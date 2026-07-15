@@ -1,0 +1,66 @@
+<?php
+
+namespace App\Http\Requests;
+
+use Illuminate\Foundation\Http\FormRequest;
+use Illuminate\Validation\Rule;
+
+/**
+ * Validation rules for creating and updating a Ticket.
+ *
+ * Mirrors the Filament TicketResource form and the `tickets` table schema.
+ * Note: `code` and `order` are generated automatically in the Ticket model's
+ * boot lifecycle, so they are intentionally not validated as user input.
+ */
+class TicketRequest extends FormRequest
+{
+    /**
+     * Determine if the user is authorized to make this request.
+     */
+    public function authorize(): bool
+    {
+        $user = $this->user();
+        if (!$user) {
+            return false;
+        }
+
+        return $this->isMethod('POST')
+            ? $user->can('Create ticket')
+            : $user->can('Update ticket');
+    }
+
+    /**
+     * Get the validation rules that apply to the request.
+     *
+     * @return array<string, mixed>
+     */
+    public function rules(): array
+    {
+        return [
+            'name' => ['required', 'string', 'max:255'],
+            'content' => ['required', 'string'],
+            'project_id' => ['required', Rule::exists('projects', 'id')->whereNull('deleted_at')],
+            'owner_id' => ['required', Rule::exists('users', 'id')->whereNull('deleted_at')],
+            'responsible_id' => ['nullable', Rule::exists('users', 'id')->whereNull('deleted_at')],
+            'status_id' => ['required', Rule::exists('ticket_statuses', 'id')],
+            'type_id' => ['required', Rule::exists('ticket_types', 'id')],
+            'priority_id' => ['required', Rule::exists('ticket_priorities', 'id')],
+            'estimation' => ['nullable', 'numeric', 'min:0'],
+            'epic_id' => ['nullable', Rule::exists('epics', 'id')->whereNull('deleted_at')],
+            'sprint_id' => ['nullable', Rule::exists('sprints', 'id')->whereNull('deleted_at')],
+        ];
+    }
+
+    /**
+     * Get custom messages for validator errors.
+     *
+     * @return array<string, string>
+     */
+    public function messages(): array
+    {
+        return [
+            'estimation.numeric' => __('The estimation must be a number of hours.'),
+            'estimation.min' => __('The estimation cannot be negative.'),
+        ];
+    }
+}

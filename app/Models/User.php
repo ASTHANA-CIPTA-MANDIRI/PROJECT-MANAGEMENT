@@ -129,7 +129,10 @@ class User extends Authenticatable implements MustVerifyEmail, FilamentUser
 
     public function canAccessFilament(): bool
     {
-        return true;
+        // Only users with at least one assigned role may access the panel.
+        // Roles carry all granular permissions, so a user without any role
+        // has no permissions and must not be allowed into the admin panel.
+        return $this->roles()->exists();
     }
 
     public function sendEmailVerificationNotification()
