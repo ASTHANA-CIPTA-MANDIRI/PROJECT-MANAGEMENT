@@ -2,7 +2,14 @@
 
 namespace App\Exceptions;
 
+use Illuminate\Auth\Access\AuthorizationException;
+use Illuminate\Auth\AuthenticationException;
+use Illuminate\Database\Eloquent\ModelNotFoundException;
 use Illuminate\Foundation\Exceptions\Handler as ExceptionHandler;
+use Illuminate\Http\JsonResponse;
+use Illuminate\Http\Request;
+use Illuminate\Validation\ValidationException;
+use Symfony\Component\HttpKernel\Exception\HttpExceptionInterface;
 use Throwable;
 
 class Handler extends ExceptionHandler
@@ -46,5 +53,84 @@ class Handler extends ExceptionHandler
         $this->reportable(function (Throwable $e) {
             //
         });
+
+        // Render every API exception as a consistent JSON envelope.
+        $this->renderable(function (Throwable $e, Request $request) {
+            if ($this->isApiRequest($request)) {
+                return $this->renderApiException($e);
+            }
+
+            return null;
+        });
+    }
+
+    /**
+     * Whether the request targets the JSON API.
+     *
+     * Scoped to the /api/* prefix only: matching on expectsJson() as well would
+     * hijack Livewire/Filament error responses, which also negotiate JSON.
+     */
+    protected function isApiRequest(Request $request): bool
+    {
+        return $request->is('api/*');
+    }
+
+    /**
+     * Build a uniform JSON error response for the given exception.
+     */
+    protected function renderApiException(Throwable $e): JsonResponse
+    {
+        if ($e instanceof ValidationException) {
+            return response()->json([
+                'message' => $e->getMessage(),
+                'errors' => $e->errors(),
+            ], 422);
+        }
+
+        if ($e instanceof AuthenticationException) {
+            return response()->json(['message' => 'Unauthenticated.'], 401);
+        }
+
+        if ($e instanceof AuthorizationException) {
+            return response()->json([
+                'message' => $e->getMessage() ?: 'This action is unauthorized.',
+            ], 403);
+        }
+
+        if ($e instanceof ModelNotFoundException) {
+            return response()->json(['message' => 'Resource not found.'], 404);
+        }
+
+        if ($e instanceof HttpExceptionInterface) {
+            $status = $e->getStatusCode();
+
+            return response()->json([
+                'message' => $e->getMessage() ?: $this->statusMessage($status),
+            ], $status);
+        }
+
+        // Unexpected server error: hide details unless debugging.
+        return response()->json(array_merge(
+            ['message' => 'Server error.'],
+            config('app.debug') ? [
+                'exception' => get_class($e),
+                'detail' => $e->getMessage(),
+            ] : []
+        ), 500);
+    }
+
+    /**
+     * Default human message for a bare HTTP status code.
+     */
+    protected function statusMessage(int $status): string
+    {
+        return match ($status) {
+            401 => 'Unauthenticated.',
+            403 => 'This action is unauthorized.',
+            404 => 'Resource not found.',
+            405 => 'Method not allowed.',
+            429 => 'Too many requests.',
+            default => 'Request failed.',
+        };
     }
 }

@@ -30,6 +30,27 @@ class TicketRequest extends FormRequest
     }
 
     /**
+     * Fill in values the API derives from the route/session before validating:
+     * the parent project (nested route) and a default owner (current user).
+     */
+    protected function prepareForValidation(): void
+    {
+        $data = [];
+
+        if ($project = $this->route('project')) {
+            $data['project_id'] = is_object($project) ? $project->getKey() : $project;
+        }
+
+        if (! $this->filled('owner_id') && $this->user()) {
+            $data['owner_id'] = $this->user()->getKey();
+        }
+
+        if ($data) {
+            $this->merge($data);
+        }
+    }
+
+    /**
      * Get the validation rules that apply to the request.
      *
      * @return array<string, mixed>

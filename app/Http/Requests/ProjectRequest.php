@@ -2,7 +2,6 @@
 
 namespace App\Http\Requests;
 
-use App\Models\Project;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Validation\Rule;
 
@@ -27,6 +26,16 @@ class ProjectRequest extends FormRequest
         return $this->isMethod('POST')
             ? $user->can('Create project')
             : $user->can('Update project');
+    }
+
+    /**
+     * Default the owner to the current user when the API caller omits it.
+     */
+    protected function prepareForValidation(): void
+    {
+        if (! $this->filled('owner_id') && $this->user()) {
+            $this->merge(['owner_id' => $this->user()->getKey()]);
+        }
     }
 
     /**
