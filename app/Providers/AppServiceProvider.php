@@ -2,9 +2,12 @@
 
 namespace App\Providers;
 
+use App\Models\User;
 use App\Settings\GeneralSettings;
+use DutchCodingCompany\FilamentSocialite\FilamentSocialite;
 use Filament\Facades\Filament;
 use Illuminate\Database\QueryException;
+use Laravel\Socialite\Contracts\User as SocialiteUserContract;
 use Illuminate\Foundation\Vite;
 use Illuminate\Support\Facades\Config;
 use Illuminate\Support\Facades\URL;
@@ -78,6 +81,22 @@ class AppServiceProvider extends ServiceProvider
 
         VerifyEmail::toMailUsing(function ($notifiable, $url) {
             return (new CustomVerifyEmail($url))->toMail($notifiable);
+        });
+
+        // Social login (Google/GitHub) creates its own users. Mark them as
+        // "social" so the User model does not treat them as admin-created
+        // "db" accounts (which would set a creation token and send the
+        // account-validation email). Their e-mail is already verified by the
+        // provider.
+        app(FilamentSocialite::class)->setCreateUserCallback(function (SocialiteUserContract $oauthUser) {
+            return User::create([
+                'name' => $oauthUser->getName()
+                    ?? $oauthUser->getNickname()
+                    ?? $oauthUser->getEmail(),
+                'email' => $oauthUser->getEmail(),
+                'type' => 'social',
+                'email_verified_at' => now(),
+            ]);
         });
     }
 
