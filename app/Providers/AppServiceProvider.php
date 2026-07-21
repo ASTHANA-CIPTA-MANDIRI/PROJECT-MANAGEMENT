@@ -96,7 +96,6 @@ class AppServiceProvider extends ServiceProvider
             Config::set('filament-socialite.registration', $settings->enable_registration ?? false);
             Config::set('filament-socialite.enabled', $settings->enable_social_login ?? false);
             Config::set('system.login_form.is_enabled', $settings->enable_login_form ?? false);
-            Config::set('services.oidc.is_enabled', $settings->enable_oidc_login ?? false);
         } catch (QueryException $e) {
             // Error: No database configured yet
         }
