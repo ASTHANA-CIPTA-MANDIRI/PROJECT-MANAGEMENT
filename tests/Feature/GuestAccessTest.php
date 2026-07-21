@@ -13,6 +13,16 @@ class GuestAccessTest extends TestCase
 {
     use RefreshDatabase;
 
+    protected function setUp(): void
+    {
+        parent::setUp();
+
+        // These tests render real pages whose layout pulls in Vite assets.
+        // CI does not run `npm run build`, so there is no manifest; stub the
+        // Vite directive out so rendering does not depend on built assets.
+        $this->withoutVite();
+    }
+
     public function test_the_home_page_redirects_a_guest_to_the_login_screen(): void
     {
         $this->get('/')->assertRedirect();
