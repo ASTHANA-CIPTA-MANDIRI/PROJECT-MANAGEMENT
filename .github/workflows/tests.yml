@@ -40,10 +40,11 @@ jobs:
 
       - name: Run test suite with coverage
         # Tests run against SQLite in-memory (see phpunit.xml), so no database
-        # service is needed.
+        # service is needed. The long per-file coverage table is written to the
+        # clover file (read by the gate below) instead of stdout, so any test
+        # failure stays the last thing printed and is easy to spot.
         run: |
           vendor/bin/phpunit \
-            --coverage-text \
             --coverage-clover=coverage.clover \
             --log-junit=junit.xml
 
