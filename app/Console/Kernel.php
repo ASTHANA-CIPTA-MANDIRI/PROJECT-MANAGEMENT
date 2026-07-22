@@ -15,7 +15,15 @@ class Kernel extends ConsoleKernel
      */
     protected function schedule(Schedule $schedule)
     {
-        // $schedule->command('inspire')->hourly();
+        // Email each user yesterday's activity digest, every morning.
+        $schedule->command('reports:daily')
+            ->dailyAt('07:00')
+            ->withoutOverlapping();
+
+        // Archive activities older than 90 days, weekly.
+        $schedule->command('cleanup:old-activities --days=90')
+            ->weeklyOn(1, '02:00')
+            ->withoutOverlapping();
     }
 
     /**
