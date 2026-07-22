@@ -9,6 +9,8 @@ use Illuminate\Foundation\Exceptions\Handler as ExceptionHandler;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Validation\ValidationException;
+use Sentry\Laravel\Integration;
+use Sentry\State\Scope;
 use Symfony\Component\HttpKernel\Exception\HttpExceptionInterface;
 use Throwable;
 
@@ -50,8 +52,23 @@ class Handler extends ExceptionHandler
      */
     public function register()
     {
+        // Report unhandled exceptions to Sentry, tagged with the current user
+        // so errors can be traced back to who hit them. No-op until a DSN is
+        // configured (SENTRY_LARAVEL_DSN), so dev/test stay silent.
         $this->reportable(function (Throwable $e) {
-            //
+            if (app()->bound('sentry')) {
+                Integration::configureScope(function (Scope $scope): void {
+                    if ($user = auth()->user()) {
+                        $scope->setUser([
+                            'id' => $user->getAuthIdentifier(),
+                            'email' => $user->email ?? null,
+                            'username' => $user->name ?? null,
+                        ]);
+                    }
+                });
+
+                Integration::captureUnhandledException($e);
+            }
         });
 
         // Render every API exception as a consistent JSON envelope.
