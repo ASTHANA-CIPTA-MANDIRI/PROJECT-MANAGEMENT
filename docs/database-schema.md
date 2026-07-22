@@ -45,7 +45,7 @@ erDiagram
         bigint id PK
         string name
         string email UK
-        string type "db | social | oidc"
+        string type "db | social"
         string password "nullable (social)"
         timestamp deleted_at "soft delete"
     }
@@ -153,7 +153,7 @@ erDiagram
 |-------|---------|
 | `project_users` | Project membership with pivot `role` |
 | `project_favorites` | Per‑user favorited projects |
-| `users` | Accounts (`type` = db/social/oidc, nullable password for social) |
+| `users` | Accounts (`type` = db/social, nullable password for social) |
 | `roles`, `permissions`, `model_has_roles`, `model_has_permissions`, `role_has_permissions` | Spatie RBAC |
 
 ### Framework & support
