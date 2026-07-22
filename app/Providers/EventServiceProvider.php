@@ -2,6 +2,7 @@
 
 namespace App\Providers;
 
+use App\Listeners\AssignDefaultRole;
 use App\Listeners\SocialRegistration;
 use DutchCodingCompany\FilamentSocialite\Events\Registered as SocialRegistered;
 use Illuminate\Auth\Events\Registered;
@@ -18,6 +19,7 @@ class EventServiceProvider extends ServiceProvider
     protected $listen = [
         Registered::class => [
             SendEmailVerificationNotification::class,
+            AssignDefaultRole::class,
         ],
         SocialRegistered::class => [
             SocialRegistration::class

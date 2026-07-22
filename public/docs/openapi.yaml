@@ -1,0 +1,477 @@
+openapi: 3.0.3
+info:
+  title: Rencanakan Project Management API
+  version: "1.0.0"
+  description: >
+    RESTful API for projects, tickets, comments and sprints.
+    All endpoints are authenticated with Laravel Sanctum bearer tokens and are
+    versioned under `/api/v1`. List endpoints support pagination, filtering and
+    sorting via query parameters.
+
+servers:
+  - url: http://localhost:8000
+    description: Local development
+
+security:
+  - bearerAuth: []
+
+tags:
+  - name: Projects
+  - name: Tickets
+  - name: Comments
+  - name: Sprints
+
+paths:
+  /api/v1/projects:
+    get:
+      tags: [Projects]
+      summary: List projects
+      description: Returns projects the authenticated user owns or is a member of.
+      parameters:
+        - $ref: '#/components/parameters/Page'
+        - $ref: '#/components/parameters/PerPage'
+        - name: sort
+          in: query
+          description: "Sort field. Prefix with `-` for descending. Allowed: name, created_at, updated_at."
+          schema: { type: string, example: -created_at }
+        - name: filter[type]
+          in: query
+          schema: { type: string, enum: [kanban, scrum] }
+        - name: filter[status_id]
+          in: query
+          schema: { type: integer }
+      responses:
+        '200':
+          description: A paginated list of projects.
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/Pagination'
+                  - type: object
+                    properties:
+                      data:
+                        type: array
+                        items: { $ref: '#/components/schemas/Project' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+    post:
+      tags: [Projects]
+      summary: Create a project
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/ProjectInput' }
+      responses:
+        '201':
+          description: Project created.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data: { $ref: '#/components/schemas/Project' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '422': { $ref: '#/components/responses/ValidationError' }
+
+  /api/v1/projects/{project}:
+    get:
+      tags: [Projects]
+      summary: Get a single project
+      parameters:
+        - $ref: '#/components/parameters/ProjectId'
+      responses:
+        '200':
+          description: The project.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data: { $ref: '#/components/schemas/Project' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  /api/v1/projects/{project}/tickets:
+    get:
+      tags: [Tickets]
+      summary: List tickets of a project
+      parameters:
+        - $ref: '#/components/parameters/ProjectId'
+        - $ref: '#/components/parameters/Page'
+        - $ref: '#/components/parameters/PerPage'
+        - name: sort
+          in: query
+          description: "Allowed: name, code, order, created_at, updated_at."
+          schema: { type: string, example: order }
+        - name: filter[status_id]
+          in: query
+          schema: { type: integer }
+        - name: filter[type_id]
+          in: query
+          schema: { type: integer }
+        - name: filter[priority_id]
+          in: query
+          schema: { type: integer }
+        - name: filter[responsible_id]
+          in: query
+          schema: { type: integer }
+      responses:
+        '200':
+          description: A paginated list of tickets.
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/Pagination'
+                  - type: object
+                    properties:
+                      data:
+                        type: array
+                        items: { $ref: '#/components/schemas/Ticket' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+    post:
+      tags: [Tickets]
+      summary: Create a ticket in a project
+      description: >
+        `project_id` is taken from the URL and `owner_id` defaults to the
+        authenticated user. `code` and `order` are generated automatically.
+      parameters:
+        - $ref: '#/components/parameters/ProjectId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/TicketInput' }
+      responses:
+        '201':
+          description: Ticket created.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data: { $ref: '#/components/schemas/Ticket' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '422': { $ref: '#/components/responses/ValidationError' }
+
+  /api/v1/tickets/{ticket}:
+    get:
+      tags: [Tickets]
+      summary: Get a single ticket
+      parameters:
+        - $ref: '#/components/parameters/TicketId'
+      responses:
+        '200':
+          description: The ticket.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data: { $ref: '#/components/schemas/Ticket' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  /api/v1/tickets/{ticket}/comments:
+    get:
+      tags: [Comments]
+      summary: List comments of a ticket
+      parameters:
+        - $ref: '#/components/parameters/TicketId'
+        - $ref: '#/components/parameters/Page'
+        - $ref: '#/components/parameters/PerPage'
+        - name: sort
+          in: query
+          description: "Allowed: created_at, updated_at."
+          schema: { type: string, example: -created_at }
+      responses:
+        '200':
+          description: A paginated list of comments.
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/Pagination'
+                  - type: object
+                    properties:
+                      data:
+                        type: array
+                        items: { $ref: '#/components/schemas/Comment' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+    post:
+      tags: [Comments]
+      summary: Post a comment to a ticket
+      description: >
+        `ticket_id` is taken from the URL and `user_id` is the authenticated
+        user; both are ignored if sent in the body. Posting notifies ticket
+        watchers.
+      parameters:
+        - $ref: '#/components/parameters/TicketId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [content]
+              properties:
+                content: { type: string, example: "Looks good to me!" }
+      responses:
+        '201':
+          description: Comment created.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data: { $ref: '#/components/schemas/Comment' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '422': { $ref: '#/components/responses/ValidationError' }
+
+  /api/v1/sprints:
+    get:
+      tags: [Sprints]
+      summary: List sprints
+      description: Returns sprints of projects the user can access.
+      parameters:
+        - $ref: '#/components/parameters/Page'
+        - $ref: '#/components/parameters/PerPage'
+        - name: sort
+          in: query
+          description: "Allowed: name, starts_at, ends_at, created_at."
+          schema: { type: string, example: starts_at }
+        - name: filter[project_id]
+          in: query
+          schema: { type: integer }
+      responses:
+        '200':
+          description: A paginated list of sprints.
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/Pagination'
+                  - type: object
+                    properties:
+                      data:
+                        type: array
+                        items: { $ref: '#/components/schemas/Sprint' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+    post:
+      tags: [Sprints]
+      summary: Create a sprint
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/SprintInput' }
+      responses:
+        '201':
+          description: Sprint created.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data: { $ref: '#/components/schemas/Sprint' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '422': { $ref: '#/components/responses/ValidationError' }
+
+  /api/v1/sprints/{sprint}:
+    get:
+      tags: [Sprints]
+      summary: Get a single sprint
+      parameters:
+        - name: sprint
+          in: path
+          required: true
+          schema: { type: integer }
+      responses:
+        '200':
+          description: The sprint.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data: { $ref: '#/components/schemas/Sprint' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      description: >
+        A Laravel Sanctum personal access token. Obtain one via
+        `$user->createToken('name')->plainTextToken` and send it as
+        `Authorization: Bearer <token>`.
+
+  parameters:
+    Page:
+      name: page
+      in: query
+      description: Page number (1-based).
+      schema: { type: integer, minimum: 1, default: 1 }
+    PerPage:
+      name: per_page
+      in: query
+      description: Items per page (max 100).
+      schema: { type: integer, minimum: 1, maximum: 100, default: 15 }
+    ProjectId:
+      name: project
+      in: path
+      required: true
+      schema: { type: integer }
+    TicketId:
+      name: ticket
+      in: path
+      required: true
+      schema: { type: integer }
+
+  responses:
+    Unauthorized:
+      description: Missing or invalid token.
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Error' }
+          example: { message: "Unauthenticated." }
+    Forbidden:
+      description: Authenticated but not allowed.
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Error' }
+          example: { message: "This action is unauthorized." }
+    NotFound:
+      description: Resource not found.
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Error' }
+          example: { message: "Resource not found." }
+    ValidationError:
+      description: The payload failed validation.
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/ValidationError' }
+
+  schemas:
+    Project:
+      type: object
+      properties:
+        id: { type: integer }
+        name: { type: string }
+        description: { type: string, nullable: true }
+        ticket_prefix: { type: string, maxLength: 3 }
+        type: { type: string, enum: [kanban, scrum] }
+        status_type: { type: string, enum: [default, custom] }
+        owner_id: { type: integer }
+        status_id: { type: integer }
+        tickets_count: { type: integer }
+        created_at: { type: string, format: date-time }
+        updated_at: { type: string, format: date-time }
+    ProjectInput:
+      type: object
+      required: [name, ticket_prefix, status_id, type, status_type]
+      properties:
+        name: { type: string, maxLength: 255 }
+        description: { type: string, nullable: true }
+        ticket_prefix: { type: string, maxLength: 3 }
+        type: { type: string, enum: [kanban, scrum] }
+        status_type: { type: string, enum: [default, custom] }
+        status_id: { type: integer }
+        owner_id:
+          type: integer
+          description: Optional; defaults to the authenticated user.
+    Ticket:
+      type: object
+      properties:
+        id: { type: integer }
+        code: { type: string, example: "ABC-1" }
+        name: { type: string }
+        content: { type: string }
+        order: { type: integer }
+        estimation: { type: number, nullable: true }
+        project_id: { type: integer }
+        owner_id: { type: integer }
+        responsible_id: { type: integer, nullable: true }
+        status_id: { type: integer }
+        type_id: { type: integer }
+        priority_id: { type: integer }
+        comments_count: { type: integer }
+    TicketInput:
+      type: object
+      required: [name, content, status_id, type_id, priority_id]
+      properties:
+        name: { type: string, maxLength: 255 }
+        content: { type: string }
+        status_id: { type: integer }
+        type_id: { type: integer }
+        priority_id: { type: integer }
+        responsible_id: { type: integer, nullable: true }
+        estimation: { type: number, minimum: 0, nullable: true }
+        sprint_id: { type: integer, nullable: true }
+        epic_id: { type: integer, nullable: true }
+    Comment:
+      type: object
+      properties:
+        id: { type: integer }
+        ticket_id: { type: integer }
+        user_id: { type: integer }
+        content: { type: string }
+        created_at: { type: string, format: date-time }
+    Sprint:
+      type: object
+      properties:
+        id: { type: integer }
+        name: { type: string }
+        description: { type: string, nullable: true }
+        project_id: { type: integer }
+        starts_at: { type: string, format: date }
+        ends_at: { type: string, format: date }
+        is_active: { type: boolean }
+    SprintInput:
+      type: object
+      required: [name, project_id, starts_at, ends_at]
+      properties:
+        name: { type: string, maxLength: 255 }
+        description: { type: string, nullable: true }
+        project_id: { type: integer }
+        starts_at: { type: string, format: date, example: "2026-02-01" }
+        ends_at: { type: string, format: date, example: "2026-02-14" }
+    Pagination:
+      type: object
+      properties:
+        links:
+          type: object
+          properties:
+            first: { type: string }
+            last: { type: string }
+            prev: { type: string, nullable: true }
+            next: { type: string, nullable: true }
+        meta:
+          type: object
+          properties:
+            current_page: { type: integer }
+            per_page: { type: integer }
+            total: { type: integer }
+            last_page: { type: integer }
+    Error:
+      type: object
+      properties:
+        message: { type: string }
+    ValidationError:
+      type: object
+      properties:
+        message: { type: string }
+        errors:
+          type: object
+          additionalProperties:
+            type: array
+            items: { type: string }

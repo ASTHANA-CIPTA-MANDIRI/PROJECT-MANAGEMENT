@@ -41,6 +41,7 @@ class LatestActivities extends BaseWidget
     protected function getTableQuery(): Builder
     {
         return TicketActivity::query()
+            ->with(['oldStatus', 'newStatus', 'user'])
             ->limit(5)
             ->whereHas('ticket', function ($query) {
                 return $query->where('owner_id', auth()->user()->id)

@@ -6,14 +6,8 @@
                 @case('google')
                     <x-icon name="fab-google" class="social-icon google"/>
                     @break
-                @case('facebook')
-                    <x-icon name="fab-facebook" class="social-icon facebook"/>
-                    @break
                 @case('github')
                     <x-icon name="fab-github" class="social-icon github"/>
-                    @break
-                @case('twitter')
-                    <x-icon name="fab-twitter" class="social-icon twitter"/>
                     @break
             @endswitch
         @endforeach

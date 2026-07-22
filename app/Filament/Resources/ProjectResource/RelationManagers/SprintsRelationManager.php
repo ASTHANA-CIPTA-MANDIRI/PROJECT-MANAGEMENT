@@ -15,6 +15,7 @@ use Filament\Resources\RelationManagers\RelationManager;
 use Filament\Resources\Table;
 use Filament\Tables;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\HtmlString;
 
 class SprintsRelationManager extends RelationManager
@@ -136,13 +137,18 @@ class SprintsRelationManager extends RelationManager
                     ->icon('heroicon-o-play')
                     ->action(function ($record) {
                         $now = now();
-                        Sprint::where('project_id', $record->project_id)
-                            ->where('id', '<>', $record->id)
-                            ->whereNotNull('started_at')
-                            ->whereNull('ended_at')
-                            ->update(['ended_at' => $now]);
-                        $record->started_at = $now;
-                        $record->save();
+                        // Atomic: close any running sprint and start this one
+                        // together, so the project is never left with zero or
+                        // two active sprints.
+                        DB::transaction(function () use ($record, $now) {
+                            Sprint::where('project_id', $record->project_id)
+                                ->where('id', '<>', $record->id)
+                                ->whereNotNull('started_at')
+                                ->whereNull('ended_at')
+                                ->update(['ended_at' => $now]);
+                            $record->started_at = $now;
+                            $record->save();
+                        });
                         Notification::make('sprint_started')
                             ->success()
                             ->body(__('Sprint started at') . ' ' . $now)
@@ -226,8 +232,12 @@ class SprintsRelationManager extends RelationManager
                     ])
                     ->action(function (Sprint $record, array $data): void {
                         $tickets = $data['tickets'];
-                        Ticket::where('sprint_id', $record->id)->update(['sprint_id' => null]);
-                        Ticket::whereIn('id', $tickets)->update(['sprint_id' => $record->id]);
+                        // Atomic batch: detach the sprint's current tickets and
+                        // attach the newly chosen set as one unit.
+                        DB::transaction(function () use ($record, $tickets) {
+                            Ticket::where('sprint_id', $record->id)->update(['sprint_id' => null]);
+                            Ticket::whereIn('id', $tickets)->update(['sprint_id' => $record->id]);
+                        });
                         Filament::notify('success', __('Tickets associated with sprint'));
                     }),
 

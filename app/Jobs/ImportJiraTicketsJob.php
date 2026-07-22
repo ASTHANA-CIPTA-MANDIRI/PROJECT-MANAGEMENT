@@ -16,6 +16,7 @@ use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Bus\Dispatchable;
 use Illuminate\Queue\InteractsWithQueue;
 use Illuminate\Queue\SerializesModels;
+use Illuminate\Support\Facades\DB;
 
 class ImportJiraTicketsJob implements ShouldQueue
 {
@@ -43,37 +44,42 @@ class ImportJiraTicketsJob implements ShouldQueue
     public function handle()
     {
         if ($this->tickets && sizeof($this->tickets)) {
-            foreach ($this->tickets as $ticket) {
-                $projectDetails = $ticket->fields->project;
-                $ticketData = $ticket->fields;
+            // Atomic batch import: if any ticket/project fails to import, the
+            // whole batch rolls back so no partial import is left behind.
+            DB::transaction(function () {
+                foreach ($this->tickets as $ticket) {
+                    $projectDetails = $ticket->fields->project;
+                    $ticketData = $ticket->fields;
 
-                $project = Project::where('name', $projectDetails->name)->first();
-                if (!$project) {
-                    $project = Project::create([
-                        'name' => $projectDetails->name,
-                        'description' => __('Project imported from Jira, project key:') . $projectDetails->key,
-                        'status_id' => ProjectStatus::where('is_default', true)->first()->id,
+                    $project = Project::where('name', $projectDetails->name)->first();
+                    if (!$project) {
+                        $project = Project::create([
+                            'name' => $projectDetails->name,
+                            'description' => __('Project imported from Jira, project key:') . $projectDetails->key,
+                            'status_id' => ProjectStatus::where('is_default', true)->first()->id,
+                            'owner_id' => $this->user->id,
+                            'ticket_prefix' => $projectDetails->key
+                        ]);
+
+                        ProjectUser::create([
+                            'project_id' => $project->id,
+                            'user_id' => $this->user->id,
+                            'role' => config('system.projects.affectations.roles.can_manage')
+                        ]);
+                    }
+
+                    Ticket::create([
+                        'name' => $ticketData->summary,
+                        'content' => $ticketData->description ?? __('No content found in jira ticket'),
                         'owner_id' => $this->user->id,
-                        'ticket_prefix' => $projectDetails->key
-                    ]);
-
-                    ProjectUser::create([
+                        'status_id' => TicketStatus::where('is_default', true)->first()->id,
                         'project_id' => $project->id,
-                        'user_id' => $this->user->id,
-                        'role' => config('system.projects.affectations.roles.can_manage')
+                        'type_id' => TicketType::where('is_default', true)->first()->id,
+                        'priority_id' => TicketPriority::where('is_default', true)->first()->id,
                     ]);
                 }
+            });
 
-                Ticket::create([
-                    'name' => $ticketData->summary,
-                    'content' => $ticketData->description ?? __('No content found in jira ticket'),
-                    'owner_id' => $this->user->id,
-                    'status_id' => TicketStatus::where('is_default', true)->first()->id,
-                    'project_id' => $project->id,
-                    'type_id' => TicketType::where('is_default', true)->first()->id,
-                    'priority_id' => TicketPriority::where('is_default', true)->first()->id,
-                ]);
-            }
             FilamentNotification::make()
                 ->title(__('Jira importation'))
                 ->icon('heroicon-o-cloud-download')

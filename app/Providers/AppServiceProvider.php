@@ -2,11 +2,16 @@
 
 namespace App\Providers;
 
+use App\Models\User;
 use App\Settings\GeneralSettings;
+use DutchCodingCompany\FilamentSocialite\FilamentSocialite;
 use Filament\Facades\Filament;
 use Illuminate\Database\QueryException;
+use Laravel\Socialite\Contracts\User as SocialiteUserContract;
 use Illuminate\Foundation\Vite;
 use Illuminate\Support\Facades\Config;
+use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\URL;
 use Illuminate\Support\HtmlString;
 use Illuminate\Support\ServiceProvider;
@@ -34,6 +39,17 @@ class AppServiceProvider extends ServiceProvider
     {
         // Configure application
         $this->configureApp();
+
+        // Monitor database queries in local development. Writes to a dedicated
+        // storage/logs/query.log channel; never active in testing/production.
+        if ($this->app->environment('local')) {
+            DB::listen(function ($query) {
+                Log::channel('query')->debug($query->sql, [
+                    'bindings' => $query->bindings,
+                    'time_ms' => $query->time,
+                ]);
+            });
+        }
 
         // Register custom Filament theme
         Filament::serving(function () {
@@ -79,6 +95,22 @@ class AppServiceProvider extends ServiceProvider
         VerifyEmail::toMailUsing(function ($notifiable, $url) {
             return (new CustomVerifyEmail($url))->toMail($notifiable);
         });
+
+        // Social login (Google/GitHub) creates its own users. Mark them as
+        // "social" so the User model does not treat them as admin-created
+        // "db" accounts (which would set a creation token and send the
+        // account-validation email). Their e-mail is already verified by the
+        // provider.
+        app(FilamentSocialite::class)->setCreateUserCallback(function (SocialiteUserContract $oauthUser) {
+            return User::create([
+                'name' => $oauthUser->getName()
+                    ?? $oauthUser->getNickname()
+                    ?? $oauthUser->getEmail(),
+                'email' => $oauthUser->getEmail(),
+                'type' => 'social',
+                'email_verified_at' => now(),
+            ]);
+        });
     }
 
     private function configureApp(): void
@@ -96,7 +128,6 @@ class AppServiceProvider extends ServiceProvider
             Config::set('filament-socialite.registration', $settings->enable_registration ?? false);
             Config::set('filament-socialite.enabled', $settings->enable_social_login ?? false);
             Config::set('system.login_form.is_enabled', $settings->enable_login_form ?? false);
-            Config::set('services.oidc.is_enabled', $settings->enable_oidc_login ?? false);
         } catch (QueryException $e) {
             // Error: No database configured yet
         }

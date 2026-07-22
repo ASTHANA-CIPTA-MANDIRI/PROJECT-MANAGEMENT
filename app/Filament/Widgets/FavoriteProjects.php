@@ -27,10 +27,16 @@ class FavoriteProjects extends BaseWidget
 
     protected function getCards(): array
     {
-        $favoriteProjects = auth()->user()->favoriteProjects;
+        // Eager load everything the cards read (ticket count, contributors via
+        // users+owner, and the cover media) to avoid a query per project.
+        $favoriteProjects = auth()->user()->favoriteProjects()
+            ->withCount('tickets')
+            ->with(['users', 'owner', 'media'])
+            ->get();
+
         $cards = [];
         foreach ($favoriteProjects as $project) {
-            $ticketsCount = $project->tickets()->count();
+            $ticketsCount = $project->tickets_count;
             $contributorsCount = $project->contributors->count();
             $cards[] = Card::make('', new HtmlString('
                     <div class="flex items-center gap-2 -mt-2 text-lg">

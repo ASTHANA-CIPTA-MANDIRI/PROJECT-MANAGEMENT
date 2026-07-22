@@ -29,6 +29,16 @@ class TicketResource extends Resource
 
     protected static ?int $navigationSort = 2;
 
+    /**
+     * Eager load the relations the table columns read so the listing runs a
+     * fixed number of queries instead of one per row.
+     */
+    public static function getEloquentQuery(): \Illuminate\Database\Eloquent\Builder
+    {
+        return parent::getEloquentQuery()
+            ->with(['project', 'owner', 'responsible', 'status', 'type', 'priority']);
+    }
+
     protected static function getNavigationLabel(): string
     {
         return __('Tickets');

@@ -16,3 +16,8 @@ yarn-error.log
 /.fleet
 /.idea
 /.vscode
+
+# Test coverage artifacts
+/coverage.clover
+/junit.xml
+/.phpunit.result.cache

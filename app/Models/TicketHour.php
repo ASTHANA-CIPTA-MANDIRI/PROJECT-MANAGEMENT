@@ -16,6 +16,17 @@ class TicketHour extends Model
         'user_id', 'ticket_id', 'value', 'comment', 'activity_id'
     ];
 
+    public static function boot()
+    {
+        parent::boot();
+
+        // Logged hours feed into Project::statistics(); keep that cache fresh.
+        $forget = fn (TicketHour $item) => $item->ticket?->project?->forgetStatistics();
+        static::created($forget);
+        static::updated($forget);
+        static::deleted($forget);
+    }
+
     public function user(): BelongsTo
     {
         return $this->belongsTo(User::class, 'user_id', 'id');

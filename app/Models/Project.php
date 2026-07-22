@@ -9,6 +9,7 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\SoftDeletes;
+use Illuminate\Support\Facades\Cache;
 use Spatie\MediaLibrary\HasMedia;
 use Spatie\MediaLibrary\InteractsWithMedia;
 
@@ -131,5 +132,42 @@ class Project extends Model implements HasMedia
                 return null;
             }
         );
+    }
+
+    /**
+     * Aggregate statistics for the project, cached for one hour so the view
+     * that displays them does not recompute the counts on every request.
+     *
+     * @return array{tickets:int, contributors:int, sprints:int, epics:int, logged_hours:float}
+     */
+    public function statistics(): array
+    {
+        return Cache::remember($this->statisticsCacheKey(), 3600, function () {
+            $ticketIds = $this->tickets()->pluck('id');
+
+            return [
+                'tickets' => $ticketIds->count(),
+                'contributors' => $this->contributors->count(),
+                'sprints' => $this->sprints()->count(),
+                'epics' => $this->epics()->count(),
+                'logged_hours' => (float) TicketHour::whereIn('ticket_id', $ticketIds)->sum('value'),
+            ];
+        });
+    }
+
+    /**
+     * Cache key holding this project's statistics.
+     */
+    public function statisticsCacheKey(): string
+    {
+        return "project:{$this->id}:statistics";
+    }
+
+    /**
+     * Invalidate the cached statistics (call when tickets/hours change).
+     */
+    public function forgetStatistics(): void
+    {
+        Cache::forget($this->statisticsCacheKey());
     }
 }

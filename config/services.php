@@ -43,28 +43,4 @@ return [
         'redirect' => env('GOOGLE_CLIENT_CALLBACK')
     ],
 
-    'facebook' => [
-        'client_id' => env('FACEBOOK_CLIENT_ID'),
-        'client_secret' => env('FACEBOOK_CLIENT_SECRET'),
-        'redirect' => env('FACEBOOK_CLIENT_CALLBACK')
-    ],
-
-    'twitter' => [
-        'client_id' => env('TWITTER_CLIENT_ID'),
-        'client_secret' => env('TWITTER_CLIENT_SECRET'),
-        'redirect' => env('TWITTER_CLIENT_CALLBACK')
-    ],
-
-    'oidc' => [
-        'is_enabled' => true,
-        'client_id' => env('OIDC_CLIENT_ID'),
-        'client_secret' => env('OIDC_CLIENT_SECRET'),
-        'discovery_endpoint' => env('OIDC_DISCOVERY_ENDPOINT'),
-        'redirect_uri' => env('OIDC_REDIRECT_URI'),
-        'url_authorize' => env('OIDC_URL_AUTHORIZE'),
-        'url_access_token' => env('OIDC_URL_ACCESS_TOKEN'),
-        'url_resource_owner_details' => env('OIDC_URL_RESOURCE_OWNER_DETAILS'),
-        'scope' => explode(",", env('OIDC_SCOPE')),
-    ],
-
 ];
