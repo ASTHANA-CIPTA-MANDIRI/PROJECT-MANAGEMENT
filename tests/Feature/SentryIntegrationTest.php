@@ -52,8 +52,9 @@ class SentryIntegrationTest extends TestCase
 
     public function test_configuration_is_env_driven(): void
     {
-        // Disabled by default (no DSN) so dev/test never phone home.
-        $this->assertNull(config('sentry.dsn'));
+        // Disabled by default so dev/test never phone home. The DSN is empty
+        // whether unset (null) or present-but-blank in .env (''); both mean off.
+        $this->assertEmpty(config('sentry.dsn'));
         // Performance monitoring knob is present and env-driven.
         $this->assertArrayHasKey('traces_sample_rate', config('sentry'));
     }
