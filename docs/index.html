@@ -19,11 +19,16 @@
             repo: 'devaslanphp/project-management',
             themeColor: '#4889ef',
             autoHeader: true,
+            mermaidConfig: { querySelector: '.mermaid' },
         }
 
     </script>
+    <!-- Mermaid (for C4 & ER diagrams) -->
+    <script src="//cdn.jsdelivr.net/npm/mermaid/dist/mermaid.min.js"></script>
+    <script>mermaid.initialize({ startOnLoad: false });</script>
     <!-- Docsify v4 -->
     <script src="//cdn.jsdelivr.net/npm/docsify@4"></script>
+    <script src="//unpkg.com/docsify-mermaid@2/dist/docsify-mermaid.js"></script>
     <script src="//cdn.jsdelivr.net/npm/docsify/lib/plugins/zoom-image.min.js"></script>
     <script src="//cdn.jsdelivr.net/npm/docsify-copy-code/dist/docsify-copy-code.min.js"></script>
     <script src="//cdn.jsdelivr.net/npm/docsify-pagination/dist/docsify-pagination.min.js"></script>
