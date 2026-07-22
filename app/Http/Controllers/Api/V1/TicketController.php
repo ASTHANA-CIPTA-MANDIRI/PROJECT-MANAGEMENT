@@ -7,6 +7,7 @@ use App\Http\Resources\TicketResource;
 use App\Models\Project;
 use App\Models\Ticket;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
 
 class TicketController extends ApiController
 {
@@ -43,7 +44,10 @@ class TicketController extends ApiController
     {
         $this->assertProjectAccess($project, $request->user());
 
-        $ticket = Ticket::create($request->validated());
+        // Atomic: the ticket insert plus its lifecycle writes (code/order,
+        // epic assignment) commit together or not at all. Queued notifications
+        // fire only after commit ($afterCommit on the notification classes).
+        $ticket = DB::transaction(fn () => Ticket::create($request->validated()));
 
         return (new TicketResource($ticket->load(['owner', 'responsible', 'status'])))
             ->response()

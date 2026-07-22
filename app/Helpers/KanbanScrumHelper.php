@@ -9,6 +9,7 @@ use App\Models\TicketStatus;
 use App\Models\TicketType;
 use App\Models\User;
 use Filament\Facades\Filament;
+use Illuminate\Support\Facades\DB;
 use Filament\Forms\Components\Grid;
 use Filament\Forms\Components\Placeholder;
 use Filament\Forms\Components\Select;
@@ -158,9 +159,13 @@ trait KanbanScrumHelper
     {
         $ticket = Ticket::find($record);
         if ($ticket) {
-            $ticket->order = $newIndex;
-            $ticket->status_id = $newStatus;
-            $ticket->save();
+            // Atomic: the ticket update and the status-change activity it
+            // triggers (Ticket::updating) commit together.
+            DB::transaction(function () use ($ticket, $newIndex, $newStatus) {
+                $ticket->order = $newIndex;
+                $ticket->status_id = $newStatus;
+                $ticket->save();
+            });
             Filament::notify('success', __('Ticket updated'));
         }
     }

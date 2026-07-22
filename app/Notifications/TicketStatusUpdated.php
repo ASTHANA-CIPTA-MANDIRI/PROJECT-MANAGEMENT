@@ -27,6 +27,8 @@ class TicketStatusUpdated extends Notification implements ShouldQueue
      */
     public function __construct(Ticket $ticket)
     {
+        // Defer queued dispatch until the surrounding DB transaction commits.
+        $this->afterCommit = true;
         $this->ticket = $ticket;
         $this->activity = $this->ticket->activities->last();
     }

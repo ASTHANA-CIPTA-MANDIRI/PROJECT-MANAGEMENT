@@ -21,6 +21,8 @@ class UserCreatedNotification extends Notification implements ShouldQueue
      */
     public function __construct(User $user)
     {
+        // Defer queued dispatch until the surrounding DB transaction commits.
+        $this->afterCommit = true;
         $this->user = $user;
     }
 
