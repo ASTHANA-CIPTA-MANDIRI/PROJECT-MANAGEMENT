@@ -10,6 +10,8 @@ use Illuminate\Database\QueryException;
 use Laravel\Socialite\Contracts\User as SocialiteUserContract;
 use Illuminate\Foundation\Vite;
 use Illuminate\Support\Facades\Config;
+use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\URL;
 use Illuminate\Support\HtmlString;
 use Illuminate\Support\ServiceProvider;
@@ -37,6 +39,17 @@ class AppServiceProvider extends ServiceProvider
     {
         // Configure application
         $this->configureApp();
+
+        // Monitor database queries in local development. Writes to a dedicated
+        // storage/logs/query.log channel; never active in testing/production.
+        if ($this->app->environment('local')) {
+            DB::listen(function ($query) {
+                Log::channel('query')->debug($query->sql, [
+                    'bindings' => $query->bindings,
+                    'time_ms' => $query->time,
+                ]);
+            });
+        }
 
         // Register custom Filament theme
         Filament::serving(function () {

@@ -2,11 +2,14 @@
 
 namespace App\Filament\Widgets;
 
+use App\Filament\Widgets\Concerns\WithCachedData;
 use App\Models\TicketType;
 use Filament\Widgets\DoughnutChartWidget;
 
 class TicketsByType extends DoughnutChartWidget
 {
+    use WithCachedData;
+
     protected static ?int $sort = 2;
     protected static ?string $heading = 'Chart';
     protected static ?string $maxHeight = '300px';
@@ -28,12 +31,16 @@ class TicketsByType extends DoughnutChartWidget
 
     protected function getData(): array
     {
-        $data = TicketType::withCount('tickets')->get();
+        // Cached for one hour: counts change slowly relative to dashboard views.
+        $data = $this->remember('counts', fn () => TicketType::withCount('tickets')
+            ->get(['id', 'name'])
+            ->pluck('tickets_count', 'name'));
+
         return [
             'datasets' => [
                 [
                     'label' => __('Tickets by types'),
-                    'data' => $data->pluck('tickets_count')->toArray(),
+                    'data' => $data->values()->toArray(),
                     'backgroundColor' => [
                         'rgba(255, 99, 132, .6)',
                         'rgba(54, 162, 235, .6)',
@@ -47,7 +54,7 @@ class TicketsByType extends DoughnutChartWidget
                     'hoverOffset' => 4
                 ]
             ],
-            'labels' => $data->pluck('name')->toArray(),
+            'labels' => $data->keys()->toArray(),
         ];
     }
 }

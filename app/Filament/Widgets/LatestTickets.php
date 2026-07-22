@@ -30,6 +30,7 @@ class LatestTickets extends BaseWidget
     protected function getTableQuery(): Builder
     {
         return Ticket::query()
+            ->with(['project', 'responsible', 'status', 'type'])
             ->limit(5)
             ->where(function ($query) {
                 return $query->where('owner_id', auth()->user()->id)

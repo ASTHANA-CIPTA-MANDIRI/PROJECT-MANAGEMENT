@@ -70,6 +70,14 @@ return [
             'days' => 14,
         ],
 
+        // Dedicated channel for database query monitoring in development.
+        'query' => [
+            'driver' => 'daily',
+            'path' => storage_path('logs/query.log'),
+            'level' => 'debug',
+            'days' => 7,
+        ],
+
         'slack' => [
             'driver' => 'slack',
             'url' => env('LOG_SLACK_WEBHOOK_URL'),

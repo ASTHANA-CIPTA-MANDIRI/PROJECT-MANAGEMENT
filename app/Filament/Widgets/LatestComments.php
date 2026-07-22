@@ -40,6 +40,7 @@ class LatestComments extends BaseWidget
     protected function getTableQuery(): Builder
     {
         return TicketComment::query()
+            ->with(['user', 'ticket'])
             ->limit(5)
             ->whereHas('ticket', function ($query) {
                 return $query->where('owner_id', auth()->user()->id)

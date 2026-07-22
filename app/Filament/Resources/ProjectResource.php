@@ -26,6 +26,16 @@ class ProjectResource extends Resource
 
     protected static ?string $navigationIcon = 'heroicon-o-archive';
 
+    /**
+     * Eager load the relations the table columns read (owner, status, members
+     * and the cover media) so the listing runs a fixed number of queries
+     * instead of one per row.
+     */
+    public static function getEloquentQuery(): \Illuminate\Database\Eloquent\Builder
+    {
+        return parent::getEloquentQuery()->with(['owner', 'status', 'users', 'media']);
+    }
+
     protected static ?int $navigationSort = 1;
 
     protected static function getNavigationLabel(): string

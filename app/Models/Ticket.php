@@ -44,6 +44,11 @@ class Ticket extends Model implements HasMedia
             foreach ($item->watchers as $user) {
                 $user->notify(new TicketCreated($item));
             }
+            $item->project?->forgetStatistics();
+        });
+
+        static::deleted(function (Ticket $item) {
+            $item->project?->forgetStatistics();
         });
 
         static::updating(function (Ticket $item) {
