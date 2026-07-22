@@ -17,6 +17,16 @@ use Illuminate\Support\Facades\Route;
 |
 */
 
+// Internal-services endpoints: restricted to whitelisted IPs (see
+// config/internal.php). Not token-authenticated; meant for health checks and
+// monitoring from trusted hosts only.
+Route::middleware('internal')->prefix('internal')->group(function () {
+    Route::get('health', fn () => response()->json([
+        'status' => 'ok',
+        'time' => now()->toIso8601String(),
+    ]));
+});
+
 Route::middleware('auth:sanctum')->group(function () {
     Route::get('/user', fn (Request $request) => $request->user());
 

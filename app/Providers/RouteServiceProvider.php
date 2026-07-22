@@ -45,8 +45,30 @@ class RouteServiceProvider extends ServiceProvider
      */
     protected function configureRateLimiting()
     {
+        // API endpoints: 100 requests/minute, counted per access token (so two
+        // tokens of the same user get independent budgets). Falls back to the
+        // user id, then the client IP for non-token contexts.
         RateLimiter::for('api', function (Request $request) {
-            return Limit::perMinute(60)->by($request->user()?->id ?: $request->ip());
+            // Resolve via the sanctum guard explicitly: this limiter runs
+            // before the route's auth:sanctum middleware, so the default guard
+            // would not yet see the bearer token.
+            $user = $request->user('sanctum') ?? $request->user();
+            $token = $user?->currentAccessToken();
+
+            if ($token && method_exists($token, 'getKey')) {
+                $key = 'token:' . $token->getKey();
+            } elseif ($user) {
+                $key = 'user:' . $user->id;
+            } else {
+                $key = 'ip:' . $request->ip();
+            }
+
+            return Limit::perMinute(100)->by($key);
+        });
+
+        // Public (unauthenticated) endpoints: 60 requests/minute per IP.
+        RateLimiter::for('public', function (Request $request) {
+            return Limit::perMinute(60)->by('public:' . $request->ip());
         });
     }
 }

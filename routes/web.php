@@ -8,18 +8,19 @@ use App\Http\Controllers\RoadMap\DataController;
 use Illuminate\Foundation\Auth\EmailVerificationRequest;
 use Illuminate\Support\Facades\Auth;
 
-// Share ticket
+// Share ticket (public, throttled to 60/min per IP)
 Route::get('/tickets/share/{ticket:code}', function (Ticket $ticket) {
     return redirect()->to(route('filament.resources.tickets.view', $ticket));
-})->name('filament.resources.tickets.share');
+})->middleware('throttle:public')->name('filament.resources.tickets.share');
 
-// Validate an account
+// Validate an account (public, throttled to 60/min per IP)
 Route::get('/validate-account/{user:creation_token}', function (User $user) {
     return view('validate-account', compact('user'));
 })
     ->name('validate-account')
     ->middleware([
         'web',
+        'throttle:public',
         DispatchServingFilamentEvent::class
     ]);
 
