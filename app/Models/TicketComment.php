@@ -2,9 +2,8 @@
 
 namespace App\Models;
 
+use App\Events\TicketCommentPosted;
 use App\Notifications\TicketCommented;
-use App\Notifications\TicketCreated;
-use App\Notifications\TicketStatusUpdated;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
@@ -27,6 +26,8 @@ class TicketComment extends Model
             foreach ($item->ticket->watchers as $user) {
                 $user->notify(new TicketCommented($item));
             }
+            // Live update for anyone viewing the ticket or project board.
+            TicketCommentPosted::dispatch($item);
         });
     }
 

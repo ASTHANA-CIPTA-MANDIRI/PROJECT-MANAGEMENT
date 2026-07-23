@@ -3,6 +3,7 @@
 namespace App\Models;
 
 use App\Notifications\TicketCreated;
+use App\Events\TicketStatusChanged;
 use App\Notifications\TicketStatusUpdated;
 use Carbon\CarbonInterval;
 use Illuminate\Database\Eloquent\Casts\Attribute;
@@ -66,6 +67,8 @@ class Ticket extends Model implements HasMedia
                 foreach ($item->watchers as $user) {
                     $user->notify(new TicketStatusUpdated($item));
                 }
+                // Live update for anyone watching the project board.
+                TicketStatusChanged::dispatch($item, $oldStatus, (int) $item->status_id, auth()->id());
             }
 
             // Ticket sprint update
