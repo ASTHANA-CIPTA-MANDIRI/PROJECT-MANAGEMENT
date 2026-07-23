@@ -15,7 +15,7 @@ class TimesheetDashboard extends Page
 
     protected static string $view = 'filament::pages.dashboard';
 
-    protected function getColumns(): int | array
+    protected function getColumns(): int|array
     {
         return 6;
     }
@@ -40,7 +40,7 @@ class TimesheetDashboard extends Page
         return [
             MonthlyReport::class,
             ActivitiesReport::class,
-            WeeklyReport::class
+            WeeklyReport::class,
         ];
     }
 }

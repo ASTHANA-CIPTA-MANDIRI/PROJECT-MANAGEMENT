@@ -32,19 +32,29 @@ class JiraImport extends Page implements HasForms
 
     protected $listeners = [
         'updateJiraProjects',
-        'updateJiraTickets'
+        'updateJiraTickets',
     ];
 
     public $host;
+
     public $username;
+
     public $token;
+
     private $loadingProjects;
+
     private $projects;
+
     public $selected_projects;
+
     private $loadingTickets;
+
     private $tickets;
+
     public $selected_tickets;
+
     public $data = [];
+
     public $ticketsDataApi;
 
     public function mount(): void
@@ -82,7 +92,7 @@ class JiraImport extends Page implements HasForms
                             ->schema([
                                 Placeholder::make('info')
                                     ->extraAttributes([
-                                        'class' => 'bg-primary-500 rounded-lg border border-primary-600 text-white font-medium text-sm py-3 px-4'
+                                        'class' => 'bg-primary-500 rounded-lg border border-primary-600 text-white font-medium text-sm py-3 px-4',
                                     ])
                                     ->disableLabel()
                                     ->content(__('Important: Your jira credentials are only used to communicate with jira REST API, and will not be stored in this application')),
@@ -115,47 +125,48 @@ class JiraImport extends Page implements HasForms
                             ->schema([
                                 Placeholder::make('hint')
                                     ->extraAttributes([
-                                        'class' => 'bg-primary-500 rounded-lg border border-primary-600 text-white font-medium text-sm py-3 px-4'
+                                        'class' => 'bg-primary-500 rounded-lg border border-primary-600 text-white font-medium text-sm py-3 px-4',
                                     ])
                                     ->disableLabel()
-                                    ->visible(fn() => !$this->loadingProjects && $this->projects)
+                                    ->visible(fn () => ! $this->loadingProjects && $this->projects)
                                     ->content(__('Choose your jira projects to import')),
 
                                 Placeholder::make('loading')
                                     ->extraAttributes([
-                                        'class' => 'bg-warning-500 rounded-lg border border-warning-600 text-white font-medium text-sm py-3 px-4'
+                                        'class' => 'bg-warning-500 rounded-lg border border-warning-600 text-white font-medium text-sm py-3 px-4',
                                     ])
                                     ->disableLabel()
-                                    ->visible(fn() => $this->loadingProjects)
+                                    ->visible(fn () => $this->loadingProjects)
                                     ->content(__('Loading projects, please wait...')),
 
                                 Placeholder::make('info')
                                     ->extraAttributes([
-                                        'class' => 'bg-danger-500 rounded-lg border border-danger-600 text-white font-medium text-sm py-3 px-4'
+                                        'class' => 'bg-danger-500 rounded-lg border border-danger-600 text-white font-medium text-sm py-3 px-4',
                                     ])
                                     ->disableLabel()
-                                    ->visible(fn() => !$this->loadingProjects && !$this->projects)
+                                    ->visible(fn () => ! $this->loadingProjects && ! $this->projects)
                                     ->content(__('Your jira credentials are incorrect, please go to previous step and re-enter your jira credentials')),
 
                                 CheckboxList::make('selected_projects')
                                     ->label(__('Jira projects'))
                                     ->required()
-                                    ->visible(fn() => $this->projects)
+                                    ->visible(fn () => $this->projects)
                                     ->options(function () {
                                         $list = [];
                                         if ($this->projects) {
                                             foreach ($this->projects as $project) {
                                                 $list[$project->key] = new HtmlString(
                                                     "<div class='w-full flex flex-col gap-1'>"
-                                                    . "<div class='w-full flex items-center gap-1'>"
-                                                    . "<img src='" . $project->avatarUrls->{'16x16'} . "' class='rounded-full w-8 h-8 shadow' />"
-                                                    . "<span class='font-medium text-gray-700 text-base'>" . $project->name . "</span>"
-                                                    . "<div class='text-gray-700 text-xs font-light'><span class='font-medium uppercase'>/</span> " . $project->key . "</div>"
-                                                    . "</div>"
-                                                    . "</div>"
+                                                    ."<div class='w-full flex items-center gap-1'>"
+                                                    ."<img src='".$project->avatarUrls->{'16x16'}."' class='rounded-full w-8 h-8 shadow' />"
+                                                    ."<span class='font-medium text-gray-700 text-base'>".$project->name.'</span>'
+                                                    ."<div class='text-gray-700 text-xs font-light'><span class='font-medium uppercase'>/</span> ".$project->key.'</div>'
+                                                    .'</div>'
+                                                    .'</div>'
                                                 );
                                             }
                                         }
+
                                         return $list;
                                     }),
 
@@ -171,70 +182,71 @@ class JiraImport extends Page implements HasForms
 
                                 $fields[] = Placeholder::make('hint')
                                     ->extraAttributes([
-                                        'class' => 'bg-primary-500 rounded-lg border border-primary-600 text-white font-medium text-sm py-3 px-4'
+                                        'class' => 'bg-primary-500 rounded-lg border border-primary-600 text-white font-medium text-sm py-3 px-4',
                                     ])
                                     ->disableLabel()
-                                    ->visible(fn() => !$this->loadingTickets && $this->tickets)
+                                    ->visible(fn () => ! $this->loadingTickets && $this->tickets)
                                     ->content(__('Choose your jira projects to import'));
 
                                 $fields[] = Placeholder::make('loading')
                                     ->extraAttributes([
-                                        'class' => 'bg-warning-500 rounded-lg border border-warning-600 text-white font-medium text-sm py-3 px-4'
+                                        'class' => 'bg-warning-500 rounded-lg border border-warning-600 text-white font-medium text-sm py-3 px-4',
                                     ])
                                     ->disableLabel()
-                                    ->visible(fn() => $this->loadingTickets)
+                                    ->visible(fn () => $this->loadingTickets)
                                     ->content(__('Loading tickets, please wait...'));
 
-                                if (!$this->loadingTickets) {
+                                if (! $this->loadingTickets) {
                                     if ($this->tickets) {
                                         foreach ($this->tickets as $projectKey => $ticket) {
                                             if ($ticket['total'] > 0) {
-                                                $fields[] = Placeholder::make('tickets_' . Str::slug($projectKey))
-                                                    ->label(__('Tickets for the project:') . ' ' . $projectKey)
+                                                $fields[] = Placeholder::make('tickets_'.Str::slug($projectKey))
+                                                    ->label(__('Tickets for the project:').' '.$projectKey)
                                                     ->extraAttributes([
-                                                        'style' => 'margin-bottom: -15px;'
+                                                        'style' => 'margin-bottom: -15px;',
                                                     ])
                                                     ->content('');
 
                                                 foreach ($ticket['issues'] as $issue) {
-                                                    $fields[] = Checkbox::make('data.' . Str::slug($projectKey) . '_' . Str::slug($issue['code']))
+                                                    $fields[] = Checkbox::make('data.'.Str::slug($projectKey).'_'.Str::slug($issue['code']))
                                                         ->label(function () use ($issue) {
                                                             return new HtmlString(
                                                                 "<div class='w-full flex flex-col gap-1'>"
-                                                                . "<div class='w-full flex items-center gap-1'>"
-                                                                . "<div class='text-gray-700 text-xs font-light'><span class='font-medium uppercase'>" . $issue['code'] . "</span> " . $issue['name'] . "</div>"
-                                                                . "</div>"
-                                                                . "</div>"
+                                                                ."<div class='w-full flex items-center gap-1'>"
+                                                                ."<div class='text-gray-700 text-xs font-light'><span class='font-medium uppercase'>".$issue['code'].'</span> '.$issue['name'].'</div>'
+                                                                .'</div>'
+                                                                .'</div>'
                                                             );
                                                         });
                                                 }
                                             } else {
-                                                $fields[] = Placeholder::make('no_tickets_' . Str::slug($projectKey))
-                                                    ->label(__('Tickets for the project:') . ' ' . $projectKey)
+                                                $fields[] = Placeholder::make('no_tickets_'.Str::slug($projectKey))
+                                                    ->label(__('Tickets for the project:').' '.$projectKey)
                                                     ->content(__('No tickets found!'));
                                             }
                                         }
                                     } else {
                                         $fields[] = Placeholder::make('info')
                                             ->extraAttributes([
-                                                'class' => 'bg-warning-500 rounded-lg border border-warning-600 text-white font-medium text-sm py-3 px-4'
+                                                'class' => 'bg-warning-500 rounded-lg border border-warning-600 text-white font-medium text-sm py-3 px-4',
                                             ])
                                             ->disableLabel()
-                                            ->visible(fn() => !$this->projects)
+                                            ->visible(fn () => ! $this->projects)
                                             ->content(__('No tickets found!'));
                                     }
                                 }
+
                                 return $fields;
                             }),
                     ])
-                        ->submitAction(new HtmlString("<button type='submit' class='px-3 py-2 bg-primary-500 hover:bg-primary-600 text-white rounded'>" . __('Import') . "</button>")),
+                        ->submitAction(new HtmlString("<button type='submit' class='px-3 py-2 bg-primary-500 hover:bg-primary-600 text-white rounded'>".__('Import').'</button>')),
                 ]),
         ];
     }
 
     public function import(): void
     {
-        if ($this->data && sizeof($this->data)) {
+        if ($this->data && count($this->data)) {
             $tickets = [];
             foreach (array_keys($this->data) as $item) {
                 $url = $this->ticketsDataApi[$item];
@@ -262,7 +274,7 @@ class JiraImport extends Page implements HasForms
         $this->tickets = $this->getJiraTicketsByProject($client, $this->selected_projects);
         foreach ($this->tickets as $projectKey => $ticket) {
             foreach ($ticket['issues'] as $issue) {
-                $this->ticketsDataApi[Str::slug($projectKey) . '_' . Str::slug($issue['code'])] = $issue['data']->self;
+                $this->ticketsDataApi[Str::slug($projectKey).'_'.Str::slug($issue['code'])] = $issue['data']->self;
             }
         }
         $this->loadingTickets = false;

@@ -31,7 +31,7 @@ class SearchTest extends TestCase
         $match = Project::factory()->create(['owner_id' => $user->id, 'name' => 'Peregrine Platform']);
         Project::factory()->create(['owner_id' => $user->id, 'name' => 'Unrelated thing']);
 
-        $results = (new SearchService())->search($user, 'Peregrine');
+        $results = (new SearchService)->search($user, 'Peregrine');
 
         $this->assertCount(1, $results['projects']);
         $this->assertTrue($results['projects']->first()->is($match));
@@ -45,7 +45,7 @@ class SearchTest extends TestCase
         $byContent = Ticket::factory()->create(['project_id' => $project->id, 'name' => 'y', 'content' => 'A wild Kangaroo appears']);
         Ticket::factory()->create(['project_id' => $project->id, 'name' => 'nope', 'content' => 'nope']);
 
-        $results = (new SearchService())->search($user, 'Kangaroo');
+        $results = (new SearchService)->search($user, 'Kangaroo');
 
         $this->assertCount(2, $results['tickets']);
         $this->assertEqualsCanonicalizing(
@@ -62,7 +62,7 @@ class SearchTest extends TestCase
         $match = TicketComment::factory()->create(['ticket_id' => $ticket->id, 'content' => 'Please review the Zephyr module']);
         TicketComment::factory()->create(['ticket_id' => $ticket->id, 'content' => 'unrelated']);
 
-        $results = (new SearchService())->search($user, 'Zephyr');
+        $results = (new SearchService)->search($user, 'Zephyr');
 
         $this->assertCount(1, $results['comments']);
         $this->assertTrue($results['comments']->first()->is($match));
@@ -74,7 +74,7 @@ class SearchTest extends TestCase
         $foreign = Project::factory()->create(['name' => 'Secret Falcon project']); // not the user's
         Ticket::factory()->create(['project_id' => $foreign->id, 'name' => 'Falcon ticket']);
 
-        $results = (new SearchService())->search($user, 'Falcon');
+        $results = (new SearchService)->search($user, 'Falcon');
 
         $this->assertCount(0, $results['projects']);
         $this->assertCount(0, $results['tickets']);
@@ -86,7 +86,7 @@ class SearchTest extends TestCase
         $project = Project::factory()->create(['name' => 'Osprey initiative']);
         $project->users()->attach($member->id, ['role' => 'employee']);
 
-        $results = (new SearchService())->search($member, 'Osprey');
+        $results = (new SearchService)->search($member, 'Osprey');
 
         $this->assertCount(1, $results['projects']);
     }
@@ -96,7 +96,7 @@ class SearchTest extends TestCase
         $user = User::factory()->create();
         Project::factory()->create(['owner_id' => $user->id]);
 
-        $results = (new SearchService())->search($user, '   ');
+        $results = (new SearchService)->search($user, '   ');
 
         $this->assertCount(0, $results['projects']);
     }

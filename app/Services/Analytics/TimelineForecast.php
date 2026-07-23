@@ -13,9 +13,7 @@ use App\Models\Ticket;
  */
 class TimelineForecast
 {
-    public function __construct(private Project $project)
-    {
-    }
+    public function __construct(private Project $project) {}
 
     /**
      * @return array{remaining_points:float, avg_velocity:float, sprints_remaining:?int, forecast_date:?string, confident:bool}

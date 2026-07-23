@@ -22,8 +22,8 @@ class EventServiceProvider extends ServiceProvider
             AssignDefaultRole::class,
         ],
         SocialRegistered::class => [
-            SocialRegistration::class
-        ]
+            SocialRegistration::class,
+        ],
     ];
 
     /**

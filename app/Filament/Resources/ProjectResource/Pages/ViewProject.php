@@ -15,8 +15,7 @@ class ViewProject extends ViewRecord
         return [
             Actions\Action::make('kanban')
                 ->label(
-                    fn ()
-                    => ($this->record->type === 'scrum' ? __('Scrum board') : __('Kanban board'))
+                    fn () => ($this->record->type === 'scrum' ? __('Scrum board') : __('Kanban board'))
                 )
                 ->icon('heroicon-o-view-boards')
                 ->color('secondary')

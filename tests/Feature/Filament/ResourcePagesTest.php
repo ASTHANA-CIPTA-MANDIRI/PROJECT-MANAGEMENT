@@ -50,9 +50,9 @@ class ResourcePagesTest extends TestCase
 
         $names = [];
         foreach ($modules as $module) {
-            $names[] = 'List ' . \Illuminate\Support\Str::plural($module);
+            $names[] = 'List '.\Illuminate\Support\Str::plural($module);
             foreach (['View', 'Create', 'Update', 'Delete'] as $action) {
-                $names[] = $action . ' ' . $module;
+                $names[] = $action.' '.$module;
             }
         }
         $names = array_merge($names, [

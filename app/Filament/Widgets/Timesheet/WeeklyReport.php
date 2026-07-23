@@ -17,14 +17,14 @@ class WeeklyReport extends BarChartWidget
     protected int|string|array $columnSpan = [
         'sm' => 1,
         'md' => 6,
-        'lg' => 3
+        'lg' => 3,
     ];
 
     public function __construct($id = null)
     {
         $weekDaysData = $this->getWeekStartAndFinishDays();
 
-        $this->filter = $weekDaysData['weekStartDate'] . ' - ' . $weekDaysData['weekEndDate'];
+        $this->filter = $weekDaysData['weekStartDate'].' - '.$weekDaysData['weekEndDate'];
 
         parent::__construct($id);
     }
@@ -41,7 +41,7 @@ class WeeklyReport extends BarChartWidget
         $collection = $this->filter(auth()->user(), [
             'year' => null,
             'weekStartDate' => $weekDaysData[0],
-            'weekEndDate' => $weekDaysData[1]
+            'weekEndDate' => $weekDaysData[1],
         ]);
 
         $dates = $this->buildDatesRange($weekDaysData[0], $weekDaysData[1]);
@@ -54,10 +54,10 @@ class WeeklyReport extends BarChartWidget
                     'label' => __('Weekly time logged'),
                     'data' => $datasets,
                     'backgroundColor' => [
-                        'rgba(54, 162, 235, .6)'
+                        'rgba(54, 162, 235, .6)',
                     ],
                     'borderColor' => [
-                        'rgba(54, 162, 235, .8)'
+                        'rgba(54, 162, 235, .8)',
                     ],
                 ],
             ],
@@ -74,8 +74,9 @@ class WeeklyReport extends BarChartWidget
     {
         $template = $this->createReportTemplate($dates);
         foreach ($collection as $item) {
-            $template[$item->day]['value'] =  $item->value;
+            $template[$item->day]['value'] = $item->value;
         }
+
         return collect($template)->pluck('value')->toArray();
     }
 
@@ -87,7 +88,7 @@ class WeeklyReport extends BarChartWidget
         ])
             ->whereBetween('created_at', [$params['weekStartDate'], $params['weekEndDate']])
             ->whereRaw(
-                DB::raw("YEAR(created_at)=" . (is_null($params['year']) ? Carbon::now()->format('Y') : $params['year']))
+                DB::raw('YEAR(created_at)='.(is_null($params['year']) ? Carbon::now()->format('Y') : $params['year']))
             )
             ->where('user_id', $user->id)
             ->groupBy(DB::raw("DATE_FORMAT(created_at,'%Y-%m-%d')"))
@@ -112,6 +113,7 @@ class WeeklyReport extends BarChartWidget
         foreach ($dates as $date) {
             $template[$date]['value'] = 0;
         }
+
         return $template;
     }
 
@@ -119,13 +121,13 @@ class WeeklyReport extends BarChartWidget
     {
         $year = date_create('today')->format('Y');
 
-        $dtStart = date_create('2 jan ' . $year)->modify('last Monday');
-        $dtEnd = date_create('last monday of Dec ' . $year);
+        $dtStart = date_create('2 jan '.$year)->modify('last Monday');
+        $dtEnd = date_create('last monday of Dec '.$year);
 
         for ($weeks = []; $dtStart <= $dtEnd; $dtStart->modify('+1 week')) {
             $from = $dtStart->format('Y-m-d');
             $to = (clone $dtStart)->modify('+6 Days')->format('Y-m-d');
-            $weeks[$from . ' - ' . $to] = $from . ' - ' . $to;
+            $weeks[$from.' - '.$to] = $from.' - '.$to;
         }
 
         return $weeks;
@@ -137,7 +139,7 @@ class WeeklyReport extends BarChartWidget
 
         return [
             'weekStartDate' => $now->startOfWeek()->format('Y-m-d'),
-            'weekEndDate' => $now->endOfWeek()->format('Y-m-d')
+            'weekEndDate' => $now->endOfWeek()->format('Y-m-d'),
         ];
     }
 }

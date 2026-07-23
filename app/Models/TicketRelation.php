@@ -11,7 +11,7 @@ class TicketRelation extends Model
     use HasFactory;
 
     protected $fillable = [
-        'ticket_id', 'type', 'relation_id', 'sort'
+        'ticket_id', 'type', 'relation_id', 'sort',
     ];
 
     public function ticket(): BelongsTo

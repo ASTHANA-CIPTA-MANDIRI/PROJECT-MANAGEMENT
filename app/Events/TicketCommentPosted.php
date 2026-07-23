@@ -15,11 +15,9 @@ use Illuminate\Queue\SerializesModels;
  */
 class TicketCommentPosted implements ShouldBroadcast
 {
-    use Dispatchable, InteractsWithSockets, SerializesModels, ChecksBroadcastDriver;
+    use ChecksBroadcastDriver, Dispatchable, InteractsWithSockets, SerializesModels;
 
-    public function __construct(public TicketComment $comment)
-    {
-    }
+    public function __construct(public TicketComment $comment) {}
 
     /**
      * Broadcast on both the ticket and its project private channels.
@@ -29,8 +27,8 @@ class TicketCommentPosted implements ShouldBroadcast
     public function broadcastOn(): array
     {
         return [
-            new PrivateChannel('ticket.' . $this->comment->ticket_id),
-            new PrivateChannel('project.' . $this->comment->ticket->project_id),
+            new PrivateChannel('ticket.'.$this->comment->ticket_id),
+            new PrivateChannel('project.'.$this->comment->ticket->project_id),
         ];
     }
 

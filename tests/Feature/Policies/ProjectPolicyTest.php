@@ -3,14 +3,13 @@
 namespace Tests\Feature\Policies;
 
 use App\Models\Project;
-use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Tests\InteractsWithPermissions;
 use Tests\TestCase;
 
 class ProjectPolicyTest extends TestCase
 {
-    use RefreshDatabase, InteractsWithPermissions;
+    use InteractsWithPermissions, RefreshDatabase;
 
     private function manageRole(): string
     {

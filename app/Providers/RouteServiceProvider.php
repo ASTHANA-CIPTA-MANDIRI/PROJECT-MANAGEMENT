@@ -56,11 +56,11 @@ class RouteServiceProvider extends ServiceProvider
             $token = $user?->currentAccessToken();
 
             if ($token && method_exists($token, 'getKey')) {
-                $key = 'token:' . $token->getKey();
+                $key = 'token:'.$token->getKey();
             } elseif ($user) {
-                $key = 'user:' . $user->id;
+                $key = 'user:'.$user->id;
             } else {
-                $key = 'ip:' . $request->ip();
+                $key = 'ip:'.$request->ip();
             }
 
             return Limit::perMinute(100)->by($key);
@@ -68,7 +68,7 @@ class RouteServiceProvider extends ServiceProvider
 
         // Public (unauthenticated) endpoints: 60 requests/minute per IP.
         RateLimiter::for('public', function (Request $request) {
-            return Limit::perMinute(60)->by('public:' . $request->ip());
+            return Limit::perMinute(60)->by('public:'.$request->ip());
         });
     }
 }

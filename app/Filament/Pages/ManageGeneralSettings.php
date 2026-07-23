@@ -5,7 +5,6 @@ namespace App\Filament\Pages;
 use App\Models\Role;
 use App\Settings\GeneralSettings;
 use Filament\Forms\Components\Card;
-use Filament\Forms\Components\Checkbox;
 use Filament\Forms\Components\FileUpload;
 use Filament\Forms\Components\Grid;
 use Filament\Forms\Components\Select;
@@ -61,7 +60,7 @@ class ManageGeneralSettings extends SettingsPage
                                     TextInput::make('site_name')
                                         ->label(__('Site name'))
                                         ->helperText(__('This is the platform name'))
-                                        ->default(fn() => config('app.name'))
+                                        ->default(fn () => config('app.name'))
                                         ->required(),
 
                                     Toggle::make('enable_registration')
@@ -102,6 +101,7 @@ class ManageGeneralSettings extends SettingsPage
     {
         $languages = config('system.locales.list');
         asort($languages);
+
         return $languages;
     }
 }

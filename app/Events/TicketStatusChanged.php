@@ -15,15 +15,14 @@ use Illuminate\Queue\SerializesModels;
  */
 class TicketStatusChanged implements ShouldBroadcast
 {
-    use Dispatchable, InteractsWithSockets, SerializesModels, ChecksBroadcastDriver;
+    use ChecksBroadcastDriver, Dispatchable, InteractsWithSockets, SerializesModels;
 
     public function __construct(
         public Ticket $ticket,
         public ?int $oldStatusId,
         public int $newStatusId,
         public ?int $actorId = null,
-    ) {
-    }
+    ) {}
 
     /**
      * Broadcast on the project's private channel.
@@ -32,7 +31,7 @@ class TicketStatusChanged implements ShouldBroadcast
      */
     public function broadcastOn(): array
     {
-        return [new PrivateChannel('project.' . $this->ticket->project_id)];
+        return [new PrivateChannel('project.'.$this->ticket->project_id)];
     }
 
     public function broadcastAs(): string

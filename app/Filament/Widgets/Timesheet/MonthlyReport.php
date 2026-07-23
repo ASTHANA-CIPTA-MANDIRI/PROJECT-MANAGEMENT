@@ -23,7 +23,7 @@ class MonthlyReport extends BarChartWidget
     protected function getData(): array
     {
         $collection = $this->filter(auth()->user(), [
-            'year' => $this->filter
+            'year' => $this->filter,
         ]);
 
         $datasets = $this->getDatasets($this->buildRapport($collection));
@@ -34,10 +34,10 @@ class MonthlyReport extends BarChartWidget
                     'label' => __('Total time logged'),
                     'data' => $datasets['sets'],
                     'backgroundColor' => [
-                        'rgba(54, 162, 235, .6)'
+                        'rgba(54, 162, 235, .6)',
                     ],
                     'borderColor' => [
-                        'rgba(54, 162, 235, .8)'
+                        'rgba(54, 162, 235, .8)',
                     ],
                 ],
             ],
@@ -49,7 +49,7 @@ class MonthlyReport extends BarChartWidget
     {
         return [
             2022 => 2022,
-            2023 => 2023
+            2023 => 2023,
         ];
     }
 
@@ -64,7 +64,7 @@ class MonthlyReport extends BarChartWidget
     protected int|string|array $columnSpan = [
         'sm' => 1,
         'md' => 6,
-        'lg' => 3
+        'lg' => 3,
     ];
 
     protected function filter(User $user, array $params)
@@ -74,7 +74,7 @@ class MonthlyReport extends BarChartWidget
             DB::raw('SUM(value) as value'),
         ])
             ->whereRaw(
-                DB::raw("YEAR(created_at)=" . (is_null($params['year']) ? Carbon::now()->format('Y') : $params['year']))
+                DB::raw('YEAR(created_at)='.(is_null($params['year']) ? Carbon::now()->format('Y') : $params['year']))
             )
             ->where('user_id', $user->id)
             ->groupBy(DB::raw("DATE_FORMAT(created_at,'%m')"))
@@ -85,7 +85,7 @@ class MonthlyReport extends BarChartWidget
     {
         $datasets = [
             'sets' => [],
-            'labels' => []
+            'labels' => [],
         ];
 
         foreach ($rapportData as $data) {
@@ -110,12 +110,12 @@ class MonthlyReport extends BarChartWidget
             9 => ['September', 0],
             10 => ['October', 0],
             11 => ['November', 0],
-            12 => ['December', 0]
+            12 => ['December', 0],
         ];
 
         foreach ($collection as $value) {
-            if (isset($months[(int)$value->month])) {
-                $months[(int)$value->month][1] = (float)$value->value;
+            if (isset($months[(int) $value->month])) {
+                $months[(int) $value->month][1] = (float) $value->value;
             }
         }
 

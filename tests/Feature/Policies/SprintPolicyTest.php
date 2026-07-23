@@ -10,7 +10,7 @@ use Tests\TestCase;
 
 class SprintPolicyTest extends TestCase
 {
-    use RefreshDatabase, InteractsWithPermissions;
+    use InteractsWithPermissions, RefreshDatabase;
 
     private function manageRole(): string
     {

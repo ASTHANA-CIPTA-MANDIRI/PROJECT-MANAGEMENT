@@ -5,11 +5,11 @@ declare(strict_types=1);
 namespace App\Filament\Pages;
 
 use Filament\Forms\Components\Card;
+use Filament\Forms\Components\DatePicker;
 use Filament\Forms\Components\Grid;
 use Filament\Forms\Concerns\InteractsWithForms;
 use Filament\Forms\Contracts\HasForms;
 use Filament\Pages\Page;
-use Filament\Forms\Components\DatePicker;
 use Maatwebsite\Excel\Facades\Excel;
 use Symfony\Component\HttpFoundation\BinaryFileResponse;
 
@@ -47,9 +47,9 @@ class TimesheetExport extends Page implements HasForms
                         DatePicker::make('end_date')
                             ->required()
                             ->reactive()
-                            ->label('End date')
-                    ])
-            ])
+                            ->label('End date'),
+                    ]),
+            ]),
         ];
     }
 
@@ -59,7 +59,7 @@ class TimesheetExport extends Page implements HasForms
 
         return Excel::download(
             new \App\Exports\TimesheetExport($data),
-            'time_' . time() . '.csv',
+            'time_'.time().'.csv',
             \Maatwebsite\Excel\Excel::CSV,
             ['Content-Type' => 'text/csv']
         );

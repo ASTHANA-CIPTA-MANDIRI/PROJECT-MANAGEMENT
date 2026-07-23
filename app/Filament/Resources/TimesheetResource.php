@@ -3,7 +3,6 @@
 namespace App\Filament\Resources;
 
 use App\Filament\Resources\TimesheetResource\Pages;
-use App\Filament\Resources\TimesheetResource\RelationManagers;
 use App\Models\Activity;
 use App\Models\TicketHour;
 use Filament\Forms;
@@ -64,7 +63,7 @@ class TimesheetResource extends Resource
                         Textarea::make('comment')
                             ->label(__('Comment'))
                             ->rows(3),
-                    ])
+                    ]),
             ]);
     }
 
@@ -75,7 +74,7 @@ class TimesheetResource extends Resource
                 Tables\Columns\TextColumn::make('user.name')
                     ->label(__('Owner'))
                     ->sortable()
-                    ->formatStateUsing(fn($record) => view('components.user-avatar', ['user' => $record->user]))
+                    ->formatStateUsing(fn ($record) => view('components.user-avatar', ['user' => $record->user]))
                     ->searchable(),
 
                 Tables\Columns\TextColumn::make('value')

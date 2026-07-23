@@ -25,7 +25,7 @@ class Kanban extends Page implements HasForms
 
     protected $listeners = [
         'recordUpdated',
-        'closeTicketDialog'
+        'closeTicketDialog',
     ];
 
     public function mount(Project $project)
@@ -36,7 +36,7 @@ class Kanban extends Page implements HasForms
         } elseif (
             $this->project->owner_id != auth()->user()->id
             &&
-            !$this->project->users->where('id', auth()->user()->id)->count()
+            ! $this->project->users->where('id', auth()->user()->id)->count()
         ) {
             abort(403);
         }
@@ -53,7 +53,7 @@ class Kanban extends Page implements HasForms
                 ->action(function () {
                     $this->getRecords();
                     Filament::notify('success', __('Kanban board updated'));
-                })
+                }),
         ];
     }
 
@@ -66,5 +66,4 @@ class Kanban extends Page implements HasForms
     {
         return $this->formSchema();
     }
-
 }

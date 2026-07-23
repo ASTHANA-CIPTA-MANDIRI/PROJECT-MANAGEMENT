@@ -44,7 +44,7 @@ class TicketHoursExport implements FromCollection, WithHeadings
                 'hours' => number_format($item->value, 2, ',', ' '),
                 'activity' => $item->activity ? $item->activity->name : '-',
                 'date' => $item->created_at->format(__('Y-m-d g:i A')),
-                'comment' => $item->comment
+                'comment' => $item->comment,
             ]);
     }
 }

@@ -11,10 +11,11 @@ use Illuminate\Support\HtmlString;
 class LatestTickets extends BaseWidget
 {
     protected static ?int $sort = 6;
+
     protected int|string|array $columnSpan = [
         'sm' => 1,
         'md' => 6,
-        'lg' => 3
+        'lg' => 3,
     ];
 
     public function mount(): void
@@ -55,50 +56,50 @@ class LatestTickets extends BaseWidget
         return [
             Tables\Columns\TextColumn::make('name')
                 ->label(__('Ticket'))
-                ->formatStateUsing(fn($record) => new HtmlString('
+                ->formatStateUsing(fn ($record) => new HtmlString('
                     <div class="flex flex-col gap-1">
                         <span class="text-gray-400 font-medium text-xs">
-                            ' . $record->project->name . '
+                            '.$record->project->name.'
                         </span>
                         <span>
-                            <a href="' . route('filament.resources.tickets.share', $record->code)
-                    . '" target="_blank" class="text-primary-500 text-sm hover:underline">'
-                    . $record->code
-                    . '</a>
+                            <a href="'.route('filament.resources.tickets.share', $record->code)
+                    .'" target="_blank" class="text-primary-500 text-sm hover:underline">'
+                    .$record->code
+                    .'</a>
                             <span class="text-sm text-gray-400">|</span> '
-                    . $record->name . '
+                    .$record->name.'
                         </span>
-                        ' . ($record->responsible ? '
+                        '.($record->responsible ? '
                         <div class="flex items-center gap-3">
                             <div class="flex items-center gap-1 text-xs text-gray-400">'
-                        . view('components.user-avatar', ['user' => $record->responsible])
-                        . '<span>' . $record->responsible?->name . '</span>'
-                        . '</div>
-                        </div>' : '') . '
+                        .view('components.user-avatar', ['user' => $record->responsible])
+                        .'<span>'.$record->responsible?->name.'</span>'
+                        .'</div>
+                        </div>' : '').'
                     </div>
                 ')),
 
             Tables\Columns\TextColumn::make('status.name')
                 ->label(__('Status'))
-                ->formatStateUsing(fn($record) => new HtmlString('
+                ->formatStateUsing(fn ($record) => new HtmlString('
                             <div class="flex items-center gap-2 mt-1">
                                 <span class="filament-tables-color-column relative flex h-6 w-6 rounded-md"
-                                    style="background-color: ' . $record->status->color . '"
-                                    title="' . $record->status->name . '"></span>
+                                    style="background-color: '.$record->status->color.'"
+                                    title="'.$record->status->name.'"></span>
                             </div>
                         ')),
 
             Tables\Columns\TextColumn::make('type.name')
                 ->label(__('Type'))
-                ->formatStateUsing(fn($record) => view('components.ticket-type', ['type' => $record->type])),
+                ->formatStateUsing(fn ($record) => view('components.ticket-type', ['type' => $record->type])),
 
             Tables\Columns\TextColumn::make('priority.name')
                 ->label(__('Priority'))
-                ->formatStateUsing(fn($record) => new HtmlString('
+                ->formatStateUsing(fn ($record) => new HtmlString('
                             <div class="flex items-center gap-2 mt-1">
                                 <span class="filament-tables-color-column relative flex h-6 w-6 rounded-md"
-                                    style="background-color: ' . $record->priority->color . '"
-                                    title="' . $record->priority->name . '"></span>
+                                    style="background-color: '.$record->priority->color.'"
+                                    title="'.$record->priority->name.'"></span>
                             </div>
                         ')),
         ];

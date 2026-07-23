@@ -45,7 +45,7 @@ class CleanupOldActivities extends Command
             return self::SUCCESS;
         }
 
-        $path = 'archives/ticket-activities-' . now()->format('Y-m-d-His') . '.jsonl';
+        $path = 'archives/ticket-activities-'.now()->format('Y-m-d-His').'.jsonl';
         Storage::disk('local')->put($path, '');
 
         $archived = 0;

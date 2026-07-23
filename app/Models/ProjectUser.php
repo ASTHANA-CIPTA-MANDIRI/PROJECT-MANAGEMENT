@@ -11,7 +11,7 @@ class ProjectUser extends Model
     use HasFactory;
 
     protected $fillable = [
-        'user_id', 'project_id', 'role'
+        'user_id', 'project_id', 'role',
     ];
 
     public function user(): BelongsTo

@@ -22,7 +22,7 @@ class Attachments extends Component implements HasForms, HasTable
     public Ticket $ticket;
 
     protected $listeners = [
-        'filesUploaded'
+        'filesUploaded',
     ];
 
     public function mount(): void
@@ -48,7 +48,7 @@ class Attachments extends Component implements HasForms, HasTable
                 ->hint(__('Important: If a file has the same name, it will be replaced'))
                 ->helperText(__('Here you can attach all files needed for this ticket'))
                 ->multiple()
-                ->disablePreview()
+                ->disablePreview(),
         ];
     }
 
@@ -97,7 +97,7 @@ class Attachments extends Component implements HasForms, HasTable
                 ->action(function ($record) {
                     $record->delete();
                     Filament::notify('success', __('Ticket attachment deleted'));
-                })
+                }),
         ];
     }
 }

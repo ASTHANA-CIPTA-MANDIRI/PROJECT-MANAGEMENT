@@ -17,6 +17,7 @@ trait WithCachedData
      * Remember the result of $callback under a widget-scoped cache key.
      *
      * @template T
+     *
      * @param  \Closure():T  $callback
      * @return T
      */

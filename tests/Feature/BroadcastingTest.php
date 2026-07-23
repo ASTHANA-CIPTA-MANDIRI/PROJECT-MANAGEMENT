@@ -73,7 +73,7 @@ class BroadcastingTest extends TestCase
 
         $channels = $event->broadcastOn();
 
-        $this->assertEquals([new PrivateChannel('project.' . $ticket->project_id)], $channels);
+        $this->assertEquals([new PrivateChannel('project.'.$ticket->project_id)], $channels);
         $this->assertSame('ticket.status.changed', $event->broadcastAs());
         $this->assertSame($ticket->id, $event->broadcastWith()['ticket_id']);
         $this->assertSame(2, $event->broadcastWith()['new_status_id']);
@@ -85,8 +85,8 @@ class BroadcastingTest extends TestCase
         $event = new TicketCommentPosted($comment);
 
         $this->assertEquals([
-            new PrivateChannel('ticket.' . $comment->ticket_id),
-            new PrivateChannel('project.' . $comment->ticket->project_id),
+            new PrivateChannel('ticket.'.$comment->ticket_id),
+            new PrivateChannel('project.'.$comment->ticket->project_id),
         ], $event->broadcastOn());
         $this->assertSame('ticket.comment.posted', $event->broadcastAs());
         $this->assertSame($comment->content, $event->broadcastWith()['content']);

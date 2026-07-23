@@ -15,7 +15,6 @@ class AssignDefaultRole
      * through the self-registration form. Without a role the user has no
      * permissions and would be blocked by User::canAccessFilament() (403).
      *
-     * @param Registered $event
      * @return void
      */
     public function handle(Registered $event)

@@ -10,7 +10,7 @@ use Tests\TestCase;
 
 class TicketPolicyTest extends TestCase
 {
-    use RefreshDatabase, InteractsWithPermissions;
+    use InteractsWithPermissions, RefreshDatabase;
 
     // ------------------------------------------------------------- viewAny
 

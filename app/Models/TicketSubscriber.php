@@ -11,7 +11,7 @@ class TicketSubscriber extends Model
     use HasFactory;
 
     protected $fillable = [
-        'user_id', 'ticket_id'
+        'user_id', 'ticket_id',
     ];
 
     public function user(): BelongsTo

@@ -77,7 +77,7 @@ class RegistrationWorkflowTest extends TestCase
         $user = User::factory()->create();
 
         // Must not throw, even though there is nothing to assign.
-        (new AssignDefaultRole())->handle(new Registered($user));
+        (new AssignDefaultRole)->handle(new Registered($user));
 
         $this->assertCount(0, $user->fresh()->roles);
     }
@@ -90,7 +90,7 @@ class RegistrationWorkflowTest extends TestCase
 
         $user = User::factory()->create();
 
-        (new AssignDefaultRole())->handle(new Registered($user));
+        (new AssignDefaultRole)->handle(new Registered($user));
 
         $this->assertCount(0, $user->fresh()->roles);
     }

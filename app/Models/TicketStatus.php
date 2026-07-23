@@ -14,7 +14,7 @@ class TicketStatus extends Model
 
     protected $fillable = [
         'name', 'color', 'is_default', 'order',
-        'project_id'
+        'project_id',
     ];
 
     public static function boot()

@@ -25,7 +25,7 @@ class Scrum extends Page implements HasForms
 
     protected $listeners = [
         'recordUpdated',
-        'closeTicketDialog'
+        'closeTicketDialog',
     ];
 
     public function mount(Project $project)
@@ -36,7 +36,7 @@ class Scrum extends Page implements HasForms
         } elseif (
             $this->project->owner_id != auth()->user()->id
             &&
-            !$this->project->users->where('id', auth()->user()->id)->count()
+            ! $this->project->users->where('id', auth()->user()->id)->count()
         ) {
             abort(403);
         }
@@ -48,14 +48,14 @@ class Scrum extends Page implements HasForms
         return [
             Action::make('manage-sprints')
                 ->button()
-                ->visible(fn() => $this->project->currentSprint && auth()->user()->can('update', $this->project))
+                ->visible(fn () => $this->project->currentSprint && auth()->user()->can('update', $this->project))
                 ->label(__('Manage sprints'))
                 ->color('primary')
                 ->url(route('filament.resources.projects.edit', $this->project)),
 
             Action::make('refresh')
                 ->button()
-                ->visible(fn() => $this->project->currentSprint)
+                ->visible(fn () => $this->project->currentSprint)
                 ->label(__('Refresh'))
                 ->color('secondary')
                 ->action(function () {
@@ -79,5 +79,4 @@ class Scrum extends Page implements HasForms
     {
         return $this->formSchema();
     }
-
 }

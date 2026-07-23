@@ -29,7 +29,7 @@ class AnalyticsPageTest extends TestCase
     private function userWithAnalytics(): User
     {
         Permission::firstOrCreate(['name' => 'View analytics']);
-        $role = Role::create(['name' => 'r_' . uniqid()]);
+        $role = Role::create(['name' => 'r_'.uniqid()]);
         $role->syncPermissions(['View analytics']);
 
         $user = User::factory()->create();

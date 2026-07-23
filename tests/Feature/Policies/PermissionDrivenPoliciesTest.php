@@ -22,7 +22,7 @@ use Tests\TestCase;
  */
 class PermissionDrivenPoliciesTest extends TestCase
 {
-    use RefreshDatabase, InteractsWithPermissions;
+    use InteractsWithPermissions, RefreshDatabase;
 
     /**
      * @return array<string, array{0: class-string, 1: string, 2: string}>
@@ -92,8 +92,8 @@ class PermissionDrivenPoliciesTest extends TestCase
         }
 
         return match ($model) {
-            Role::class => Role::create(['name' => 'subject_' . uniqid()]),
-            Permission::class => Permission::create(['name' => 'subject_' . uniqid()]),
+            Role::class => Role::create(['name' => 'subject_'.uniqid()]),
+            Permission::class => Permission::create(['name' => 'subject_'.uniqid()]),
             default => $model::factory()->create(),
         };
     }

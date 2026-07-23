@@ -17,7 +17,7 @@ class Dashboard extends BasePage
 {
     protected static bool $shouldRegisterNavigation = false;
 
-    protected function getColumns(): int | array
+    protected function getColumns(): int|array
     {
         return 6;
     }
@@ -33,7 +33,7 @@ class Dashboard extends BasePage
             TicketsByPriority::class,
             TicketsByType::class,
             TicketTimeLogged::class,
-            UserTimeLogged::class
+            UserTimeLogged::class,
         ];
     }
 }

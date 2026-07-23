@@ -2,7 +2,6 @@
 
 namespace App\Models;
 
-use Carbon\Carbon;
 use Illuminate\Database\Eloquent\Casts\Attribute;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
@@ -16,7 +15,7 @@ class Sprint extends Model
 
     protected $fillable = [
         'name', 'starts_at', 'ends_at', 'description',
-        'project_id', 'started_at', 'ended_at'
+        'project_id', 'started_at', 'ended_at',
     ];
 
     protected $casts = [
@@ -35,7 +34,7 @@ class Sprint extends Model
                 'name' => $item->name,
                 'starts_at' => $item->starts_at,
                 'ends_at' => $item->ends_at,
-                'project_id' => $item->project_id
+                'project_id' => $item->project_id,
             ]);
             $item->epic_id = $epic->id;
             $item->save();
@@ -61,9 +60,10 @@ class Sprint extends Model
     {
         return new Attribute(
             get: function () {
-                if ($this->starts_at && $this->ends_at && $this->started_at && !$this->ended_at) {
+                if ($this->starts_at && $this->ends_at && $this->started_at && ! $this->ended_at) {
                     return $this->ends_at->diffInDays(now()) + 1;
                 }
+
                 return null;
             }
         );

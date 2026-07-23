@@ -16,7 +16,7 @@ class ActivitiesReport extends BarChartWidget
     protected int|string|array $columnSpan = [
         'sm' => 1,
         'md' => 6,
-        'lg' => 3
+        'lg' => 3,
     ];
 
     public ?string $filter = '2023';
@@ -30,14 +30,14 @@ class ActivitiesReport extends BarChartWidget
     {
         return [
             2022 => 2022,
-            2023 => 2023
+            2023 => 2023,
         ];
     }
 
     protected function getData(): array
     {
         $collection = $this->filter(auth()->user(), [
-            'year' => $this->filter
+            'year' => $this->filter,
         ]);
 
         $datasets = $this->getDatasets($collection);
@@ -48,10 +48,10 @@ class ActivitiesReport extends BarChartWidget
                     'label' => __('Total time logged'),
                     'data' => $datasets['sets'],
                     'backgroundColor' => [
-                        'rgba(54, 162, 235, .6)'
+                        'rgba(54, 162, 235, .6)',
                     ],
                     'borderColor' => [
-                        'rgba(54, 162, 235, .8)'
+                        'rgba(54, 162, 235, .8)',
                     ],
                 ],
             ],
@@ -63,7 +63,7 @@ class ActivitiesReport extends BarChartWidget
     {
         $datasets = [
             'sets' => [],
-            'labels' => []
+            'labels' => [],
         ];
 
         foreach ($collection as $item) {
@@ -82,7 +82,7 @@ class ActivitiesReport extends BarChartWidget
                 DB::raw('SUM(value) as value'),
             ])
             ->whereRaw(
-                DB::raw("YEAR(created_at)=" . (is_null($params['year']) ? Carbon::now()->format('Y') : $params['year']))
+                DB::raw('YEAR(created_at)='.(is_null($params['year']) ? Carbon::now()->format('Y') : $params['year']))
             )
             ->where('user_id', $user->id)
             ->groupBy('activity_id')

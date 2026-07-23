@@ -19,6 +19,7 @@ class EpicForm extends Component implements HasForms
     use InteractsWithForms;
 
     public Epic $epic;
+
     public array $epics = [];
 
     public function mount()

@@ -8,7 +8,6 @@ use App\Filament\Resources\ProjectResource\RelationManagers;
 use App\Models\Project;
 use App\Models\ProjectFavorite;
 use App\Models\ProjectStatus;
-use App\Models\Ticket;
 use App\Models\User;
 use Filament\Facades\Filament;
 use Filament\Forms;
@@ -89,23 +88,23 @@ class ProjectResource extends Resource
                                                     ->columnSpan(2)
                                                     ->unique(Project::class, column: 'ticket_prefix', ignoreRecord: true)
                                                     ->disabled(
-                                                        fn($record) => $record && $record->tickets()->count() != 0
+                                                        fn ($record) => $record && $record->tickets()->count() != 0
                                                     )
-                                                    ->required()
+                                                    ->required(),
                                             ]),
 
                                         Forms\Components\Select::make('owner_id')
                                             ->label(__('Project owner'))
                                             ->searchable()
-                                            ->options(fn() => User::all()->pluck('name', 'id')->toArray())
-                                            ->default(fn() => auth()->user()->id)
+                                            ->options(fn () => User::all()->pluck('name', 'id')->toArray())
+                                            ->default(fn () => auth()->user()->id)
                                             ->required(),
 
                                         Forms\Components\Select::make('status_id')
                                             ->label(__('Project status'))
                                             ->searchable()
-                                            ->options(fn() => ProjectStatus::all()->pluck('name', 'id')->toArray())
-                                            ->default(fn() => ProjectStatus::where('is_default', true)->first()?->id)
+                                            ->options(fn () => ProjectStatus::all()->pluck('name', 'id')->toArray())
+                                            ->default(fn () => ProjectStatus::where('is_default', true)->first()?->id)
                                             ->required(),
                                     ]),
 
@@ -118,16 +117,17 @@ class ProjectResource extends Resource
                                     ->searchable()
                                     ->options([
                                         'kanban' => __('Kanban'),
-                                        'scrum' => __('Scrum')
+                                        'scrum' => __('Scrum'),
                                     ])
                                     ->reactive()
-                                    ->default(fn() => 'kanban')
+                                    ->default(fn () => 'kanban')
                                     ->helperText(function ($state) {
                                         if ($state === 'kanban') {
                                             return __('Display and move your project forward with issues on a powerful board.');
                                         } elseif ($state === 'scrum') {
                                             return __('Achieve your project goals with a board, backlog, and roadmap.');
                                         }
+
                                         return '';
                                     })
                                     ->required(),
@@ -140,10 +140,10 @@ class ProjectResource extends Resource
                                     ->searchable()
                                     ->options([
                                         'default' => __('Default'),
-                                        'custom' => __('Custom configuration')
+                                        'custom' => __('Custom configuration'),
                                     ])
-                                    ->default(fn() => 'default')
-                                    ->disabled(fn($record) => $record && $record->tickets()->count())
+                                    ->default(fn () => 'default')
+                                    ->disabled(fn ($record) => $record && $record->tickets()->count())
                                     ->required(),
                             ]),
                     ]),
@@ -156,8 +156,8 @@ class ProjectResource extends Resource
             ->columns([
                 Tables\Columns\TextColumn::make('cover')
                     ->label(__('Cover image'))
-                    ->formatStateUsing(fn($state) => new HtmlString('
-                            <div style=\'background-image: url("' . $state . '")\'
+                    ->formatStateUsing(fn ($state) => new HtmlString('
+                            <div style=\'background-image: url("'.$state.'")\'
                                  class="w-8 h-8 bg-cover bg-center bg-no-repeat"></div>
                         ')),
 
@@ -173,11 +173,11 @@ class ProjectResource extends Resource
 
                 Tables\Columns\TextColumn::make('status.name')
                     ->label(__('Project status'))
-                    ->formatStateUsing(fn($record) => new HtmlString('
+                    ->formatStateUsing(fn ($record) => new HtmlString('
                             <div class="flex items-center gap-2">
                                 <span class="filament-tables-color-column relative flex h-6 w-6 rounded-md"
-                                    style="background-color: ' . $record->status->color . '"></span>
-                                <span>' . $record->status->name . '</span>
+                                    style="background-color: '.$record->status->color.'"></span>
+                                <span>'.$record->status->name.'</span>
                             </div>
                         '))
                     ->sortable()
@@ -190,7 +190,7 @@ class ProjectResource extends Resource
                 Tables\Columns\BadgeColumn::make('type')
                     ->enum([
                         'kanban' => __('Kanban'),
-                        'scrum' => __('Scrum')
+                        'scrum' => __('Scrum'),
                     ])
                     ->colors([
                         'secondary' => 'kanban',
@@ -207,19 +207,19 @@ class ProjectResource extends Resource
                 Tables\Filters\SelectFilter::make('owner_id')
                     ->label(__('Owner'))
                     ->multiple()
-                    ->options(fn() => User::all()->pluck('name', 'id')->toArray()),
+                    ->options(fn () => User::all()->pluck('name', 'id')->toArray()),
 
                 Tables\Filters\SelectFilter::make('status_id')
                     ->label(__('Status'))
                     ->multiple()
-                    ->options(fn() => ProjectStatus::all()->pluck('name', 'id')->toArray()),
+                    ->options(fn () => ProjectStatus::all()->pluck('name', 'id')->toArray()),
             ])
             ->actions([
 
                 Tables\Actions\Action::make('favorite')
                     ->label('')
                     ->icon('heroicon-o-star')
-                    ->color(fn($record) => auth()->user()->favoriteProjects()
+                    ->color(fn ($record) => auth()->user()->favoriteProjects()
                         ->where('projects.id', $record->id)->count() ? 'success' : 'default')
                     ->action(function ($record) {
                         $projectId = $record->id;
@@ -231,7 +231,7 @@ class ProjectResource extends Resource
                         } else {
                             ProjectFavorite::create([
                                 'project_id' => $projectId,
-                                'user_id' => auth()->user()->id
+                                'user_id' => auth()->user()->id,
                             ]);
                         }
                         Filament::notify('success', __('Project updated'));
@@ -245,17 +245,16 @@ class ProjectResource extends Resource
                         ->label(__('Export hours'))
                         ->icon('heroicon-o-document-download')
                         ->color('secondary')
-                        ->action(fn($record) => Excel::download(
+                        ->action(fn ($record) => Excel::download(
                             new ProjectHoursExport($record),
-                            'time_' . Str::slug($record->name) . '.csv',
+                            'time_'.Str::slug($record->name).'.csv',
                             \Maatwebsite\Excel\Excel::CSV,
                             ['Content-Type' => 'text/csv']
                         )),
 
                     Tables\Actions\Action::make('kanban')
                         ->label(
-                            fn ($record)
-                                => ($record->type === 'scrum' ? __('Scrum board') : __('Kanban board'))
+                            fn ($record) => ($record->type === 'scrum' ? __('Scrum board') : __('Kanban board'))
                         )
                         ->icon('heroicon-o-view-boards')
                         ->color('secondary')

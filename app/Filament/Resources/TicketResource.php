@@ -3,7 +3,6 @@
 namespace App\Filament\Resources;
 
 use App\Filament\Resources\TicketResource\Pages;
-use App\Filament\Resources\TicketResource\RelationManagers;
 use App\Models\Epic;
 use App\Models\Project;
 use App\Models\Ticket;
@@ -86,12 +85,12 @@ class TicketResource extends Resource
                                             );
                                         }
                                     })
-                                    ->options(fn() => Project::where('owner_id', auth()->user()->id)
+                                    ->options(fn () => Project::where('owner_id', auth()->user()->id)
                                         ->orWhereHas('users', function ($query) {
                                             return $query->where('users.id', auth()->user()->id);
                                         })->pluck('name', 'id')->toArray()
                                     )
-                                    ->default(fn() => request()->get('project'))
+                                    ->default(fn () => request()->get('project'))
                                     ->required(),
                                 Forms\Components\Select::make('epic_id')
                                     ->label(__('Epic'))
@@ -106,7 +105,7 @@ class TicketResource extends Resource
                                     ->schema([
                                         Forms\Components\TextInput::make('code')
                                             ->label(__('Ticket code'))
-                                            ->visible(fn($livewire) => !($livewire instanceof CreateRecord))
+                                            ->visible(fn ($livewire) => ! ($livewire instanceof CreateRecord))
                                             ->columnSpan(2)
                                             ->disabled(),
 
@@ -114,7 +113,7 @@ class TicketResource extends Resource
                                             ->label(__('Ticket name'))
                                             ->required()
                                             ->columnSpan(
-                                                fn($livewire) => !($livewire instanceof CreateRecord) ? 10 : 12
+                                                fn ($livewire) => ! ($livewire instanceof CreateRecord) ? 10 : 12
                                             )
                                             ->maxLength(255),
                                     ]),
@@ -122,14 +121,14 @@ class TicketResource extends Resource
                                 Forms\Components\Select::make('owner_id')
                                     ->label(__('Ticket owner'))
                                     ->searchable()
-                                    ->options(fn() => User::all()->pluck('name', 'id')->toArray())
-                                    ->default(fn() => auth()->user()->id)
+                                    ->options(fn () => User::all()->pluck('name', 'id')->toArray())
+                                    ->default(fn () => auth()->user()->id)
                                     ->required(),
 
                                 Forms\Components\Select::make('responsible_id')
                                     ->label(__('Ticket responsible'))
                                     ->searchable()
-                                    ->options(fn() => User::all()->pluck('name', 'id')->toArray()),
+                                    ->options(fn () => User::all()->pluck('name', 'id')->toArray()),
 
                                 Forms\Components\Grid::make()
                                     ->columns(3)
@@ -171,15 +170,15 @@ class TicketResource extends Resource
                                         Forms\Components\Select::make('type_id')
                                             ->label(__('Ticket type'))
                                             ->searchable()
-                                            ->options(fn() => TicketType::all()->pluck('name', 'id')->toArray())
-                                            ->default(fn() => TicketType::where('is_default', true)->first()?->id)
+                                            ->options(fn () => TicketType::all()->pluck('name', 'id')->toArray())
+                                            ->default(fn () => TicketType::where('is_default', true)->first()?->id)
                                             ->required(),
 
                                         Forms\Components\Select::make('priority_id')
                                             ->label(__('Ticket priority'))
                                             ->searchable()
-                                            ->options(fn() => TicketPriority::all()->pluck('name', 'id')->toArray())
-                                            ->default(fn() => TicketPriority::where('is_default', true)->first()?->id)
+                                            ->options(fn () => TicketPriority::all()->pluck('name', 'id')->toArray())
+                                            ->default(fn () => TicketPriority::where('is_default', true)->first()?->id)
                                             ->required(),
                                     ]),
                             ]),
@@ -203,11 +202,12 @@ class TicketResource extends Resource
                             ->itemLabel(function (array $state) {
                                 $ticketRelation = TicketRelation::find($state['id'] ?? 0);
                                 if ($ticketRelation) {
-                                    return __(config('system.tickets.relations.list.' . $ticketRelation->type))
-                                        . ' '
-                                        . $ticketRelation->relation->name
-                                        . ' (' . $ticketRelation->relation->code . ')';
+                                    return __(config('system.tickets.relations.list.'.$ticketRelation->type))
+                                        .' '
+                                        .$ticketRelation->relation->name
+                                        .' ('.$ticketRelation->relation->code.')';
                                 }
+
                                 return null;
                             })
                             ->relationship()
@@ -224,7 +224,7 @@ class TicketResource extends Resource
                                             ->required()
                                             ->searchable()
                                             ->options(config('system.tickets.relations.list'))
-                                            ->default(fn() => config('system.tickets.relations.default')),
+                                            ->default(fn () => config('system.tickets.relations.default')),
 
                                         Forms\Components\Select::make('relation_id')
                                             ->label(__('Related ticket'))
@@ -236,6 +236,7 @@ class TicketResource extends Resource
                                                 if ($livewire instanceof EditRecord && $livewire->record) {
                                                     $query->where('id', '<>', $livewire->record->id);
                                                 }
+
                                                 return $query->get()->pluck('name', 'id')->toArray();
                                             }),
                                     ]),
@@ -262,22 +263,22 @@ class TicketResource extends Resource
             Tables\Columns\TextColumn::make('owner.name')
                 ->label(__('Owner'))
                 ->sortable()
-                ->formatStateUsing(fn($record) => view('components.user-avatar', ['user' => $record->owner]))
+                ->formatStateUsing(fn ($record) => view('components.user-avatar', ['user' => $record->owner]))
                 ->searchable(),
 
             Tables\Columns\TextColumn::make('responsible.name')
                 ->label(__('Responsible'))
                 ->sortable()
-                ->formatStateUsing(fn($record) => view('components.user-avatar', ['user' => $record->responsible]))
+                ->formatStateUsing(fn ($record) => view('components.user-avatar', ['user' => $record->responsible]))
                 ->searchable(),
 
             Tables\Columns\TextColumn::make('status.name')
                 ->label(__('Status'))
-                ->formatStateUsing(fn($record) => new HtmlString('
+                ->formatStateUsing(fn ($record) => new HtmlString('
                             <div class="flex items-center gap-2 mt-1">
                                 <span class="filament-tables-color-column relative flex h-6 w-6 rounded-md"
-                                    style="background-color: ' . $record->status->color . '"></span>
-                                <span>' . $record->status->name . '</span>
+                                    style="background-color: '.$record->status->color.'"></span>
+                                <span>'.$record->status->name.'</span>
                             </div>
                         '))
                 ->sortable()
@@ -286,18 +287,18 @@ class TicketResource extends Resource
             Tables\Columns\TextColumn::make('type.name')
                 ->label(__('Type'))
                 ->formatStateUsing(
-                    fn($record) => view('partials.filament.resources.ticket-type', ['state' => $record->type])
+                    fn ($record) => view('partials.filament.resources.ticket-type', ['state' => $record->type])
                 )
                 ->sortable()
                 ->searchable(),
 
             Tables\Columns\TextColumn::make('priority.name')
                 ->label(__('Priority'))
-                ->formatStateUsing(fn($record) => new HtmlString('
+                ->formatStateUsing(fn ($record) => new HtmlString('
                             <div class="flex items-center gap-2 mt-1">
                                 <span class="filament-tables-color-column relative flex h-6 w-6 rounded-md"
-                                    style="background-color: ' . $record->priority->color . '"></span>
-                                <span>' . $record->priority->name . '</span>
+                                    style="background-color: '.$record->priority->color.'"></span>
+                                <span>'.$record->priority->name.'</span>
                             </div>
                         '))
                 ->sortable()
@@ -309,6 +310,7 @@ class TicketResource extends Resource
                 ->sortable()
                 ->searchable(),
         ]);
+
         return $columns;
     }
 
@@ -320,7 +322,7 @@ class TicketResource extends Resource
                 Tables\Filters\SelectFilter::make('project_id')
                     ->label(__('Project'))
                     ->multiple()
-                    ->options(fn() => Project::where('owner_id', auth()->user()->id)
+                    ->options(fn () => Project::where('owner_id', auth()->user()->id)
                         ->orWhereHas('users', function ($query) {
                             return $query->where('users.id', auth()->user()->id);
                         })->pluck('name', 'id')->toArray()),
@@ -328,27 +330,27 @@ class TicketResource extends Resource
                 Tables\Filters\SelectFilter::make('owner_id')
                     ->label(__('Owner'))
                     ->multiple()
-                    ->options(fn() => User::all()->pluck('name', 'id')->toArray()),
+                    ->options(fn () => User::all()->pluck('name', 'id')->toArray()),
 
                 Tables\Filters\SelectFilter::make('responsible_id')
                     ->label(__('Responsible'))
                     ->multiple()
-                    ->options(fn() => User::all()->pluck('name', 'id')->toArray()),
+                    ->options(fn () => User::all()->pluck('name', 'id')->toArray()),
 
                 Tables\Filters\SelectFilter::make('status_id')
                     ->label(__('Status'))
                     ->multiple()
-                    ->options(fn() => TicketStatus::all()->pluck('name', 'id')->toArray()),
+                    ->options(fn () => TicketStatus::all()->pluck('name', 'id')->toArray()),
 
                 Tables\Filters\SelectFilter::make('type_id')
                     ->label(__('Type'))
                     ->multiple()
-                    ->options(fn() => TicketType::all()->pluck('name', 'id')->toArray()),
+                    ->options(fn () => TicketType::all()->pluck('name', 'id')->toArray()),
 
                 Tables\Filters\SelectFilter::make('priority_id')
                     ->label(__('Priority'))
                     ->multiple()
-                    ->options(fn() => TicketPriority::all()->pluck('name', 'id')->toArray()),
+                    ->options(fn () => TicketPriority::all()->pluck('name', 'id')->toArray()),
             ])
             ->actions([
                 Tables\Actions\ViewAction::make(),

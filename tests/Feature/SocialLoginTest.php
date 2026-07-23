@@ -45,7 +45,7 @@ class SocialLoginTest extends TestCase
 
     private function mockProviderUser(string $id, string $name, string $email): void
     {
-        $oauthUser = (new SocialiteOAuthUser())->map([
+        $oauthUser = (new SocialiteOAuthUser)->map([
             'id' => $id,
             'name' => $name,
             'email' => $email,

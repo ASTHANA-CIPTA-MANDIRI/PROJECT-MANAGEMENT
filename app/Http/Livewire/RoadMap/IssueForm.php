@@ -19,8 +19,10 @@ class IssueForm extends Component implements HasForms
 {
     use InteractsWithForms;
 
-    public Project|null $project = null;
+    public ?Project $project = null;
+
     public array $epics;
+
     public array $sprints;
 
     public function mount()
@@ -42,7 +44,7 @@ class IssueForm extends Component implements HasForms
             'owner_id' => auth()->user()->id,
             'status_id' => $defaultStatus,
             'type_id' => TicketType::where('is_default', true)->first()?->id,
-            'priority_id' => TicketPriority::where('is_default', true)->first()?->id
+            'priority_id' => TicketPriority::where('is_default', true)->first()?->id,
         ]);
     }
 
@@ -75,12 +77,12 @@ class IssueForm extends Component implements HasForms
                                 ->reactive()
                                 ->disabled($this->project != null)
                                 ->columnSpan(2)
-                                ->options(fn() => Project::where('owner_id', auth()->user()->id)
+                                ->options(fn () => Project::where('owner_id', auth()->user()->id)
                                     ->orWhereHas('users', function ($query) {
                                         return $query->where('users.id', auth()->user()->id);
                                     })->pluck('name', 'id')->toArray()
                                 )
-                                ->afterStateUpdated(fn(Closure $get) => $this->initProject($get('project_id')))
+                                ->afterStateUpdated(fn (Closure $get) => $this->initProject($get('project_id')))
                                 ->required(),
 
                             Forms\Components\Select::make('sprint_id')
@@ -110,13 +112,13 @@ class IssueForm extends Component implements HasForms
                     Forms\Components\Select::make('owner_id')
                         ->label(__('Ticket owner'))
                         ->searchable()
-                        ->options(fn() => User::all()->pluck('name', 'id')->toArray())
+                        ->options(fn () => User::all()->pluck('name', 'id')->toArray())
                         ->required(),
 
                     Forms\Components\Select::make('responsible_id')
                         ->label(__('Ticket responsible'))
                         ->searchable()
-                        ->options(fn() => User::all()->pluck('name', 'id')->toArray()),
+                        ->options(fn () => User::all()->pluck('name', 'id')->toArray()),
 
                     Forms\Components\Grid::make()
                         ->columns(3)
@@ -143,13 +145,13 @@ class IssueForm extends Component implements HasForms
                             Forms\Components\Select::make('type_id')
                                 ->label(__('Ticket type'))
                                 ->searchable()
-                                ->options(fn() => TicketType::all()->pluck('name', 'id')->toArray())
+                                ->options(fn () => TicketType::all()->pluck('name', 'id')->toArray())
                                 ->required(),
 
                             Forms\Components\Select::make('priority_id')
                                 ->label(__('Ticket priority'))
                                 ->searchable()
-                                ->options(fn() => TicketPriority::all()->pluck('name', 'id')->toArray())
+                                ->options(fn () => TicketPriority::all()->pluck('name', 'id')->toArray())
                                 ->required(),
                         ]),
                 ]),

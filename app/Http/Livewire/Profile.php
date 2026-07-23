@@ -7,7 +7,6 @@ use JeffGreco13\FilamentBreezy\Pages\MyProfile as BaseProfile;
 
 class Profile extends BaseProfile
 {
-
     protected static ?string $slug = 'my-profile';
 
     protected function getUpdateProfileFormSchema(): array
@@ -17,19 +16,20 @@ class Profile extends BaseProfile
             $pendingEmail = $this->user->getPendingEmail();
             if ($pendingEmail) {
                 return new HtmlString(
-                    '<span>' .
+                    '<span>'.
                     __('You have a pending email verification for :email.', [
-                        'email' => $pendingEmail
+                        'email' => $pendingEmail,
                     ])
-                    . '</span> <a wire:click="resendPending"
+                    .'</span> <a wire:click="resendPending"
                                    class="hover:cursor-pointer hover:text-primary-500 hover:underline">
-                    ' . __('Click here to resend') . '
+                    '.__('Click here to resend').'
                 </a>'
                 );
             } else {
                 return '';
             }
         });
+
         return $fields;
     }
 
@@ -42,12 +42,12 @@ class Profile extends BaseProfile
         $this->user->refresh();
         $this->updateProfileForm->fill([
             'name' => $this->user->name,
-            'email' => $this->user->email
+            'email' => $this->user->email,
         ]);
         if ($loginColumnValue != $this->user->{$this->loginColumn}) {
             $this->user->newEmail($loginColumnValue);
         }
-        $this->notify("success", __('filament-breezy::default.profile.personal_info.notify'));
+        $this->notify('success', __('filament-breezy::default.profile.personal_info.notify'));
     }
 
     public function resendPending(): void

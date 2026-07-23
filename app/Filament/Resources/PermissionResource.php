@@ -3,7 +3,6 @@
 namespace App\Filament\Resources;
 
 use App\Filament\Resources\PermissionResource\Pages;
-use App\Filament\Resources\PermissionResource\RelationManagers;
 use App\Models\Permission;
 use Filament\Forms;
 use Filament\Resources\Form;
@@ -49,7 +48,7 @@ class PermissionResource extends Resource
                                     ->required()
                                     ->columnSpan(1),
                             ]),
-                    ])
+                    ]),
             ]);
     }
 

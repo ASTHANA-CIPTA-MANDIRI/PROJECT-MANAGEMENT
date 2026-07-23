@@ -3,16 +3,12 @@
 namespace App\Filament\Resources;
 
 use App\Filament\Resources\TicketPriorityResource\Pages;
-use App\Filament\Resources\TicketPriorityResource\RelationManagers;
 use App\Models\TicketPriority;
 use Filament\Forms;
 use Filament\Resources\Form;
 use Filament\Resources\Resource;
 use Filament\Resources\Table;
 use Filament\Tables;
-use Guava\FilamentIconPicker\Tables\IconColumn;
-use Illuminate\Database\Eloquent\Builder;
-use Illuminate\Database\Eloquent\SoftDeletingScope;
 
 class TicketPriorityResource extends Resource
 {
@@ -59,8 +55,8 @@ class TicketPriorityResource extends Resource
                                     ->helperText(
                                         __('If checked, this priority will be automatically affected to new tickets')
                                     ),
-                            ])
-                    ])
+                            ]),
+                    ]),
             ]);
     }
 

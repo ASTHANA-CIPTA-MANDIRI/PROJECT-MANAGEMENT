@@ -16,7 +16,7 @@ use Spatie\MediaLibrary\InteractsWithMedia;
 
 class Project extends Model implements HasMedia
 {
-    use HasFactory, SoftDeletes, InteractsWithMedia, Searchable;
+    use HasFactory, InteractsWithMedia, Searchable, SoftDeletes;
 
     /**
      * The data indexed for full-text search (Laravel Scout).
@@ -35,11 +35,11 @@ class Project extends Model implements HasMedia
 
     protected $fillable = [
         'name', 'description', 'status_id', 'owner_id', 'ticket_prefix',
-        'status_type', 'type'
+        'status_type', 'type',
     ];
 
     protected $appends = [
-        'cover'
+        'cover',
     ];
 
     public function owner(): BelongsTo
@@ -85,6 +85,7 @@ class Project extends Model implements HasMedia
                 if ($firstEpic) {
                     return $firstEpic->starts_at;
                 }
+
                 return now();
             }
         );
@@ -98,6 +99,7 @@ class Project extends Model implements HasMedia
                 if ($firstEpic) {
                     return $firstEpic->ends_at;
                 }
+
                 return now();
             }
         );
@@ -109,6 +111,7 @@ class Project extends Model implements HasMedia
             get: function () {
                 $users = $this->users;
                 $users->push($this->owner);
+
                 return $users->unique('id');
             }
         );
@@ -117,16 +120,16 @@ class Project extends Model implements HasMedia
     public function cover(): Attribute
     {
         return new Attribute(
-            get: fn() => $this->media('cover')?->first()?->getFullUrl()
+            get: fn () => $this->media('cover')?->first()?->getFullUrl()
                 ??
-                'https://ui-avatars.com/api/?background=3f84f3&color=ffffff&name=' . $this->name
+                'https://ui-avatars.com/api/?background=3f84f3&color=ffffff&name='.$this->name
         );
     }
 
     public function currentSprint(): Attribute
     {
         return new Attribute(
-            get: fn() => $this->sprints()
+            get: fn () => $this->sprints()
                 ->whereNotNull('started_at')
                 ->whereNull('ended_at')
                 ->first()
@@ -145,6 +148,7 @@ class Project extends Model implements HasMedia
                         ->orderBy('starts_at')
                         ->first();
                 }
+
                 return null;
             }
         );

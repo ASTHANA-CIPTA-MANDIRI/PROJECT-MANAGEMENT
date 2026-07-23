@@ -12,10 +12,10 @@ use Laravel\Scout\Searchable;
 
 class TicketComment extends Model
 {
-    use HasFactory, SoftDeletes, Searchable;
+    use HasFactory, Searchable, SoftDeletes;
 
     protected $fillable = [
-        'user_id', 'ticket_id', 'content'
+        'user_id', 'ticket_id', 'content',
     ];
 
     /**
@@ -31,7 +31,6 @@ class TicketComment extends Model
             'ticket_id' => $this->ticket_id,
         ];
     }
-
 
     public static function boot()
     {

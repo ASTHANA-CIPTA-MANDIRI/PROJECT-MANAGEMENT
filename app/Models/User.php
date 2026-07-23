@@ -20,16 +20,16 @@ use ProtoneMedia\LaravelVerifyNewEmail\MustVerifyNewEmail;
 use Ramsey\Uuid\Uuid;
 use Spatie\Permission\Traits\HasRoles;
 
-class User extends Authenticatable implements MustVerifyEmail, FilamentUser
+class User extends Authenticatable implements FilamentUser, MustVerifyEmail
 {
     use HasApiTokens,
-        HasFactory,
-        Notifiable,
-        TwoFactorAuthenticatable,
-        HasRoles,
         HasAvatarUrl,
+        HasFactory,
+        HasRoles,
+        MustVerifyNewEmail,
+        Notifiable,
         SoftDeletes,
-        MustVerifyNewEmail;
+        TwoFactorAuthenticatable;
 
     /**
      * The attributes that are mass assignable.

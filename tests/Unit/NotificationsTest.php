@@ -121,7 +121,7 @@ class NotificationsTest extends TestCase
         // Guards the :ticket placeholder in the translation files.
         $this->assertStringContainsString(
             $ticket->name,
-            $mail->subject . ' ' . implode(' ', $mail->introLines)
+            $mail->subject.' '.implode(' ', $mail->introLines)
         );
     }
 
@@ -169,7 +169,7 @@ class NotificationsTest extends TestCase
     {
         $user = User::factory()->create();
 
-        $mail = (new CustomVerifyEmail())->toMail($user);
+        $mail = (new CustomVerifyEmail)->toMail($user);
 
         $this->assertInstanceOf(MailMessage::class, $mail);
         $this->assertStringContainsString('signature=', $mail->actionUrl);
@@ -179,7 +179,7 @@ class NotificationsTest extends TestCase
     {
         $user = User::factory()->create(['name' => 'Fajar']);
 
-        $mail = (new CustomVerifyEmail())->toMail($user);
+        $mail = (new CustomVerifyEmail)->toMail($user);
 
         $this->assertStringContainsString('Fajar', $mail->greeting);
     }

@@ -3,7 +3,6 @@
 namespace App\Filament\Resources;
 
 use App\Filament\Resources\TicketStatusResource\Pages;
-use App\Filament\Resources\TicketStatusResource\RelationManagers;
 use App\Models\TicketStatus;
 use Filament\Forms;
 use Filament\Resources\Form;
@@ -60,10 +59,10 @@ class TicketStatusResource extends Resource
                                 Forms\Components\TextInput::make('order')
                                     ->label(__('Status order'))
                                     ->integer()
-                                    ->default(fn() => TicketStatus::whereNull('project_id')->count() + 1)
+                                    ->default(fn () => TicketStatus::whereNull('project_id')->count() + 1)
                                     ->required(),
-                            ])
-                    ])
+                            ]),
+                    ]),
             ]);
     }
 

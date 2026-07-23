@@ -58,7 +58,7 @@ class Board extends Page implements HasForms
                                 ->reactive()
                                 ->afterStateUpdated(fn () => $this->search())
                                 ->helperText(__("Choose a project to show it's board"))
-                                ->options(fn() => Project::where('owner_id', auth()->user()->id)
+                                ->options(fn () => Project::where('owner_id', auth()->user()->id)
                                     ->orWhereHas('users', function ($query) {
                                         return $query->where('users.id', auth()->user()->id);
                                     })->pluck('name', 'id')->toArray()),
@@ -71,7 +71,7 @@ class Board extends Page implements HasForms
     {
         $data = $this->form->getState();
         $project = Project::find($data['project']);
-        if ($project->type === "scrum") {
+        if ($project->type === 'scrum') {
             $this->redirect(route('filament.pages.scrum/{project}', ['project' => $project]));
         } else {
             $this->redirect(route('filament.pages.kanban/{project}', ['project' => $project]));

@@ -21,7 +21,7 @@ class CustomVerifyEmail extends VerifyEmail
 
         return (new MailMessage)
             ->subject('Verifikasi Alamat Email Anda')
-            ->greeting('Halo ' . $notifiable->name . '!')
+            ->greeting('Halo '.$notifiable->name.'!')
             ->line('Terima kasih telah mendaftar di Rencanakan.')
             ->line('Untuk menyelesaikan proses pendaftaran dan mulai menggunakan layanan kami, silakan verifikasi email Anda dengan mengklik tombol di bawah ini:')
             ->action('Verifikasi Email', $verificationUrl)

@@ -3,11 +3,12 @@
 namespace App\Providers;
 
 use App\Models\User;
+use App\Notifications\CustomVerifyEmail;
 use App\Settings\GeneralSettings;
 use DutchCodingCompany\FilamentSocialite\FilamentSocialite;
 use Filament\Facades\Filament;
+use Illuminate\Auth\Notifications\VerifyEmail;
 use Illuminate\Database\QueryException;
-use Laravel\Socialite\Contracts\User as SocialiteUserContract;
 use Illuminate\Foundation\Vite;
 use Illuminate\Support\Facades\Config;
 use Illuminate\Support\Facades\DB;
@@ -15,8 +16,7 @@ use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\URL;
 use Illuminate\Support\HtmlString;
 use Illuminate\Support\ServiceProvider;
-use Illuminate\Auth\Notifications\VerifyEmail;
-use App\Notifications\CustomVerifyEmail;
+use Laravel\Socialite\Contracts\User as SocialiteUserContract;
 
 class AppServiceProvider extends ServiceProvider
 {
@@ -76,7 +76,7 @@ class AppServiceProvider extends ServiceProvider
         Filament::pushMeta([
             new HtmlString('<link rel="icon"
                                        type="image/x-icon"
-                                       href="' . config('app.logo') . '">'),
+                                       href="'.config('app.logo').'">'),
         ]);
 
         // Register navigation groups
@@ -122,7 +122,7 @@ class AppServiceProvider extends ServiceProvider
             Config::set('filament.brand', $settings->site_name ?? env('APP_NAME'));
             Config::set(
                 'app.logo',
-                $settings->site_logo ? asset('storage/' . $settings->site_logo) : asset('favicon.ico')
+                $settings->site_logo ? asset('storage/'.$settings->site_logo) : asset('favicon.ico')
             );
             Config::set('filament-breezy.enable_registration', $settings->enable_registration ?? false);
             Config::set('filament-socialite.registration', $settings->enable_registration ?? false);

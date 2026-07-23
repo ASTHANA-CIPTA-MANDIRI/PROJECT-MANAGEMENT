@@ -19,8 +19,7 @@ class ResourceUtilizationReport
         private CarbonInterface $end,
         private ?Project $project = null,
         private float $hoursPerDay = 8.0,
-    ) {
-    }
+    ) {}
 
     /**
      * @return Collection<int, array{user_id:int, user_name:?string, hours_logged:float, utilization_pct:float}>

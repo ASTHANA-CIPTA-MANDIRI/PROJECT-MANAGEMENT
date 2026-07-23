@@ -3,7 +3,6 @@
 namespace App\Filament\Resources;
 
 use App\Filament\Resources\RoleResource\Pages;
-use App\Filament\Resources\RoleResource\RelationManagers;
 use App\Models\Permission;
 use App\Models\Role;
 use Filament\Forms;
@@ -56,7 +55,7 @@ class RoleResource extends Resource
                                     ->columns(4)
                                     ->relationship('permissions', 'name'),
                             ]),
-                    ])
+                    ]),
             ]);
     }
 

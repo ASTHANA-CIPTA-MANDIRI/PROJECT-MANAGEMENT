@@ -2,7 +2,6 @@
 
 namespace App\Filament\Resources\ProjectResource\RelationManagers;
 
-use App\Models\Ticket;
 use App\Models\TicketStatus;
 use Filament\Forms;
 use Filament\Resources\Form;
@@ -44,8 +43,7 @@ class StatusesRelationManager extends RelationManager
                 Forms\Components\TextInput::make('order')
                     ->label(__('Status order'))
                     ->integer()
-                    ->default(fn($livewire) =>
-                        TicketStatus::where('project_id', $livewire->ownerRecord->id)->count() + 1
+                    ->default(fn ($livewire) => TicketStatus::where('project_id', $livewire->ownerRecord->id)->count() + 1
                     )
                     ->required(),
             ]);

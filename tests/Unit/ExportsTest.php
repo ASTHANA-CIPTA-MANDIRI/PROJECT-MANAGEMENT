@@ -75,7 +75,7 @@ class ExportsTest extends TestCase
 
         $row = $export->collection()->first();
 
-        $this->assertCount(count($export->headings()), (array)$row);
+        $this->assertCount(count($export->headings()), (array) $row);
     }
 
     public function test_the_ticket_hours_export_handles_entries_without_an_activity(): void

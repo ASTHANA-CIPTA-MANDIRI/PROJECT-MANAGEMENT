@@ -15,12 +15,12 @@ class Epic extends Model
 
     protected $fillable = [
         'name', 'project_id', 'starts_at', 'ends_at',
-        'parent_id'
+        'parent_id',
     ];
 
     protected $casts = [
         'starts_at' => 'date',
-        'ends_at' => 'date'
+        'ends_at' => 'date',
     ];
 
     public function project(): BelongsTo

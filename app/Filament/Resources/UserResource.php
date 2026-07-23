@@ -3,15 +3,12 @@
 namespace App\Filament\Resources;
 
 use App\Filament\Resources\UserResource\Pages;
-use App\Filament\Resources\UserResource\RelationManagers;
 use App\Models\User;
 use Filament\Forms;
 use Filament\Resources\Form;
-use Filament\Resources\Pages\CreateRecord;
 use Filament\Resources\Resource;
 use Filament\Resources\Table;
 use Filament\Tables;
-use Illuminate\Support\HtmlString;
 
 class UserResource extends Resource
 {
@@ -55,9 +52,9 @@ class UserResource extends Resource
                                     ->email()
                                     ->required()
                                     ->rule(
-                                        fn($record) => 'unique:users,email,'
-                                            . ($record ? $record->id : 'NULL')
-                                            . ',id,deleted_at,NULL'
+                                        fn ($record) => 'unique:users,email,'
+                                            .($record ? $record->id : 'NULL')
+                                            .',id,deleted_at,NULL'
                                     )
                                     ->maxLength(255),
 
@@ -67,7 +64,7 @@ class UserResource extends Resource
                                     ->columns(3)
                                     ->relationship('roles', 'name'),
                             ]),
-                    ])
+                    ]),
             ]);
     }
 

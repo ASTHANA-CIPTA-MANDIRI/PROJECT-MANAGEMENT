@@ -21,7 +21,6 @@ class SocialRegistration
     /**
      * Handle the event.
      *
-     * @param Registered $event
      * @return void
      */
     public function handle(Registered $event)

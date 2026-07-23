@@ -24,6 +24,7 @@ class AnalyticsTest extends TestCase
     use RefreshDatabase;
 
     private TicketStatus $todo;
+
     private TicketStatus $done;
 
     protected function setUp(): void

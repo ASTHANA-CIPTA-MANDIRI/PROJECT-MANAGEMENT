@@ -3,7 +3,6 @@
 namespace App\Filament\Resources;
 
 use App\Filament\Resources\ProjectStatusResource\Pages;
-use App\Filament\Resources\ProjectStatusResource\RelationManagers;
 use App\Models\ProjectStatus;
 use Filament\Forms;
 use Filament\Resources\Form;
@@ -56,8 +55,8 @@ class ProjectStatusResource extends Resource
                                     ->helperText(
                                         __('If checked, this status will be automatically affected to new projects')
                                     ),
-                            ])
-                    ])
+                            ]),
+                    ]),
             ]);
     }
 

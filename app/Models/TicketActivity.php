@@ -11,7 +11,7 @@ class TicketActivity extends Model
     use HasFactory;
 
     protected $fillable = [
-        'ticket_id', 'old_status_id', 'new_status_id', 'user_id'
+        'ticket_id', 'old_status_id', 'new_status_id', 'user_id',
     ];
 
     public function ticket(): BelongsTo

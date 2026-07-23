@@ -11,12 +11,15 @@ class UserTimeLogged extends BarChartWidget
     use WithCachedData;
 
     protected static ?string $heading = 'Chart';
+
     protected static ?int $sort = 5;
+
     protected static ?string $maxHeight = '300px';
+
     protected int|string|array $columnSpan = [
         'sm' => 1,
         'md' => 6,
-        'lg' => 3
+        'lg' => 3,
     ];
 
     public static function canView(): bool
@@ -51,10 +54,10 @@ class UserTimeLogged extends BarChartWidget
                     'label' => __('Total time logged (hours)'),
                     'data' => array_column($rows, 'hours'),
                     'backgroundColor' => [
-                        'rgba(54, 162, 235, .6)'
+                        'rgba(54, 162, 235, .6)',
                     ],
                     'borderColor' => [
-                        'rgba(54, 162, 235, .8)'
+                        'rgba(54, 162, 235, .8)',
                     ],
                 ],
             ],

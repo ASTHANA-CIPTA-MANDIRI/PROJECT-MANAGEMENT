@@ -23,7 +23,7 @@ abstract class ApiController extends Controller
     /**
      * Apply `?filter[field]=value` constraints, limited to $allowed fields.
      *
-     * @param array<int, string> $allowed
+     * @param  array<int, string>  $allowed
      */
     protected function applyFilters(Builder $query, Request $request, array $allowed): Builder
     {
@@ -45,7 +45,7 @@ abstract class ApiController extends Controller
     /**
      * Apply `?sort=field` (asc) or `?sort=-field` (desc), limited to $allowed.
      *
-     * @param array<int, string> $allowed
+     * @param  array<int, string>  $allowed
      */
     protected function applySorting(Builder $query, Request $request, array $allowed, string $default = 'created_at'): Builder
     {

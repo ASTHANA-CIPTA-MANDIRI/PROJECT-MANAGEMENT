@@ -3,7 +3,6 @@
 namespace App\Filament\Resources;
 
 use App\Filament\Resources\TicketTypeResource\Pages;
-use App\Filament\Resources\TicketTypeResource\RelationManagers;
 use App\Models\TicketType;
 use Filament\Forms;
 use Filament\Resources\Form;
@@ -62,8 +61,8 @@ class TicketTypeResource extends Resource
                                     ->helperText(
                                         __('If checked, this type will be automatically affected to new tickets')
                                     ),
-                            ])
-                    ])
+                            ]),
+                    ]),
             ]);
     }
 

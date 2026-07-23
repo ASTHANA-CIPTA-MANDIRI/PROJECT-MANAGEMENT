@@ -4,7 +4,6 @@ namespace App\Filament\Resources\TicketPriorityResource\Pages;
 
 use App\Filament\Resources\TicketPriorityResource;
 use App\Models\TicketPriority;
-use Filament\Pages\Actions;
 use Filament\Resources\Pages\CreateRecord;
 
 class CreateTicketPriority extends CreateRecord

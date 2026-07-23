@@ -3,7 +3,6 @@
 namespace Tests\Feature\Api;
 
 use App\Models\Permission;
-use App\Models\Project;
 use App\Models\Role;
 use App\Models\Ticket;
 use App\Models\TicketComment;
@@ -29,7 +28,7 @@ class CommentApiTest extends TestCase
         foreach ($permissions as $p) {
             Permission::firstOrCreate(['name' => $p]);
         }
-        $role = Role::create(['name' => 'r_' . uniqid()]);
+        $role = Role::create(['name' => 'r_'.uniqid()]);
         $role->syncPermissions($permissions);
 
         $user = User::factory()->create();
