@@ -1,0 +1,45 @@
+name: Deploy (staging)
+
+# Auto-deploys to staging on every push to the main branch. Configure branch
+# protection so this only runs after the CI workflow passes.
+on:
+  push:
+    branches: [ main ]
+  workflow_dispatch:
+
+concurrency:
+  group: deploy-staging
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    name: Deploy to staging
+    runs-on: ubuntu-latest
+    # Uses the "staging" GitHub Environment: put the secrets below on it.
+    environment:
+      name: staging
+      url: ${{ vars.APP_URL }}
+
+    steps:
+      - name: Deploy over SSH
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.SSH_HOST }}
+          username: ${{ secrets.SSH_USER }}
+          key: ${{ secrets.SSH_KEY }}
+          port: ${{ secrets.SSH_PORT || 22 }}
+          # DEPLOY_PATH is the app root on the server. See docs/cicd.md.
+          script: |
+            set -e
+            cd ${{ secrets.DEPLOY_PATH }}
+            php artisan down --retry=15 || true
+            git fetch --all --prune
+            git reset --hard origin/main
+            composer install --no-dev --optimize-autoloader --no-interaction
+            npm ci && npm run build
+            php artisan migrate --force
+            php artisan config:cache
+            php artisan route:cache
+            php artisan view:cache
+            php artisan queue:restart
+            php artisan up

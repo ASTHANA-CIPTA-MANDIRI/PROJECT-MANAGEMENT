@@ -1,0 +1,59 @@
+name: Rollback (production)
+
+# Manually roll production back to a previous release. Optionally restore the
+# database from the pre-deploy snapshot taken by the production deploy.
+on:
+  workflow_dispatch:
+    inputs:
+      ref:
+        description: 'Ref to roll back to (blank = last recorded PREVIOUS_RELEASE)'
+        required: false
+        default: ''
+      restore_db:
+        description: 'Restore DB from the most recent pre-deploy backup?'
+        type: boolean
+        default: false
+
+concurrency:
+  group: deploy-production
+  cancel-in-progress: false
+
+jobs:
+  rollback:
+    name: Roll back production
+    runs-on: ubuntu-latest
+    environment:
+      name: production
+      url: ${{ vars.APP_URL }}
+
+    steps:
+      - name: Roll back over SSH
+        uses: appleboy/ssh-action@v1.0.3
+        env:
+          ROLLBACK_REF: ${{ github.event.inputs.ref }}
+          RESTORE_DB: ${{ github.event.inputs.restore_db }}
+        with:
+          host: ${{ secrets.SSH_HOST }}
+          username: ${{ secrets.SSH_USER }}
+          key: ${{ secrets.SSH_KEY }}
+          port: ${{ secrets.SSH_PORT || 22 }}
+          envs: ROLLBACK_REF,RESTORE_DB
+          script: |
+            set -e
+            cd ${{ secrets.DEPLOY_PATH }}
+            REF="$ROLLBACK_REF"
+            if [ -z "$REF" ]; then REF="$(cat storage/app/PREVIOUS_RELEASE)"; fi
+            echo "Rolling back to $REF"
+            php artisan down --retry=15 || true
+            git fetch --all --tags --prune
+            git checkout --force "$REF"
+            composer install --no-dev --optimize-autoloader --no-interaction
+            npm ci && npm run build
+            if [ "$RESTORE_DB" = "true" ]; then
+              bash scripts/db-restore.sh
+            fi
+            php artisan config:cache
+            php artisan route:cache
+            php artisan view:cache
+            php artisan queue:restart
+            php artisan up

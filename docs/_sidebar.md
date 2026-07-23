@@ -40,3 +40,7 @@
 - [Deployment & setup](/deployment?id=deployment-setup-guide)
     - [Local setup](/deployment?id=local-setup)
     - [Production deployment](/deployment?id=production-deployment)
+- [CI/CD pipeline](/cicd?id=cicd-pipeline)
+    - [Continuous Integration](/cicd?id=continuous-integration-testsyml)
+    - [Deployment](/cicd?id=deployment)
+    - [Backup & rollback](/cicd?id=database-backup-db-backupyml)

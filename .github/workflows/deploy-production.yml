@@ -1,0 +1,61 @@
+name: Deploy (production)
+
+# Deploys to production when a version tag (v*) is pushed, or manually.
+# The "production" GitHub Environment should require a manual approval
+# (Settings -> Environments -> production -> Required reviewers).
+on:
+  push:
+    tags: [ 'v*' ]
+  workflow_dispatch:
+    inputs:
+      ref:
+        description: 'Git ref (tag/branch/SHA) to deploy'
+        required: true
+        default: 'main'
+
+concurrency:
+  group: deploy-production
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    name: Deploy to production
+    runs-on: ubuntu-latest
+    environment:
+      name: production
+      url: ${{ vars.APP_URL }}
+
+    steps:
+      - name: Resolve ref
+        id: ref
+        run: echo "value=${{ github.event.inputs.ref || github.ref_name }}" >> "$GITHUB_OUTPUT"
+
+      - name: Deploy over SSH
+        uses: appleboy/ssh-action@v1.0.3
+        env:
+          DEPLOY_REF: ${{ steps.ref.outputs.value }}
+        with:
+          host: ${{ secrets.SSH_HOST }}
+          username: ${{ secrets.SSH_USER }}
+          key: ${{ secrets.SSH_KEY }}
+          port: ${{ secrets.SSH_PORT || 22 }}
+          envs: DEPLOY_REF
+          # Records the current release before deploying so it can be rolled
+          # back (see rollback.yml / docs/cicd.md). A pre-deploy DB snapshot is
+          # taken as an extra safety net.
+          script: |
+            set -e
+            cd ${{ secrets.DEPLOY_PATH }}
+            git rev-parse HEAD > storage/app/PREVIOUS_RELEASE
+            php artisan down --retry=15 || true
+            bash scripts/db-backup.sh pre-deploy || echo "backup skipped"
+            git fetch --all --tags --prune
+            git checkout --force "$DEPLOY_REF"
+            composer install --no-dev --optimize-autoloader --no-interaction
+            npm ci && npm run build
+            php artisan migrate --force
+            php artisan config:cache
+            php artisan route:cache
+            php artisan view:cache
+            php artisan queue:restart
+            php artisan up
