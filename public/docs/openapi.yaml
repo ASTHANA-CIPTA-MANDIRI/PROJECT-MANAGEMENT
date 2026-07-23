@@ -22,6 +22,53 @@ tags:
   - name: Sprints
 
 paths:
+  /api/v1/search:
+    get:
+      tags: [Search]
+      summary: Full-text search
+      description: >
+        Full-text search (Laravel Scout) across the projects, tickets and
+        comments the authenticated user can access.
+      parameters:
+        - name: q
+          in: query
+          required: true
+          description: The search term.
+          schema: { type: string, minLength: 1, maxLength: 255, example: "login bug" }
+        - name: limit
+          in: query
+          description: Max results per group (1–50).
+          schema: { type: integer, minimum: 1, maximum: 50, default: 10 }
+      responses:
+        '200':
+          description: Grouped search results.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  query: { type: string }
+                  data:
+                    type: object
+                    properties:
+                      projects:
+                        type: array
+                        items: { $ref: '#/components/schemas/Project' }
+                      tickets:
+                        type: array
+                        items: { $ref: '#/components/schemas/Ticket' }
+                      comments:
+                        type: array
+                        items: { $ref: '#/components/schemas/Comment' }
+                  meta:
+                    type: object
+                    properties:
+                      projects_count: { type: integer }
+                      tickets_count: { type: integer }
+                      comments_count: { type: integer }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '422': { $ref: '#/components/responses/ValidationError' }
+
   /api/v1/projects:
     get:
       tags: [Projects]

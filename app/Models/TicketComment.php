@@ -8,14 +8,29 @@ use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\SoftDeletes;
+use Laravel\Scout\Searchable;
 
 class TicketComment extends Model
 {
-    use HasFactory, SoftDeletes;
+    use HasFactory, SoftDeletes, Searchable;
 
     protected $fillable = [
         'user_id', 'ticket_id', 'content'
     ];
+
+    /**
+     * The data indexed for full-text search (Laravel Scout).
+     *
+     * @return array<string, mixed>
+     */
+    public function toSearchableArray(): array
+    {
+        return [
+            'id' => $this->id,
+            'content' => strip_tags((string) $this->content),
+            'ticket_id' => $this->ticket_id,
+        ];
+    }
 
 
     public static function boot()
