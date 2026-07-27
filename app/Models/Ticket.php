@@ -89,7 +89,8 @@ class Ticket extends Model implements HasMedia
                     'ticket_id' => $item->id,
                     'old_status_id' => $oldStatus,
                     'new_status_id' => $item->status_id,
-                    'user_id' => auth()->user()->id,
+                    // Null for system-driven changes (queue, console, seeders).
+                    'user_id' => auth()->id(),
                 ]);
                 foreach ($item->watchers as $user) {
                     $user->notify(new TicketStatusUpdated($item));

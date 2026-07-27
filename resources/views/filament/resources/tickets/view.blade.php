@@ -299,8 +299,12 @@
                                  @if(!$loop->last) pb-5 mb-5 border-b border-gray-200 @endif">
                                 <span class="flex items-center gap-1 text-gray-500 text-sm">
                                     <span class="font-medium flex items-center gap-1">
-                                        <x-user-avatar :user="$activity->user"/>
-                                        {{ $activity->user->name }}
+                                        @if($activity->user)
+                                            <x-user-avatar :user="$activity->user"/>
+                                            {{ $activity->user->name }}
+                                        @else
+                                            {{ __('System') }}
+                                        @endif
                                     </span>
                                     <span class="text-gray-400 px-2">|</span>
                                     {{ $activity->created_at->format('Y-m-d g:i A') }}

@@ -87,6 +87,24 @@ class TicketWorkflowTest extends TestCase
         ]);
     }
 
+    public function test_changing_the_status_without_an_authenticated_user_records_a_system_activity(): void
+    {
+        // No actingAs(): mimics a queue job, artisan command or seeder.
+        $ticket = Ticket::factory()->create();
+        $oldStatusId = $ticket->status_id;
+        $newStatus = TicketStatus::factory()->create();
+
+        $ticket->update(['status_id' => $newStatus->id]);
+
+        $this->assertDatabaseHas('ticket_activities', [
+            'ticket_id' => $ticket->id,
+            'old_status_id' => $oldStatusId,
+            'new_status_id' => $newStatus->id,
+            'user_id' => null,
+        ]);
+        $this->assertNull($ticket->fresh()->activities->first()->user);
+    }
+
     public function test_changing_the_status_notifies_the_owner(): void
     {
         $actor = User::factory()->create();
