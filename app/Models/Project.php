@@ -119,10 +119,12 @@ class Project extends Model implements HasMedia
 
     public function cover(): Attribute
     {
+        // The Filament SpatieMediaLibraryFileUpload stores the cover in the
+        // default collection, so read it back with the proper Spatie API
+        // instead of misusing the media() relation.
         return new Attribute(
-            get: fn () => $this->media('cover')?->first()?->getFullUrl()
-                ??
-                'https://ui-avatars.com/api/?background=3f84f3&color=ffffff&name='.$this->name
+            get: fn () => $this->getFirstMedia()?->getFullUrl()
+                ?? 'https://ui-avatars.com/api/?background=3f84f3&color=ffffff&name='.$this->name
         );
     }
 

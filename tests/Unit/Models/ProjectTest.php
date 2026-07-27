@@ -10,6 +10,7 @@ use App\Models\Ticket;
 use App\Models\TicketStatus;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\Storage;
 use Tests\TestCase;
 
 class ProjectTest extends TestCase
@@ -111,6 +112,18 @@ class ProjectTest extends TestCase
         $project = Project::factory()->create(['name' => 'Acme']);
 
         $this->assertStringContainsString('ui-avatars.com', $project->cover);
+    }
+
+    public function test_cover_returns_the_uploaded_media_url(): void
+    {
+        Storage::fake('public');
+        $project = Project::factory()->create(['name' => 'Acme']);
+        $media = $project->addMediaFromString('binary-image-data')
+            ->usingFileName('cover.png')
+            ->toMediaCollection();
+
+        $this->assertSame($media->getFullUrl(), $project->fresh()->cover);
+        $this->assertStringNotContainsString('ui-avatars.com', $project->fresh()->cover);
     }
 
     // ------------------------------------------------------------ epic dates
