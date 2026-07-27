@@ -34,6 +34,42 @@ trait KanbanScrumHelper
 
     public bool $ticket = false;
 
+    /**
+     * Livewire listeners. Besides the board's own events, subscribe to the
+     * project's private broadcast channel so the board updates live when a
+     * ticket's status changes or a comment is posted from anywhere.
+     *
+     * The echo-* listeners bind only when Laravel Echo is available in the
+     * browser; with real-time disabled (empty Pusher key) window.Echo is never
+     * created, so they simply never fire and the board behaves as before.
+     *
+     * @return array<int|string, string>
+     */
+    public function getListeners(): array
+    {
+        $listeners = [
+            'recordUpdated',
+            'closeTicketDialog',
+        ];
+
+        if ($this->project) {
+            $channel = "echo-private:project.{$this->project->id}";
+            $listeners["{$channel},.ticket.status.changed"] = 'refreshBoard';
+            $listeners["{$channel},.ticket.comment.posted"] = 'refreshBoard';
+        }
+
+        return $listeners;
+    }
+
+    /**
+     * Handle a live broadcast. The board re-queries via getRecords() on every
+     * Livewire re-render, so simply handling the event refreshes the columns.
+     */
+    public function refreshBoard(): void
+    {
+        //
+    }
+
     protected function formSchema(): array
     {
         return [

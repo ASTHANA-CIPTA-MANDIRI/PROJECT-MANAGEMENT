@@ -20,9 +20,9 @@ if (!window.Echo && import.meta.env.VITE_PUSHER_APP_KEY) {
         enabledTransports: ['ws', 'wss'],
     });
 
-    // Example subscriptions (see docs/realtime.md):
-    //
-    //   window.Echo.private(`project.${projectId}`)
-    //       .listen('.ticket.status.changed', (e) => { /* update board */ })
-    //       .listen('.ticket.comment.posted', (e) => { /* append comment */ });
+    // The Kanban/Scrum boards subscribe themselves: their Livewire components
+    // declare `echo-private:project.{id},.ticket.status.changed` (and
+    // `.ticket.comment.posted`) listeners via getListeners(), so they refresh
+    // live off this same window.Echo instance — no manual subscription here.
+    // See docs/realtime.md and app/Helpers/KanbanScrumHelper.php.
 }

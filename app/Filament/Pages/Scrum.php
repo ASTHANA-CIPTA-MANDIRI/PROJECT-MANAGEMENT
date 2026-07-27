@@ -23,11 +23,6 @@ class Scrum extends Page implements HasForms
 
     protected static bool $shouldRegisterNavigation = false;
 
-    protected $listeners = [
-        'recordUpdated',
-        'closeTicketDialog',
-    ];
-
     public function mount(Project $project)
     {
         $this->project = $project;

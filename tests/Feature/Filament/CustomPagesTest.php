@@ -97,6 +97,28 @@ class CustomPagesTest extends TestCase
         Livewire::test(Kanban::class, ['project' => $project])->assertSuccessful();
     }
 
+    public function test_the_kanban_board_subscribes_to_live_project_updates(): void
+    {
+        $project = $this->kanbanProject();
+
+        $listeners = Livewire::test(Kanban::class, ['project' => $project])
+            ->instance()
+            ->getListeners();
+
+        $this->assertArrayHasKey("echo-private:project.{$project->id},.ticket.status.changed", $listeners);
+        $this->assertArrayHasKey("echo-private:project.{$project->id},.ticket.comment.posted", $listeners);
+        $this->assertSame('refreshBoard', $listeners["echo-private:project.{$project->id},.ticket.status.changed"]);
+    }
+
+    public function test_a_live_broadcast_refreshes_the_kanban_board(): void
+    {
+        $project = $this->kanbanProject();
+
+        Livewire::test(Kanban::class, ['project' => $project])
+            ->call('refreshBoard')
+            ->assertSuccessful();
+    }
+
     // ----------------------------------------------------------------- scrum
 
     public function test_the_scrum_board_renders_for_a_scrum_project(): void
