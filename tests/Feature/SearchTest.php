@@ -80,6 +80,18 @@ class SearchTest extends TestCase
         $this->assertCount(0, $results['tickets']);
     }
 
+    public function test_it_does_not_leak_comments_from_inaccessible_projects(): void
+    {
+        $user = User::factory()->create();
+        $foreign = Project::factory()->create(['name' => 'Secret Falcon project']); // not the user's
+        $ticket = Ticket::factory()->create(['project_id' => $foreign->id]);
+        TicketComment::factory()->create(['ticket_id' => $ticket->id, 'content' => 'Falcon secret note']);
+
+        $results = (new SearchService)->search($user, 'Falcon');
+
+        $this->assertCount(0, $results['comments']);
+    }
+
     public function test_a_project_member_can_search_the_project(): void
     {
         $member = User::factory()->create();

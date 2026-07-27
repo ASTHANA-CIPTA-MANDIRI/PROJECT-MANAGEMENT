@@ -140,9 +140,18 @@ return [
         'host' => env('MEILISEARCH_HOST', 'http://localhost:7700'),
         'key' => env('MEILISEARCH_KEY'),
         'index-settings' => [
-            // 'users' => [
-            //     'filterableAttributes'=> ['id', 'name', 'email'],
-            // ],
+            // Attributes SearchService filters on to scope results to the
+            // projects a user can access. Run `php artisan scout:sync-index-settings`
+            // after deploying so Meilisearch accepts these whereIn() filters.
+            \App\Models\Project::class => [
+                'filterableAttributes' => ['id'],
+            ],
+            \App\Models\Ticket::class => [
+                'filterableAttributes' => ['project_id'],
+            ],
+            \App\Models\TicketComment::class => [
+                'filterableAttributes' => ['ticket_id'],
+            ],
         ],
     ],
 

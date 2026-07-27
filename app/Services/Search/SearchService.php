@@ -10,8 +10,14 @@ use Illuminate\Support\Collection;
 
 /**
  * Full-text search across projects, tickets and comments via Laravel Scout,
- * scoped to the projects the user can access. Driver-agnostic: works with the
- * collection driver (default) and Meilisearch/Elasticsearch in production.
+ * scoped to the projects the user can access.
+ *
+ * Access scoping is pushed down to the search engine with whereIn() filters
+ * instead of loading every hit and filtering in PHP, so it scales the same way
+ * on the collection driver (default) and Meilisearch/Elasticsearch. The filter
+ * keys (id / project_id / ticket_id) are real columns and indexed attributes,
+ * so they resolve on both. For Meilisearch they must also be declared
+ * filterable — see config/scout.php.
  */
 class SearchService
 {
@@ -22,27 +28,37 @@ class SearchService
     {
         $query = trim($query);
 
+        $empty = ['projects' => collect(), 'tickets' => collect(), 'comments' => collect()];
+
         if ($query === '') {
-            return ['projects' => collect(), 'tickets' => collect(), 'comments' => collect()];
+            return $empty;
         }
 
-        $projectIds = $this->accessibleProjectIds($user);
+        $projectIds = $this->accessibleProjectIds($user)->all();
 
-        $projects = Project::search($query)->get()
-            ->filter(fn (Project $p) => $projectIds->contains($p->id))
-            ->take($limit)
-            ->values();
+        if ($projectIds === []) {
+            return $empty;
+        }
 
-        $tickets = Ticket::search($query)->get()
-            ->filter(fn (Ticket $t) => $projectIds->contains($t->project_id))
+        $projects = Project::search($query)
+            ->whereIn('id', $projectIds)
             ->take($limit)
-            ->values();
+            ->get();
 
-        $comments = TicketComment::search($query)->get()
-            ->load('ticket:id,project_id')
-            ->filter(fn (TicketComment $c) => $c->ticket && $projectIds->contains($c->ticket->project_id))
+        $tickets = Ticket::search($query)
+            ->whereIn('project_id', $projectIds)
             ->take($limit)
-            ->values();
+            ->get();
+
+        $ticketIds = Ticket::whereIn('project_id', $projectIds)->pluck('id')->all();
+
+        $comments = $ticketIds === []
+            ? collect()
+            : TicketComment::search($query)
+                ->whereIn('ticket_id', $ticketIds)
+                ->take($limit)
+                ->get()
+                ->load('ticket:id,project_id');
 
         return compact('projects', 'tickets', 'comments');
     }
