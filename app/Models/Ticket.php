@@ -85,7 +85,7 @@ class Ticket extends Model implements HasMedia
             // Ticket activity based on status
             $oldStatus = $old->status_id;
             if ($oldStatus != $item->status_id) {
-                TicketActivity::create([
+                $activity = TicketActivity::create([
                     'ticket_id' => $item->id,
                     'old_status_id' => $oldStatus,
                     'new_status_id' => $item->status_id,
@@ -93,7 +93,7 @@ class Ticket extends Model implements HasMedia
                     'user_id' => auth()->id(),
                 ]);
                 foreach ($item->watchers as $user) {
-                    $user->notify(new TicketStatusUpdated($item));
+                    $user->notify(new TicketStatusUpdated($item, $activity));
                 }
                 // Live update for anyone watching the project board.
                 TicketStatusChanged::dispatch($item, $oldStatus, (int) $item->status_id, auth()->id());

@@ -69,8 +69,7 @@ class NotificationsTest extends TestCase
     }
 
     /**
-     * TicketStatusUpdated reads $ticket->activities->last() into a non-nullable
-     * property, so it can only be built after a status change has recorded one.
+     * A ticket whose status has changed, so an activity has been recorded.
      */
     private function ticketWithStatusChange(): Ticket
     {
@@ -111,6 +110,30 @@ class NotificationsTest extends TestCase
         // Guards the :ticket / :name placeholders in the translation files.
         $this->assertStringContainsString($comment->ticket->name, $body);
         $this->assertStringContainsString($comment->user->name, $body);
+    }
+
+    public function test_the_status_updated_mail_builds_without_an_activity(): void
+    {
+        // A ticket with no recorded status change hands the notification a null
+        // activity; it must still build instead of crashing a queue worker.
+        $ticket = Ticket::factory()->create();
+
+        $mail = (new TicketStatusUpdated($ticket))->toMail($ticket->owner);
+
+        $this->assertInstanceOf(MailMessage::class, $mail);
+        $this->assertNotEmpty($mail->introLines);
+    }
+
+    public function test_the_status_updated_notification_uses_the_activity_passed_to_it(): void
+    {
+        $ticket = $this->ticketWithStatusChange();
+        $activity = $ticket->activities->last();
+
+        $mail = (new TicketStatusUpdated($ticket, $activity))->toMail($ticket->owner);
+        $body = implode(' ', $mail->introLines);
+
+        $this->assertStringContainsString($activity->oldStatus->name, $body);
+        $this->assertStringContainsString($activity->newStatus->name, $body);
     }
 
     public function test_the_status_updated_mail_names_the_ticket(): void
