@@ -113,7 +113,10 @@ jobs:
         run: composer install --prefer-dist --no-interaction --no-progress
 
       - name: Composer audit
-        run: composer audit
+        # Report abandoned packages (currently transitive deps of Filament 2,
+        # unavoidable until the Filament 3 upgrade) but only fail on actual
+        # security advisories, so a real vulnerability stands out.
+        run: composer audit --abandoned=report
 
       - name: Setup Node
         uses: actions/setup-node@v4
