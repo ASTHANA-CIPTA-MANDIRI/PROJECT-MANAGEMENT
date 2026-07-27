@@ -1,0 +1,73 @@
+<?php
+
+namespace App\Observers;
+
+use App\Events\TicketStatusChanged;
+use App\Models\Project;
+use App\Models\Ticket;
+use App\Models\TicketActivity;
+use App\Notifications\TicketCreated;
+use App\Notifications\TicketStatusUpdated;
+
+/**
+ * Side effects for the Ticket lifecycle, kept out of the model itself:
+ * code/order generation, status-change activity + notifications + broadcast,
+ * sprint/epic syncing, and statistics-cache invalidation.
+ */
+class TicketObserver
+{
+    public function creating(Ticket $ticket): void
+    {
+        $project = Project::where('id', $ticket->project_id)->first();
+        $count = Ticket::where('project_id', $project->id)->count();
+        $order = $project->tickets?->last()?->order ?? -1;
+        $ticket->code = $project->ticket_prefix.'-'.($count + 1);
+        $ticket->order = $order + 1;
+    }
+
+    public function created(Ticket $ticket): void
+    {
+        if ($ticket->sprint_id && $ticket->sprint->epic_id) {
+            Ticket::where('id', $ticket->id)->update(['epic_id' => $ticket->sprint->epic_id]);
+        }
+        foreach ($ticket->watchers as $user) {
+            $user->notify(new TicketCreated($ticket));
+        }
+        $ticket->project?->forgetStatistics();
+    }
+
+    public function updating(Ticket $ticket): void
+    {
+        $old = Ticket::where('id', $ticket->id)->first();
+
+        // Ticket activity based on status
+        $oldStatus = $old->status_id;
+        if ($oldStatus != $ticket->status_id) {
+            $activity = TicketActivity::create([
+                'ticket_id' => $ticket->id,
+                'old_status_id' => $oldStatus,
+                'new_status_id' => $ticket->status_id,
+                // Null for system-driven changes (queue, console, seeders).
+                'user_id' => auth()->id(),
+            ]);
+            foreach ($ticket->watchers as $user) {
+                $user->notify(new TicketStatusUpdated($ticket, $activity));
+            }
+            // Live update for anyone watching the project board.
+            TicketStatusChanged::dispatch($ticket, $oldStatus, (int) $ticket->status_id, auth()->id());
+        }
+
+        // Ticket sprint update
+        $oldSprint = $old->sprint_id;
+        if ($oldSprint && ! $ticket->sprint_id) {
+            Ticket::where('id', $ticket->id)->update(['epic_id' => null]);
+        } elseif ($ticket->sprint_id && $ticket->sprint->epic_id) {
+            Ticket::where('id', $ticket->id)->update(['epic_id' => $ticket->sprint->epic_id]);
+        }
+    }
+
+    public function deleted(Ticket $ticket): void
+    {
+        $ticket->project?->forgetStatistics();
+    }
+}

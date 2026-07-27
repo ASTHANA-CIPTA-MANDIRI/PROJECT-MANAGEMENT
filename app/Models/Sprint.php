@@ -25,22 +25,6 @@ class Sprint extends Model
         'ended_at' => 'datetime',
     ];
 
-    public static function boot()
-    {
-        parent::boot();
-
-        static::created(function (Sprint $item) {
-            $epic = Epic::create([
-                'name' => $item->name,
-                'starts_at' => $item->starts_at,
-                'ends_at' => $item->ends_at,
-                'project_id' => $item->project_id,
-            ]);
-            $item->epic_id = $epic->id;
-            $item->save();
-        });
-    }
-
     public function project(): BelongsTo
     {
         return $this->belongsTo(Project::class, 'project_id', 'id');

@@ -4,6 +4,14 @@ namespace App\Providers;
 
 use App\Listeners\AssignDefaultRole;
 use App\Listeners\SocialRegistration;
+use App\Models\Sprint;
+use App\Models\Ticket;
+use App\Models\TicketComment;
+use App\Models\TicketStatus;
+use App\Observers\SprintObserver;
+use App\Observers\TicketCommentObserver;
+use App\Observers\TicketObserver;
+use App\Observers\TicketStatusObserver;
 use DutchCodingCompany\FilamentSocialite\Events\Registered as SocialRegistered;
 use Illuminate\Auth\Events\Registered;
 use Illuminate\Auth\Listeners\SendEmailVerificationNotification;
@@ -33,7 +41,10 @@ class EventServiceProvider extends ServiceProvider
      */
     public function boot()
     {
-        //
+        Ticket::observe(TicketObserver::class);
+        TicketComment::observe(TicketCommentObserver::class);
+        Sprint::observe(SprintObserver::class);
+        TicketStatus::observe(TicketStatusObserver::class);
     }
 
     /**

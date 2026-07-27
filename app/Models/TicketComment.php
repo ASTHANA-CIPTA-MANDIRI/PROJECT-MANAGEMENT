@@ -2,8 +2,6 @@
 
 namespace App\Models;
 
-use App\Events\TicketCommentPosted;
-use App\Notifications\TicketCommented;
 use App\Support\HtmlSanitizer;
 use Illuminate\Database\Eloquent\Casts\Attribute;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
@@ -41,19 +39,6 @@ class TicketComment extends Model
             'content' => strip_tags((string) $this->content),
             'ticket_id' => $this->ticket_id,
         ];
-    }
-
-    public static function boot()
-    {
-        parent::boot();
-
-        static::created(function (TicketComment $item) {
-            foreach ($item->ticket->watchers as $user) {
-                $user->notify(new TicketCommented($item));
-            }
-            // Live update for anyone viewing the ticket or project board.
-            TicketCommentPosted::dispatch($item);
-        });
     }
 
     public function user(): BelongsTo

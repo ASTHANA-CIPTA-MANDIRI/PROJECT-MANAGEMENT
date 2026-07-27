@@ -2,9 +2,6 @@
 
 namespace App\Models;
 
-use App\Events\TicketStatusChanged;
-use App\Notifications\TicketCreated;
-use App\Notifications\TicketStatusUpdated;
 use App\Support\HtmlSanitizer;
 use Carbon\CarbonInterval;
 use Illuminate\Database\Eloquent\Casts\Attribute;
@@ -51,62 +48,6 @@ class Ticket extends Model implements HasMedia
     protected function content(): Attribute
     {
         return Attribute::set(fn (?string $value) => HtmlSanitizer::clean($value));
-    }
-
-    public static function boot()
-    {
-        parent::boot();
-
-        static::creating(function (Ticket $item) {
-            $project = Project::where('id', $item->project_id)->first();
-            $count = Ticket::where('project_id', $project->id)->count();
-            $order = $project->tickets?->last()?->order ?? -1;
-            $item->code = $project->ticket_prefix.'-'.($count + 1);
-            $item->order = $order + 1;
-        });
-
-        static::created(function (Ticket $item) {
-            if ($item->sprint_id && $item->sprint->epic_id) {
-                Ticket::where('id', $item->id)->update(['epic_id' => $item->sprint->epic_id]);
-            }
-            foreach ($item->watchers as $user) {
-                $user->notify(new TicketCreated($item));
-            }
-            $item->project?->forgetStatistics();
-        });
-
-        static::deleted(function (Ticket $item) {
-            $item->project?->forgetStatistics();
-        });
-
-        static::updating(function (Ticket $item) {
-            $old = Ticket::where('id', $item->id)->first();
-
-            // Ticket activity based on status
-            $oldStatus = $old->status_id;
-            if ($oldStatus != $item->status_id) {
-                $activity = TicketActivity::create([
-                    'ticket_id' => $item->id,
-                    'old_status_id' => $oldStatus,
-                    'new_status_id' => $item->status_id,
-                    // Null for system-driven changes (queue, console, seeders).
-                    'user_id' => auth()->id(),
-                ]);
-                foreach ($item->watchers as $user) {
-                    $user->notify(new TicketStatusUpdated($item, $activity));
-                }
-                // Live update for anyone watching the project board.
-                TicketStatusChanged::dispatch($item, $oldStatus, (int) $item->status_id, auth()->id());
-            }
-
-            // Ticket sprint update
-            $oldSprint = $old->sprint_id;
-            if ($oldSprint && ! $item->sprint_id) {
-                Ticket::where('id', $item->id)->update(['epic_id' => null]);
-            } elseif ($item->sprint_id && $item->sprint->epic_id) {
-                Ticket::where('id', $item->id)->update(['epic_id' => $item->sprint->epic_id]);
-            }
-        });
     }
 
     public function owner(): BelongsTo
