@@ -4,6 +4,8 @@ namespace App\Models;
 
 use App\Events\TicketCommentPosted;
 use App\Notifications\TicketCommented;
+use App\Support\HtmlSanitizer;
+use Illuminate\Database\Eloquent\Casts\Attribute;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
@@ -17,6 +19,15 @@ class TicketComment extends Model
     protected $fillable = [
         'user_id', 'ticket_id', 'content',
     ];
+
+    /**
+     * Sanitize rich-text content on write so stored (and later rendered) HTML
+     * can never carry a script/XSS payload, regardless of the write path.
+     */
+    protected function content(): Attribute
+    {
+        return Attribute::set(fn (?string $value) => HtmlSanitizer::clean($value));
+    }
 
     /**
      * The data indexed for full-text search (Laravel Scout).

@@ -5,6 +5,7 @@ namespace App\Models;
 use App\Events\TicketStatusChanged;
 use App\Notifications\TicketCreated;
 use App\Notifications\TicketStatusUpdated;
+use App\Support\HtmlSanitizer;
 use Carbon\CarbonInterval;
 use Illuminate\Database\Eloquent\Casts\Attribute;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
@@ -42,6 +43,15 @@ class Ticket extends Model implements HasMedia
         'status_id', 'project_id', 'code', 'order', 'type_id',
         'priority_id', 'estimation', 'epic_id', 'sprint_id',
     ];
+
+    /**
+     * Sanitize rich-text content on write so stored (and later rendered) HTML
+     * can never carry a script/XSS payload, regardless of the write path.
+     */
+    protected function content(): Attribute
+    {
+        return Attribute::set(fn (?string $value) => HtmlSanitizer::clean($value));
+    }
 
     public static function boot()
     {

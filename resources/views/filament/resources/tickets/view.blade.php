@@ -46,7 +46,7 @@
                     {{ __('Content') }}
                 </span>
                 <div class="w-full prose">
-                    {!! $record->content !!}
+                    {!! \App\Support\HtmlSanitizer::clean($record->content) !!}
                 </div>
             </div>
         </x-filament::card>
@@ -286,7 +286,7 @@
                             @endif
                         </div>
                         <div class="w-full prose">
-                            {!! $comment->content !!}
+                            {!! \App\Support\HtmlSanitizer::clean($comment->content) !!}
                         </div>
                     </div>
                 @endforeach
