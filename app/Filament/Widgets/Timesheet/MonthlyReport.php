@@ -8,23 +8,29 @@ use App\Models\TicketHour;
 use App\Models\User;
 use Carbon\Carbon;
 use Filament\Widgets\BarChartWidget;
-use Illuminate\Database\Eloquent\Collection;
-use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Collection;
 
 class MonthlyReport extends BarChartWidget
 {
+    use HasYearFilter;
+
     protected function getHeading(): string
     {
         return __('Logged time monthly');
     }
 
-    public ?string $filter = '2023';
+    public ?string $filter = null;
+
+    public function __construct($id = null)
+    {
+        $this->filter = (string) Carbon::now()->year;
+
+        parent::__construct($id);
+    }
 
     protected function getData(): array
     {
-        $collection = $this->filter(auth()->user(), [
-            'year' => $this->filter,
-        ]);
+        $collection = $this->filter(auth()->user(), $this->filter);
 
         $datasets = $this->getDatasets($this->buildRapport($collection));
 
@@ -47,10 +53,7 @@ class MonthlyReport extends BarChartWidget
 
     protected function getFilters(): ?array
     {
-        return [
-            2022 => 2022,
-            2023 => 2023,
-        ];
+        return $this->yearFilterOptions();
     }
 
     protected static ?array $options = [
@@ -67,18 +70,25 @@ class MonthlyReport extends BarChartWidget
         'lg' => 3,
     ];
 
-    protected function filter(User $user, array $params)
+    /**
+     * Total logged hours per month number (1-12) for the user and year.
+     * Grouping happens in PHP so it runs on any database driver.
+     *
+     * @return Collection<int, float>
+     */
+    protected function filter(User $user, ?string $year): Collection
     {
-        return TicketHour::select([
-            DB::raw("DATE_FORMAT(created_at,'%m') as month"),
-            DB::raw('SUM(value) as value'),
-        ])
-            ->whereRaw(
-                DB::raw('YEAR(created_at)='.(is_null($params['year']) ? Carbon::now()->format('Y') : $params['year']))
-            )
+        $year = (int) ($year ?: Carbon::now()->year);
+
+        return TicketHour::query()
             ->where('user_id', $user->id)
-            ->groupBy(DB::raw("DATE_FORMAT(created_at,'%m')"))
-            ->get();
+            ->whereBetween('created_at', [
+                Carbon::create($year, 1, 1)->startOfDay(),
+                Carbon::create($year, 12, 31)->endOfDay(),
+            ])
+            ->get()
+            ->groupBy(fn (TicketHour $hour) => (int) $hour->created_at->format('n'))
+            ->map(fn (Collection $group) => (float) $group->sum('value'));
     }
 
     protected function getDatasets(array $rapportData): array
@@ -96,6 +106,9 @@ class MonthlyReport extends BarChartWidget
         return $datasets;
     }
 
+    /**
+     * @param  Collection<int, float>  $collection
+     */
     protected function buildRapport(Collection $collection): array
     {
         $months = [
@@ -113,9 +126,9 @@ class MonthlyReport extends BarChartWidget
             12 => ['December', 0],
         ];
 
-        foreach ($collection as $value) {
-            if (isset($months[(int) $value->month])) {
-                $months[(int) $value->month][1] = (float) $value->value;
+        foreach ($collection as $month => $value) {
+            if (isset($months[$month])) {
+                $months[$month][1] = (float) $value;
             }
         }
 

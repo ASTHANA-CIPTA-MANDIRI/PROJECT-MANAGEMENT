@@ -7,10 +7,8 @@ namespace App\Filament\Widgets\Timesheet;
 use App\Models\TicketHour;
 use App\Models\User;
 use Carbon\Carbon;
-use Carbon\CarbonPeriod;
 use Filament\Widgets\BarChartWidget;
-use Illuminate\Database\Eloquent\Collection;
-use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Collection;
 
 class WeeklyReport extends BarChartWidget
 {
@@ -36,15 +34,11 @@ class WeeklyReport extends BarChartWidget
 
     protected function getData(): array
     {
-        $weekDaysData = explode(' - ', $this->filter);
+        [$weekStart, $weekEnd] = $this->parseWeekRange((string) $this->filter);
 
-        $collection = $this->filter(auth()->user(), [
-            'year' => null,
-            'weekStartDate' => $weekDaysData[0],
-            'weekEndDate' => $weekDaysData[1],
-        ]);
+        $dates = $this->buildDatesRange($weekStart, $weekEnd);
 
-        $dates = $this->buildDatesRange($weekDaysData[0], $weekDaysData[1]);
+        $collection = $this->filter(auth()->user(), $weekStart, $weekEnd);
 
         $datasets = $this->buildRapport($collection, $dates);
 
@@ -73,38 +67,82 @@ class WeeklyReport extends BarChartWidget
     protected function buildRapport(Collection $collection, array $dates): array
     {
         $template = $this->createReportTemplate($dates);
-        foreach ($collection as $item) {
-            $template[$item->day]['value'] = $item->value;
+        foreach ($collection as $day => $value) {
+            if (isset($template[$day])) {
+                $template[$day]['value'] = $value;
+            }
         }
 
         return collect($template)->pluck('value')->toArray();
     }
 
-    protected function filter(User $user, array $params)
+    /**
+     * Total logged hours per day for the given user and week, keyed Y-m-d.
+     *
+     * Grouping happens in PHP (not DATE_FORMAT) so the query runs on any
+     * database driver.
+     *
+     * @return Collection<string, float>
+     */
+    protected function filter(User $user, string $weekStart, string $weekEnd): Collection
     {
-        return TicketHour::select([
-            DB::raw("DATE_FORMAT(created_at,'%Y-%m-%d') as day"),
-            DB::raw('SUM(value) as value'),
-        ])
-            ->whereBetween('created_at', [$params['weekStartDate'], $params['weekEndDate']])
-            ->whereRaw(
-                DB::raw('YEAR(created_at)='.(is_null($params['year']) ? Carbon::now()->format('Y') : $params['year']))
-            )
+        return TicketHour::query()
             ->where('user_id', $user->id)
-            ->groupBy(DB::raw("DATE_FORMAT(created_at,'%Y-%m-%d')"))
-            ->get();
+            ->whereBetween('created_at', [
+                Carbon::parse($weekStart)->startOfDay(),
+                Carbon::parse($weekEnd)->endOfDay(),
+            ])
+            ->get()
+            ->groupBy(fn (TicketHour $hour) => $hour->created_at->format('Y-m-d'))
+            ->map(fn (Collection $group) => (float) $group->sum('value'));
     }
 
-    protected function buildDatesRange($weekStartDate, $weekEndDate): array
+    /**
+     * Every Y-m-d in the (validated) range. Guarded so a malformed or empty
+     * filter can never spin CarbonPeriod into an endless loop.
+     *
+     * @return array<int, string>
+     */
+    protected function buildDatesRange(string $weekStart, string $weekEnd): array
     {
-        $period = CarbonPeriod::create($weekStartDate, $weekEndDate);
+        if ($weekStart === '' || $weekEnd === '') {
+            return [];
+        }
+
+        try {
+            $start = Carbon::parse($weekStart)->startOfDay();
+            $end = Carbon::parse($weekEnd)->startOfDay();
+        } catch (\Exception) {
+            return [];
+        }
+
+        if ($start->greaterThan($end)) {
+            return [];
+        }
+
+        // A week is 7 days; cap defensively so no range can explode.
+        if ($start->diffInDays($end) > 31) {
+            $end = $start->copy()->addDays(31);
+        }
 
         $dates = [];
-        foreach ($period as $item) {
-            $dates[] = $item->format('Y-m-d');
+        for ($date = $start->copy(); $date->lessThanOrEqualTo($end); $date->addDay()) {
+            $dates[] = $date->format('Y-m-d');
         }
 
         return $dates;
+    }
+
+    /**
+     * Split the "Y-m-d - Y-m-d" filter, tolerating a missing/blank value.
+     *
+     * @return array{0: string, 1: string}
+     */
+    protected function parseWeekRange(string $filter): array
+    {
+        $parts = explode(' - ', $filter);
+
+        return [trim($parts[0] ?? ''), trim($parts[1] ?? '')];
     }
 
     protected function createReportTemplate(array $dates): array
