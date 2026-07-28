@@ -103,7 +103,11 @@ class UserResource extends Resource
                     ->searchable(),
             ])
             ->filters([
-                //
+                // New registrants get no role until an admin assigns one; this
+                // surfaces those awaiting approval so they can be actioned.
+                Tables\Filters\Filter::make('pending_approval')
+                    ->label(__('Pending approval'))
+                    ->query(fn ($query) => $query->doesntHave('roles')),
             ])
             ->actions([
                 Tables\Actions\ViewAction::make(),

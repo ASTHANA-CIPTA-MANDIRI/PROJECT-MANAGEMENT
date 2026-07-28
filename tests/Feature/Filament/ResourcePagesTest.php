@@ -157,6 +157,18 @@ class ResourcePagesTest extends TestCase
             ->assertSuccessful();
     }
 
+    public function test_pending_approval_filter_shows_only_users_without_a_role(): void
+    {
+        // The admin ($this->admin) holds a role; a fresh registrant has none.
+        $pending = User::factory()->create();
+
+        Livewire::test(\App\Filament\Resources\UserResource\Pages\ListUsers::class)
+            ->assertCanSeeTableRecords([$pending, $this->admin])
+            ->filterTable('pending_approval')
+            ->assertCanSeeTableRecords([$pending])
+            ->assertCanNotSeeTableRecords([$this->admin]);
+    }
+
     public function test_the_user_create_page_renders(): void
     {
         Livewire::test(\App\Filament\Resources\UserResource\Pages\CreateUser::class)
