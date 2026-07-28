@@ -124,6 +124,39 @@ class SprintApiTest extends TestCase
         ])->assertForbidden();
     }
 
+    public function test_it_forbids_creating_a_sprint_in_an_inaccessible_project(): void
+    {
+        // Has the global permission but no access to the target project.
+        $this->actingWith(['Create sprint']);
+        $foreign = Project::factory()->create(); // someone else's project
+
+        $this->postJson('/api/v1/sprints', [
+            'name' => 'Injected sprint',
+            'project_id' => $foreign->id,
+            'starts_at' => '2026-02-01',
+            'ends_at' => '2026-02-14',
+        ])->assertForbidden();
+
+        $this->assertDatabaseMissing('sprints', ['project_id' => $foreign->id]);
+        $this->assertDatabaseMissing('epics', ['project_id' => $foreign->id]);
+    }
+
+    public function test_a_project_member_can_create_a_sprint(): void
+    {
+        $user = $this->actingWith(['Create sprint']);
+        $project = Project::factory()->create(); // not owned by the user
+        $project->users()->attach($user->id, ['role' => 'employee']);
+
+        $this->postJson('/api/v1/sprints', [
+            'name' => 'Member sprint',
+            'project_id' => $project->id,
+            'starts_at' => '2026-02-01',
+            'ends_at' => '2026-02-14',
+        ])->assertCreated();
+
+        $this->assertDatabaseHas('sprints', ['name' => 'Member sprint', 'project_id' => $project->id]);
+    }
+
     public function test_it_validates_the_sprint_payload(): void
     {
         $this->actingWith(['Create sprint']);
