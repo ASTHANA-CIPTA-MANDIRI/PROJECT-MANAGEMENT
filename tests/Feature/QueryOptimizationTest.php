@@ -12,6 +12,7 @@ use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Notification;
+use Illuminate\Support\Facades\Storage;
 use Tests\TestCase;
 
 class QueryOptimizationTest extends TestCase
@@ -141,6 +142,32 @@ class QueryOptimizationTest extends TestCase
 
         // 1 tickets + 5 eager-loaded relations = ~6, not 1 + 5*5 = 26.
         $this->assertLessThanOrEqual(10, $queryCount, "Expected eager loading, ran {$queryCount} queries");
+    }
+
+    public function test_latest_projects_widget_eager_loads_cover_media(): void
+    {
+        Storage::fake('public');
+        $owner = User::factory()->create();
+        $projects = Project::factory()->count(5)->create(['owner_id' => $owner->id]);
+        // Give a couple of them a real cover so the media-present path runs too.
+        foreach ($projects->take(2) as $project) {
+            $project->addMediaFromString('img')->usingFileName('cover.png')->toMediaCollection();
+        }
+
+        DB::connection()->enableQueryLog();
+
+        // Mirrors LatestProjects::getTableQuery's eager-load set.
+        $rows = Project::query()->with(['owner', 'status', 'media'])->limit(5)->get();
+        foreach ($rows as $project) {
+            $project->cover; // reads the media collection
+        }
+
+        $queryCount = count(DB::connection()->getQueryLog());
+        DB::connection()->disableQueryLog();
+
+        // Constant regardless of row count: without eager-loaded media each
+        // cover access would add a query per project.
+        $this->assertLessThanOrEqual(4, $queryCount, "Expected eager-loaded media, ran {$queryCount} queries");
     }
 
     public function test_time_logged_widget_avoids_per_row_hour_queries(): void

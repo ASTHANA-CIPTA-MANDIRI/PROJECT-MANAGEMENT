@@ -36,7 +36,10 @@ class LatestProjects extends BaseWidget
     protected function getTableQuery(): Builder
     {
         return Project::query()
-            ->with(['owner', 'status'])
+            // Eager load media too: each row renders $record->cover, which
+            // reads the project's media collection — without this it is one
+            // extra query per row (N+1).
+            ->with(['owner', 'status', 'media'])
             ->limit(5)
             ->where(function ($query) {
                 return $query->where('owner_id', auth()->user()->id)
