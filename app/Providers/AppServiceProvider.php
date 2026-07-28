@@ -16,6 +16,8 @@ use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\URL;
 use Illuminate\Support\HtmlString;
 use Illuminate\Support\ServiceProvider;
+use Illuminate\Validation\Rules\Password;
+use JeffGreco13\FilamentBreezy\FilamentBreezy;
 use Laravel\Socialite\Contracts\User as SocialiteUserContract;
 
 class AppServiceProvider extends ServiceProvider
@@ -39,6 +41,9 @@ class AppServiceProvider extends ServiceProvider
     {
         // Configure application
         $this->configureApp();
+
+        // Enforce a strong password policy on registration/profile/reset
+        $this->configurePasswordPolicy();
 
         // Monitor database queries in local development. Writes to a dedicated
         // storage/logs/query.log channel; never active in testing/production.
@@ -110,6 +115,29 @@ class AppServiceProvider extends ServiceProvider
                 'type' => 'social',
                 'email_verified_at' => now(),
             ]);
+        });
+    }
+
+    /**
+     * A single strong password policy for every password entry point
+     * (registration, My Profile, password reset).
+     *
+     * Set here rather than in config because config is cached in production and
+     * cannot hold a Password rule object; the HaveIBeenPwned breach check runs
+     * only in production so tests and offline dev don't depend on the API.
+     */
+    private function configurePasswordPolicy(): void
+    {
+        Password::defaults(function () {
+            $rule = Password::min(8)->mixedCase()->numbers();
+
+            return $this->app->isProduction() ? $rule->uncompromised() : $rule;
+        });
+
+        // Breezy sets its rules from (string) config at boot; override them once
+        // the app is fully booted so all its forms use the policy above.
+        $this->app->booted(function () {
+            FilamentBreezy::setPasswordRules([Password::defaults()]);
         });
     }
 
