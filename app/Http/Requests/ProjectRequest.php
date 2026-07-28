@@ -29,11 +29,13 @@ class ProjectRequest extends FormRequest
     }
 
     /**
-     * Default the owner to the current user when the API caller omits it.
+     * On create the owner is always the authenticated user: force owner_id and
+     * ignore any value from the body, so a project cannot be attributed to
+     * someone else. (Updates keep whatever owner_id is provided.)
      */
     protected function prepareForValidation(): void
     {
-        if (! $this->filled('owner_id') && $this->user()) {
+        if ($this->isMethod('POST') && $this->user()) {
             $this->merge(['owner_id' => $this->user()->getKey()]);
         }
     }

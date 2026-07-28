@@ -162,6 +162,27 @@ class ProjectApiTest extends TestCase
         $this->assertDatabaseHas('projects', ['name' => 'API Project', 'owner_id' => $user->id]);
     }
 
+    public function test_creating_ignores_a_spoofed_owner_id(): void
+    {
+        $user = $this->actingWith(['Create project']);
+        $status = ProjectStatus::factory()->create();
+        $victim = User::factory()->create();
+
+        $this->postJson('/api/v1/projects', [
+            'name' => 'Spoofed',
+            'ticket_prefix' => 'SPF',
+            'status_id' => $status->id,
+            'type' => 'kanban',
+            'status_type' => 'default',
+            'owner_id' => $victim->id, // attempt to attribute to someone else
+        ])
+            ->assertCreated()
+            ->assertJsonPath('data.owner_id', $user->id); // forced back to caller
+
+        $this->assertDatabaseHas('projects', ['name' => 'Spoofed', 'owner_id' => $user->id]);
+        $this->assertDatabaseMissing('projects', ['name' => 'Spoofed', 'owner_id' => $victim->id]);
+    }
+
     public function test_creating_requires_the_create_permission(): void
     {
         $this->actingWith(['List projects']); // wrong permission
