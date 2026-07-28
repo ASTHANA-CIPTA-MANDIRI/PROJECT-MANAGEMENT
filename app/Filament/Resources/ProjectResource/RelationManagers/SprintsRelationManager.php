@@ -2,10 +2,9 @@
 
 namespace App\Filament\Resources\ProjectResource\RelationManagers;
 
+use App\Filament\Resources\ProjectResource\Forms\SprintForm;
 use App\Models\Sprint;
 use App\Models\Ticket;
-use Carbon\Carbon;
-use Closure;
 use Filament\Facades\Filament;
 use Filament\Forms;
 use Filament\Notifications\Actions\Action;
@@ -31,49 +30,7 @@ class SprintsRelationManager extends RelationManager
 
     public static function form(Form $form): Form
     {
-        return $form
-            ->schema([
-                Forms\Components\Grid::make()
-                    ->columns(1)
-                    ->visible(fn ($record) => ! $record)
-                    ->extraAttributes([
-                        'class' => 'text-danger-500 text-xs',
-                    ])
-                    ->schema([
-                        Forms\Components\Placeholder::make('information')
-                            ->disableLabel()
-                            ->content(new HtmlString(
-                                '<span class="font-medium">'.__('Important:').'</span>'.' '.
-                                __('The creation of a new Sprint will create a linked Epic into to the Road Map')
-                            )),
-                    ]),
-
-                Forms\Components\Grid::make()
-                    ->schema([
-                        Forms\Components\TextInput::make('name')
-                            ->label(__('Sprint name'))
-                            ->maxLength(255)
-                            ->columnSpan(2)
-                            ->required(),
-
-                        Forms\Components\DatePicker::make('starts_at')
-                            ->label(__('Sprint start date'))
-                            ->reactive()
-                            ->afterStateUpdated(fn ($state, Closure $set) => $set('ends_at', Carbon::parse($state)->addWeek()->subDay()))
-                            ->beforeOrEqual(fn (Closure $get) => $get('ends_at'))
-                            ->required(),
-
-                        Forms\Components\DatePicker::make('ends_at')
-                            ->label(__('Sprint end date'))
-                            ->reactive()
-                            ->afterOrEqual(fn (Closure $get) => $get('starts_at'))
-                            ->required(),
-
-                        Forms\Components\RichEditor::make('description')
-                            ->label(__('Sprint description'))
-                            ->columnSpan(2),
-                    ]),
-            ]);
+        return $form->schema(SprintForm::schema());
     }
 
     public static function table(Table $table): Table
