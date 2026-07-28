@@ -20,7 +20,7 @@ RUN apt-get update -y && \
     apt-get install -y composer && \
     composer update && \
     composer install && \
-    npm install && \
+    npm ci && \
     php artisan key:generate && \
     rm -rf /var/lib/apt/lists/*
 
