@@ -72,6 +72,33 @@ class SuperAdminRoleTest extends TestCase
         $this->assertNull(User::find($a->id));
     }
 
+    public function test_the_configured_super_admin_role_cannot_be_deleted(): void
+    {
+        $role = Role::create(['name' => 'Owner']);
+        GeneralSettings::fake(['super_admin_role' => (string) $role->id]);
+
+        $this->assertFalse((bool) $role->fresh()->delete());
+        $this->assertNotNull(Role::find($role->id), 'the Super Admin role must not be deletable');
+    }
+
+    public function test_the_named_super_admin_role_cannot_be_deleted_when_unconfigured(): void
+    {
+        GeneralSettings::fake(['super_admin_role' => null]);
+        $role = Role::create(['name' => 'Super Admin']);
+
+        $this->assertFalse((bool) $role->fresh()->delete());
+        $this->assertNotNull(Role::find($role->id));
+    }
+
+    public function test_a_normal_role_can_be_deleted(): void
+    {
+        GeneralSettings::fake(['super_admin_role' => null]);
+        $role = Role::create(['name' => 'Editor']);
+
+        $this->assertTrue((bool) $role->fresh()->delete());
+        $this->assertNull(Role::find($role->id));
+    }
+
     public function test_cannot_remove_the_super_admin_role_from_the_last_super_admin(): void
     {
         $superAdminRole = Role::create(['name' => 'Super Admin']);
