@@ -62,7 +62,20 @@ class UserResource extends Resource
                                     ->label(__('Permission roles'))
                                     ->required()
                                     ->columns(3)
-                                    ->relationship('roles', 'name'),
+                                    ->relationship('roles', 'name')
+                                    // Guard: don't let the Super Admin role be
+                                    // removed from the last Super Admin.
+                                    ->rule(fn (?User $record) => function (string $attribute, $value, \Closure $fail) use ($record) {
+                                        if (! $record || ! $record->isLastSuperAdmin()) {
+                                            return;
+                                        }
+                                        $superAdminRoleId = User::superAdminRoleId()
+                                            ?? \App\Models\Role::where('name', 'Super Admin')->value('id');
+                                        $selected = array_map('strval', (array) $value);
+                                        if (! in_array((string) $superAdminRoleId, $selected, true)) {
+                                            $fail(__('You cannot remove the Super Admin role from the last Super Admin.'));
+                                        }
+                                    }),
                             ]),
                     ]),
             ]);
@@ -86,6 +99,11 @@ class UserResource extends Resource
                     ->label(__('Roles'))
                     ->limit(2),
 
+                Tables\Columns\IconColumn::make('is_super_admin')
+                    ->label(__('Super Admin'))
+                    ->boolean()
+                    ->getStateUsing(fn (User $record) => $record->isSuperAdmin()),
+
                 Tables\Columns\TextColumn::make('email_verified_at')
                     ->label(__('Email verified at'))
                     ->dateTime()
@@ -108,6 +126,16 @@ class UserResource extends Resource
                 Tables\Filters\Filter::make('pending_approval')
                     ->label(__('Pending approval'))
                     ->query(fn ($query) => $query->doesntHave('roles')),
+
+                Tables\Filters\Filter::make('super_admins')
+                    ->label(__('Super Admins only'))
+                    ->query(function ($query) {
+                        $roleId = User::superAdminRoleId();
+
+                        return $query->whereHas('roles', fn ($q) => $roleId !== null
+                            ? $q->whereKey($roleId)
+                            : $q->where('name', 'Super Admin'));
+                    }),
             ])
             ->actions([
                 Tables\Actions\ViewAction::make(),

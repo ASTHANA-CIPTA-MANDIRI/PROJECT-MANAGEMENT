@@ -80,6 +80,13 @@ class User extends Authenticatable implements FilamentUser, MustVerifyEmail
                 $item->notify(new UserCreatedNotification($item));
             }
         });
+
+        // Never let the platform be left without a Super Admin.
+        static::deleting(function (User $item) {
+            if ($item->isLastSuperAdmin()) {
+                return false;
+            }
+        });
     }
 
     public function projectsOwning(): HasMany
@@ -158,6 +165,28 @@ class User extends Authenticatable implements FilamentUser, MustVerifyEmail
             // Settings not available yet (e.g. no database / faked settings).
             return null;
         }
+    }
+
+    /**
+     * Query for users holding the Super Admin role.
+     */
+    public static function superAdmins(): \Illuminate\Database\Eloquent\Builder
+    {
+        $roleId = static::superAdminRoleId();
+
+        return static::whereHas('roles', fn ($q) => $roleId !== null
+            ? $q->whereKey($roleId)
+            : $q->where('name', 'Super Admin'));
+    }
+
+    /**
+     * True when this user is a Super Admin and no other user holds the role —
+     * removing it would leave the platform with no administrator.
+     */
+    public function isLastSuperAdmin(): bool
+    {
+        return $this->isSuperAdmin()
+            && static::superAdmins()->whereKeyNot($this->getKey())->doesntExist();
     }
 
     public function sendEmailVerificationNotification()
