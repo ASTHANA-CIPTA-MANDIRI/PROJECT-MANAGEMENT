@@ -2,6 +2,7 @@
 
 use Illuminate\Database\Migrations\Migration;
 use Illuminate\Database\Schema\Blueprint;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
 
 /**
@@ -14,10 +15,39 @@ return new class extends Migration
 {
     public function up(): void
     {
+        $this->removeDuplicateSettings();
+
+        // The old single-column index may already be gone from a partially
+        // applied run (MySQL auto-commits DDL), so drop it defensively.
+        try {
+            Schema::table('settings', fn (Blueprint $table) => $table->dropIndex(['group']));
+        } catch (\Throwable $e) {
+            // Index already removed.
+        }
+
         Schema::table('settings', function (Blueprint $table) {
-            $table->dropIndex(['group']);
             $table->unique(['group', 'name']);
         });
+    }
+
+    /**
+     * Drop any pre-existing duplicate (group, name) rows before enforcing
+     * uniqueness — keeping the lowest id — so the index can be added on a
+     * database that already accumulated duplicates. Portable across drivers.
+     */
+    private function removeDuplicateSettings(): void
+    {
+        $seen = [];
+
+        DB::table('settings')->orderBy('id')->get(['id', 'group', 'name'])
+            ->each(function ($row) use (&$seen) {
+                $key = $row->group.'|'.$row->name;
+                if (isset($seen[$key])) {
+                    DB::table('settings')->where('id', $row->id)->delete();
+                } else {
+                    $seen[$key] = true;
+                }
+            });
     }
 
     public function down(): void

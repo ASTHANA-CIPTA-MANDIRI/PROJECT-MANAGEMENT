@@ -8,7 +8,6 @@ use App\Settings\GeneralSettings;
 use DutchCodingCompany\FilamentSocialite\FilamentSocialite;
 use Filament\Facades\Filament;
 use Illuminate\Auth\Notifications\VerifyEmail;
-use Illuminate\Database\QueryException;
 use Illuminate\Foundation\Vite;
 use Illuminate\Support\Facades\Config;
 use Illuminate\Support\Facades\DB;
@@ -158,8 +157,11 @@ class AppServiceProvider extends ServiceProvider
             Config::set('filament-socialite.registration', $settings->enable_registration ?? false);
             Config::set('filament-socialite.enabled', $settings->enable_social_login ?? false);
             Config::set('system.login_form.is_enabled', $settings->enable_login_form ?? false);
-        } catch (QueryException $e) {
-            // Error: No database configured yet
+        } catch (\Throwable $e) {
+            // Settings aren't available yet: no database configured, or a
+            // pending settings migration (e.g. a newly added property). Fall
+            // back to config defaults so the app can still boot — importantly,
+            // so `php artisan migrate` can run to add that very property.
         }
     }
 }
