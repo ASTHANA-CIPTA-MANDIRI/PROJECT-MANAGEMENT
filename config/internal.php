@@ -1,5 +1,7 @@
 <?php
 
+$trustedProxies = trim((string) env('TRUSTED_PROXIES', ''));
+
 return [
 
     /*
@@ -19,5 +21,23 @@ return [
         'trim',
         explode(',', (string) env('INTERNAL_IP_WHITELIST', '127.0.0.1,::1'))
     ))),
+
+    /*
+    |--------------------------------------------------------------------------
+    | Trusted Proxies
+    |--------------------------------------------------------------------------
+    |
+    | Load balancers / reverse proxies to trust so $request->ip() reflects the
+    | real client (needed for the IP whitelist above). Set TRUSTED_PROXIES to a
+    | comma-separated list of IPs/CIDRs, or "*" to trust all forwarding proxies
+    | (only when the app is reachable *exclusively* through them).
+    |
+    | Empty = trust none (safe default when not behind a proxy).
+    |
+    */
+
+    'trusted_proxies' => $trustedProxies === '*'
+        ? '*'
+        : array_values(array_filter(array_map('trim', explode(',', $trustedProxies)))),
 
 ];
