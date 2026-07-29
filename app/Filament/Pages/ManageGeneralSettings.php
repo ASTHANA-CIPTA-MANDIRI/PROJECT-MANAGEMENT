@@ -86,6 +86,12 @@ class ManageGeneralSettings extends SettingsPage
                                         ->helperText(__('The platform default role (assigned to newly registered users).'))
                                         ->searchable()
                                         ->options(Role::all()->pluck('name', 'id')->toArray()),
+
+                                    Select::make('super_admin_role')
+                                        ->label(__('Super Admin role'))
+                                        ->helperText(__('Role treated as the main administrator (full access, 2FA policy).'))
+                                        ->searchable()
+                                        ->options(Role::all()->pluck('name', 'id')->toArray()),
                                 ]),
                         ]),
                 ]),

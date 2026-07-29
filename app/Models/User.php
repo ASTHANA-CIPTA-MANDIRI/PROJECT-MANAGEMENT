@@ -135,11 +135,29 @@ class User extends Authenticatable implements FilamentUser, MustVerifyEmail
     }
 
     /**
-     * The main administrator: the "Super Admin" role (all permissions).
+     * The main administrator. Which role counts as "Super Admin" is chosen in
+     * Settings; when unset we fall back to a role literally named "Super Admin".
      */
     public function isSuperAdmin(): bool
     {
-        return $this->hasRole('Super Admin');
+        $roleId = static::superAdminRoleId();
+
+        return $roleId !== null
+            ? $this->roles()->whereKey($roleId)->exists()
+            : $this->hasRole('Super Admin');
+    }
+
+    /**
+     * The configured Super Admin role id, or null when unset/unavailable.
+     */
+    public static function superAdminRoleId(): ?string
+    {
+        try {
+            return app(\App\Settings\GeneralSettings::class)->super_admin_role ?: null;
+        } catch (\Throwable $e) {
+            // Settings not available yet (e.g. no database / faked settings).
+            return null;
+        }
     }
 
     public function sendEmailVerificationNotification()

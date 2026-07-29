@@ -18,6 +18,8 @@ class GeneralSettings extends Settings
 
     public ?string $default_role;
 
+    public ?string $super_admin_role;
+
     public ?string $enable_login_form;
 
     public static function group(): string
