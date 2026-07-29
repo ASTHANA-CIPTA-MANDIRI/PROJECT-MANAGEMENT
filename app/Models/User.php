@@ -134,6 +134,14 @@ class User extends Authenticatable implements FilamentUser, MustVerifyEmail
         return $this->roles()->exists();
     }
 
+    /**
+     * The main administrator: the "Super Admin" role (all permissions).
+     */
+    public function isSuperAdmin(): bool
+    {
+        return $this->hasRole('Super Admin');
+    }
+
     public function sendEmailVerificationNotification()
     {
         $this->notify(new \App\Notifications\CustomVerifyEmail);

@@ -317,6 +317,7 @@ return [
         'auth' => [
             Authenticate::class,
             'verified',
+            \App\Http\Middleware\RequireTwoFactorForSuperAdmins::class,
         ],
         'base' => [
             EncryptCookies::class,
