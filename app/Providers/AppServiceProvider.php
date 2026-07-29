@@ -145,7 +145,9 @@ class AppServiceProvider extends ServiceProvider
     {
         try {
             $settings = app(GeneralSettings::class);
-            Config::set('app.locale', $settings->site_language ?? config('app.fallback_locale'));
+            // setLocale (not Config::set) so the translator's active locale is
+            // updated too, applying the configured site language app-wide.
+            app()->setLocale($settings->site_language ?? config('app.fallback_locale'));
             Config::set('app.name', $settings->site_name ?? env('APP_NAME'));
             Config::set('filament.brand', $settings->site_name ?? env('APP_NAME'));
             Config::set(
