@@ -3,6 +3,7 @@
 namespace App\Providers;
 
 use App\Listeners\AssignDefaultRole;
+use App\Listeners\NotifyAdminsOfRegistration;
 use App\Listeners\SocialRegistration;
 use App\Models\Sprint;
 use App\Models\Ticket;
@@ -28,6 +29,7 @@ class EventServiceProvider extends ServiceProvider
         Registered::class => [
             SendEmailVerificationNotification::class,
             AssignDefaultRole::class,
+            NotifyAdminsOfRegistration::class,
         ],
         SocialRegistered::class => [
             SocialRegistration::class,

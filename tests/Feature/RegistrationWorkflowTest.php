@@ -3,12 +3,16 @@
 namespace Tests\Feature;
 
 use App\Listeners\AssignDefaultRole;
+use App\Listeners\NotifyAdminsOfRegistration;
+use App\Models\Permission;
 use App\Models\Role;
 use App\Models\User;
+use App\Notifications\NewUserPendingApproval;
 use App\Settings\GeneralSettings;
 use Illuminate\Auth\Events\Registered;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Notification;
+use Spatie\Permission\PermissionRegistrar;
 use Tests\TestCase;
 
 /**
@@ -117,5 +121,62 @@ class RegistrationWorkflowTest extends TestCase
         $user->syncRoles([]);
 
         $this->assertFalse($user->fresh()->canAccessFilament());
+    }
+
+    // ------------------------------------------------ admin approval workflow
+
+    private function adminWhoCanApprove(): User
+    {
+        Permission::firstOrCreate(['name' => 'Update user']);
+        $role = Role::create(['name' => 'Approver_'.uniqid()]);
+        $role->syncPermissions(['Update user']);
+
+        $admin = User::factory()->create();
+        $admin->syncRoles([$role]);
+        app(PermissionRegistrar::class)->forgetCachedPermissions();
+
+        return $admin->fresh();
+    }
+
+    public function test_admins_are_notified_of_a_new_registrant(): void
+    {
+        $admin = $this->adminWhoCanApprove();
+        $registrant = User::factory()->create();
+
+        (new NotifyAdminsOfRegistration)->handle(new Registered($registrant));
+
+        Notification::assertSentTo($admin, NewUserPendingApproval::class);
+        Notification::assertNotSentTo($registrant, NewUserPendingApproval::class);
+    }
+
+    public function test_the_admin_notification_listener_is_wired_to_registration(): void
+    {
+        $admin = $this->adminWhoCanApprove();
+        $this->withDefaultRole(null);
+
+        event(new Registered(User::factory()->create()));
+
+        Notification::assertSentTo($admin, NewUserPendingApproval::class);
+    }
+
+    public function test_a_pending_user_sees_the_awaiting_approval_page(): void
+    {
+        $this->actingAs(User::factory()->create()); // no role → pending
+
+        $html = strtolower(view('errors.403')->render());
+
+        $this->assertStringContainsString('awaiting approval', $html);
+    }
+
+    public function test_a_user_with_a_role_sees_the_generic_forbidden_page(): void
+    {
+        $user = User::factory()->create();
+        $user->syncRoles([Role::create(['name' => 'Member'])]);
+        $this->actingAs($user->fresh());
+
+        $html = strtolower(view('errors.403')->render());
+
+        $this->assertStringNotContainsString('awaiting approval', $html);
+        $this->assertStringContainsString('403', $html);
     }
 }
