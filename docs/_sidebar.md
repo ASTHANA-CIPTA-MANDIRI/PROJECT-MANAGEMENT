@@ -44,3 +44,5 @@
     - [Continuous Integration](/cicd?id=continuous-integration-testsyml)
     - [Deployment](/cicd?id=deployment)
     - [Backup & rollback](/cicd?id=database-backup-db-backupyml)
+- [Security advisories](/security-advisories?id=known-amp-accepted-security-advisories)
+    - [Accepted npm / composer advisories](/security-advisories?id=1-npm-esbuild-vite-laravel-vite-plugin-3-advisories-dev-only)
