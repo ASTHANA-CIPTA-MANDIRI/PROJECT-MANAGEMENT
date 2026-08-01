@@ -40,6 +40,7 @@ class ProjectForm
         return Forms\Components\SpatieMediaLibraryFileUpload::make('cover')
             ->label(__('Cover image'))
             ->image()
+            ->maxSize(config('system.max_file_size'))
             ->helperText(
                 __('If not selected, an image will be generated based on the project name')
             )
