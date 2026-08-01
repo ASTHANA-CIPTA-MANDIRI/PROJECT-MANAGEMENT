@@ -37,6 +37,23 @@ class TwoFactorEnforcementTest extends TestCase
             ->assertRedirect(route('filament.pages.my-profile'));
     }
 
+    public function test_the_2fa_notice_is_flashed_only_once_per_session(): void
+    {
+        config(['system.security.require_2fa_for_super_admin' => true]);
+        $this->actingAs($this->superAdmin());
+
+        // First blocked navigation: notice sent, guard flag set.
+        $this->get(route('filament.pages.dashboard'))
+            ->assertRedirect(route('filament.pages.my-profile'));
+        $this->assertTrue(session('2fa_required_notified'));
+
+        // Further navigations still redirect (policy enforced) without
+        // re-notifying — the flag remains and gates the notification.
+        $this->get(route('filament.pages.dashboard'))
+            ->assertRedirect(route('filament.pages.my-profile'));
+        $this->assertTrue(session('2fa_required_notified'));
+    }
+
     public function test_super_admin_without_2fa_can_still_reach_the_profile_page(): void
     {
         config(['system.security.require_2fa_for_super_admin' => true]);

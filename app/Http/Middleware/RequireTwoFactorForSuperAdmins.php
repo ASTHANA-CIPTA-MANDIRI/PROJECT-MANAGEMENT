@@ -35,12 +35,18 @@ class RequireTwoFactorForSuperAdmins
             && ! $user->has_confirmed_two_factor
             && ! in_array($request->route()?->getName(), $this->allowed, true)
         ) {
-            Notification::make()
-                ->warning()
-                ->title(__('Two-factor authentication required'))
-                ->body(__('Please enable two-factor authentication to continue using the panel.'))
-                ->persistent()
-                ->send();
+            // Notify only once per session so repeated navigation doesn't stack
+            // the same warning; the redirect itself keeps enforcing the policy.
+            if (! $request->session()->get('2fa_required_notified')) {
+                Notification::make()
+                    ->warning()
+                    ->title(__('Two-factor authentication required'))
+                    ->body(__('Please enable two-factor authentication to continue using the panel.'))
+                    ->persistent()
+                    ->send();
+
+                $request->session()->put('2fa_required_notified', true);
+            }
 
             return redirect()->route('filament.pages.my-profile');
         }
