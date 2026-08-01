@@ -49,6 +49,19 @@ class SuperAdminRoleTest extends TestCase
         $this->assertTrue($user->fresh()->isSuperAdmin());
     }
 
+    public function test_a_dangling_super_admin_role_setting_falls_back_to_the_named_role(): void
+    {
+        $named = Role::create(['name' => 'Super Admin']);
+        GeneralSettings::fake(['super_admin_role' => '999999']); // points to a role that doesn't exist
+
+        $user = User::factory()->create();
+        $user->syncRoles([$named]);
+
+        // The dangling id is ignored, so it falls back to the named role.
+        $this->assertNull(User::superAdminRoleId());
+        $this->assertTrue($user->fresh()->isSuperAdmin());
+    }
+
     // ------------------------------------------------ guardrails (no lock-out)
 
     public function test_the_last_super_admin_cannot_be_deleted(): void

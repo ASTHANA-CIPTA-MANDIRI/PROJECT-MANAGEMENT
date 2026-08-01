@@ -3,16 +3,19 @@
 namespace App\Filament\Pages;
 
 use App\Models\Role;
+use App\Models\User;
 use App\Settings\GeneralSettings;
 use Filament\Forms\Components\Card;
 use Filament\Forms\Components\FileUpload;
 use Filament\Forms\Components\Grid;
+use Filament\Forms\Components\Placeholder;
 use Filament\Forms\Components\Select;
 use Filament\Forms\Components\TextInput;
 use Filament\Forms\Components\Toggle;
 use Filament\Pages\Actions\Action;
 use Filament\Pages\SettingsPage;
 use Illuminate\Contracts\Support\Htmlable;
+use Illuminate\Support\HtmlString;
 
 class ManageGeneralSettings extends SettingsPage
 {
@@ -89,9 +92,15 @@ class ManageGeneralSettings extends SettingsPage
 
                                     Select::make('super_admin_role')
                                         ->label(__('Super Admin role'))
-                                        ->helperText(__('Role treated as the main administrator (full access, 2FA policy).'))
+                                        ->helperText(__('Role treated as the main administrator (full access, 2FA policy). This role cannot be deleted while selected.'))
                                         ->searchable()
+                                        ->reactive()
+                                        ->rules(['nullable', 'exists:roles,id'])
                                         ->options(Role::all()->pluck('name', 'id')->toArray()),
+
+                                    Placeholder::make('super_admin_status')
+                                        ->label(__('Super Admin summary'))
+                                        ->content(fn (callable $get) => $this->superAdminSummary($get('super_admin_role'))),
                                 ]),
                         ]),
                 ]),
@@ -109,5 +118,30 @@ class ManageGeneralSettings extends SettingsPage
         asort($languages);
 
         return $languages;
+    }
+
+    /**
+     * A friendly, live summary of who the current Super Admins are so the
+     * setting's effect is never silent.
+     */
+    private function superAdminSummary($roleId): HtmlString
+    {
+        if ($roleId && $role = Role::find($roleId)) {
+            $count = $role->users()->count();
+
+            return new HtmlString(
+                '<span style="color:#15803d">✓ <strong>'.e($role->name).'</strong></span> — '
+                .$count.' '.__('user(s) currently hold this role')
+            );
+        }
+
+        // No (valid) selection → the app falls back to a role named "Super Admin".
+        $count = User::superAdmins()->count();
+
+        return new HtmlString(
+            '<span style="color:#b45309">⚠ '
+            .__('No role selected — the app falls back to a role named “Super Admin”')
+            .'</span> ('.$count.' '.__('user(s)').')'
+        );
     }
 }

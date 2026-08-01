@@ -160,11 +160,20 @@ class User extends Authenticatable implements FilamentUser, MustVerifyEmail
     public static function superAdminRoleId(): ?string
     {
         try {
-            return app(\App\Settings\GeneralSettings::class)->super_admin_role ?: null;
+            $id = app(\App\Settings\GeneralSettings::class)->super_admin_role ?: null;
         } catch (\Throwable $e) {
             // Settings not available yet (e.g. no database / faked settings).
             return null;
         }
+
+        // Heal a dangling reference: if the configured role no longer exists,
+        // treat it as unset so isSuperAdmin() falls back to a role named
+        // "Super Admin" instead of silently having no Super Admins at all.
+        if ($id !== null && ! Role::whereKey($id)->exists()) {
+            return null;
+        }
+
+        return $id;
     }
 
     /**
