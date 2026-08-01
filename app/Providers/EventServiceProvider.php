@@ -9,10 +9,12 @@ use App\Models\Sprint;
 use App\Models\Ticket;
 use App\Models\TicketComment;
 use App\Models\TicketStatus;
+use App\Models\User;
 use App\Observers\SprintObserver;
 use App\Observers\TicketCommentObserver;
 use App\Observers\TicketObserver;
 use App\Observers\TicketStatusObserver;
+use App\Observers\UserObserver;
 use DutchCodingCompany\FilamentSocialite\Events\Registered as SocialRegistered;
 use Illuminate\Auth\Events\Registered;
 use Illuminate\Auth\Listeners\SendEmailVerificationNotification;
@@ -47,6 +49,7 @@ class EventServiceProvider extends ServiceProvider
         TicketComment::observe(TicketCommentObserver::class);
         Sprint::observe(SprintObserver::class);
         TicketStatus::observe(TicketStatusObserver::class);
+        User::observe(UserObserver::class);
     }
 
     /**

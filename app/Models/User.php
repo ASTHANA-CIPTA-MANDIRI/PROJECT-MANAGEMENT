@@ -2,7 +2,6 @@
 
 namespace App\Models;
 
-use App\Notifications\UserCreatedNotification;
 use Devaslanphp\FilamentAvatar\Core\HasAvatarUrl;
 use DutchCodingCompany\FilamentSocialite\Models\SocialiteUser;
 use Filament\Models\Contracts\FilamentUser;
@@ -17,7 +16,6 @@ use Illuminate\Notifications\Notifiable;
 use JeffGreco13\FilamentBreezy\Traits\TwoFactorAuthenticatable;
 use Laravel\Sanctum\HasApiTokens;
 use ProtoneMedia\LaravelVerifyNewEmail\MustVerifyNewEmail;
-use Ramsey\Uuid\Uuid;
 use Spatie\Permission\Traits\HasRoles;
 
 class User extends Authenticatable implements FilamentUser, MustVerifyEmail
@@ -63,31 +61,6 @@ class User extends Authenticatable implements FilamentUser, MustVerifyEmail
     protected $casts = [
         'email_verified_at' => 'datetime',
     ];
-
-    public static function boot()
-    {
-        parent::boot();
-
-        static::creating(function (User $item) {
-            if ($item->type == 'db') {
-                $item->password = bcrypt(uniqid());
-                $item->creation_token = Uuid::uuid4()->toString();
-            }
-        });
-
-        static::created(function (User $item) {
-            if ($item->type == 'db') {
-                $item->notify(new UserCreatedNotification($item));
-            }
-        });
-
-        // Never let the platform be left without a Super Admin.
-        static::deleting(function (User $item) {
-            if ($item->isLastSuperAdmin()) {
-                return false;
-            }
-        });
-    }
 
     public function projectsOwning(): HasMany
     {
