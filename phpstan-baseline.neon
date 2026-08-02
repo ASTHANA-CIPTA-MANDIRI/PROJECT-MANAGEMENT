@@ -1,0 +1,346 @@
+parameters:
+	ignoreErrors:
+		-
+			message: "#^Access to an undefined property App\\\\Models\\\\TicketComment\\:\\:\\$content\\.$#"
+			count: 1
+			path: app/Events/TicketCommentPosted.php
+
+		-
+			message: "#^Access to an undefined property App\\\\Models\\\\TicketHour\\:\\:\\$forHumans\\.$#"
+			count: 1
+			path: app/Exports/ProjectHoursExport.php
+
+		-
+			message: "#^Parameter \\#1 \\$callback of method Illuminate\\\\Support\\\\Collection\\<int,App\\\\Models\\\\Ticket\\>\\:\\:filter\\(\\) expects \\(callable\\(App\\\\Models\\\\Ticket, int\\)\\: bool\\)\\|null, Closure\\(mixed\\)\\: int given\\.$#"
+			count: 1
+			path: app/Exports/ProjectHoursExport.php
+
+		-
+			message: "#^Access to an undefined property App\\\\Models\\\\TicketHour\\:\\:\\$forHumans\\.$#"
+			count: 1
+			path: app/Exports/TicketHoursExport.php
+
+		-
+			message: "#^Access to an undefined property App\\\\Models\\\\TicketHour\\:\\:\\$forHumans\\.$#"
+			count: 1
+			path: app/Exports/TimesheetExport.php
+
+		-
+			message: "#^Access to an undefined property App\\\\Filament\\\\Pages\\\\Board\\:\\:\\$form\\.$#"
+			count: 2
+			path: app/Filament/Pages/Board.php
+
+		-
+			message: "#^Called 'pluck' on Laravel collection, but could have been retrieved as a query\\.$#"
+			count: 3
+			path: app/Filament/Pages/Forms/BoardFilterForm.php
+
+		-
+			message: "#^Access to an undefined property App\\\\Filament\\\\Pages\\\\JiraImport\\:\\:\\$form\\.$#"
+			count: 1
+			path: app/Filament/Pages/JiraImport.php
+
+		-
+			message: "#^Access to an undefined property App\\\\Filament\\\\Pages\\\\Kanban\\:\\:\\$form\\.$#"
+			count: 2
+			path: app/Filament/Pages/Kanban.php
+
+		-
+			message: "#^Access to an undefined property App\\\\Models\\\\Project\\:\\:\\$currentSprint\\.$#"
+			count: 2
+			path: app/Filament/Pages/Kanban.php
+
+		-
+			message: "#^Access to an undefined property App\\\\Models\\\\Project\\:\\:\\$nextSprint\\.$#"
+			count: 1
+			path: app/Filament/Pages/Kanban.php
+
+		-
+			message: "#^Access to an undefined property App\\\\Models\\\\Ticket\\:\\:\\$totalLoggedHours\\.$#"
+			count: 1
+			path: app/Filament/Pages/Kanban.php
+
+		-
+			message: "#^Access to an undefined property App\\\\Models\\\\Ticket\\:\\:\\$totalLoggedSeconds\\.$#"
+			count: 1
+			path: app/Filament/Pages/Kanban.php
+
+		-
+			message: "#^Access to an undefined property App\\\\Filament\\\\Pages\\\\RoadMap\\:\\:\\$form\\.$#"
+			count: 3
+			path: app/Filament/Pages/RoadMap.php
+
+		-
+			message: "#^Access to an undefined property App\\\\Models\\\\Project\\:\\:\\$epicsFirstDate\\.$#"
+			count: 2
+			path: app/Filament/Pages/RoadMap.php
+
+		-
+			message: "#^Access to an undefined property App\\\\Models\\\\Project\\:\\:\\$epicsLastDate\\.$#"
+			count: 1
+			path: app/Filament/Pages/RoadMap.php
+
+		-
+			message: "#^Access to an undefined property Illuminate\\\\Database\\\\Eloquent\\\\Model\\:\\:\\$id\\.$#"
+			count: 1
+			path: app/Filament/Pages/RoadMap.php
+
+		-
+			message: "#^Access to an undefined property App\\\\Filament\\\\Pages\\\\Scrum\\:\\:\\$form\\.$#"
+			count: 2
+			path: app/Filament/Pages/Scrum.php
+
+		-
+			message: "#^Access to an undefined property App\\\\Models\\\\Project\\:\\:\\$currentSprint\\.$#"
+			count: 4
+			path: app/Filament/Pages/Scrum.php
+
+		-
+			message: "#^Access to an undefined property App\\\\Models\\\\Project\\:\\:\\$nextSprint\\.$#"
+			count: 1
+			path: app/Filament/Pages/Scrum.php
+
+		-
+			message: "#^Access to an undefined property App\\\\Models\\\\Ticket\\:\\:\\$totalLoggedHours\\.$#"
+			count: 1
+			path: app/Filament/Pages/Scrum.php
+
+		-
+			message: "#^Access to an undefined property App\\\\Models\\\\Ticket\\:\\:\\$totalLoggedSeconds\\.$#"
+			count: 1
+			path: app/Filament/Pages/Scrum.php
+
+		-
+			message: "#^Access to an undefined property App\\\\Filament\\\\Pages\\\\TimesheetExport\\:\\:\\$form\\.$#"
+			count: 2
+			path: app/Filament/Pages/TimesheetExport.php
+
+		-
+			message: "#^Called 'pluck' on Laravel collection, but could have been retrieved as a query\\.$#"
+			count: 2
+			path: app/Filament/Resources/ProjectResource.php
+
+		-
+			message: "#^Called 'pluck' on Laravel collection, but could have been retrieved as a query\\.$#"
+			count: 2
+			path: app/Filament/Resources/ProjectResource/Forms/ProjectForm.php
+
+		-
+			message: "#^Access to an undefined property Illuminate\\\\Database\\\\Eloquent\\\\Model\\:\\:\\$type\\.$#"
+			count: 1
+			path: app/Filament/Resources/ProjectResource/RelationManagers/SprintsRelationManager.php
+
+		-
+			message: "#^Access to an undefined property Illuminate\\\\Database\\\\Eloquent\\\\Model\\:\\:\\$status_type\\.$#"
+			count: 1
+			path: app/Filament/Resources/ProjectResource/RelationManagers/StatusesRelationManager.php
+
+		-
+			message: "#^Called 'pluck' on Laravel collection, but could have been retrieved as a query\\.$#"
+			count: 5
+			path: app/Filament/Resources/TicketResource.php
+
+		-
+			message: "#^Called 'pluck' on Laravel collection, but could have been retrieved as a query\\.$#"
+			count: 5
+			path: app/Filament/Resources/TicketResource/Forms/TicketForm.php
+
+		-
+			message: "#^Called 'pluck' on Laravel collection, but could have been retrieved as a query\\.$#"
+			count: 1
+			path: app/Filament/Resources/TicketResource/Pages/ViewTicket.php
+
+		-
+			message: "#^Called 'pluck' on Laravel collection, but could have been retrieved as a query\\.$#"
+			count: 1
+			path: app/Filament/Resources/TimesheetResource.php
+
+		-
+			message: "#^Access to an undefined property App\\\\Models\\\\Project\\:\\:\\$contributors\\.$#"
+			count: 1
+			path: app/Filament/Widgets/FavoriteProjects.php
+
+		-
+			message: "#^Access to an undefined property App\\\\Models\\\\Project\\:\\:\\$cover\\.$#"
+			count: 1
+			path: app/Filament/Widgets/FavoriteProjects.php
+
+		-
+			message: "#^Using nullsafe property access on non\\-nullable type mixed\\. Use \\-\\> instead\\.$#"
+			count: 1
+			path: app/Filament/Widgets/LatestTickets.php
+
+		-
+			message: "#^Method App\\\\Filament\\\\Widgets\\\\Timesheet\\\\ActivitiesReport\\:\\:filter\\(\\) should return Illuminate\\\\Support\\\\Collection\\<int, object\\{value\\: float, activity\\: App\\\\Models\\\\Activity\\|null\\}\\> but returns Illuminate\\\\Support\\\\Collection\\<int, object\\{value\\: float, activity\\: App\\\\Models\\\\Activity\\|null\\}&stdClass\\>\\.$#"
+			count: 1
+			path: app/Filament/Widgets/Timesheet/ActivitiesReport.php
+
+		-
+			message: "#^Access to an undefined property App\\\\Models\\\\Ticket\\:\\:\\$completudePercentage\\.$#"
+			count: 1
+			path: app/Http/Controllers/RoadMap/DataController.php
+
+		-
+			message: "#^Access to an undefined property App\\\\Http\\\\Livewire\\\\Profile\\:\\:\\$updateProfileForm\\.$#"
+			count: 2
+			path: app/Http/Livewire/Profile.php
+
+		-
+			message: "#^Access to an undefined property App\\\\Http\\\\Livewire\\\\RoadMap\\\\EpicForm\\:\\:\\$form\\.$#"
+			count: 2
+			path: app/Http/Livewire/RoadMap/EpicForm.php
+
+		-
+			message: "#^Called 'pluck' on Laravel collection, but could have been retrieved as a query\\.$#"
+			count: 2
+			path: app/Http/Livewire/RoadMap/EpicForm.php
+
+		-
+			message: "#^Access to an undefined property App\\\\Http\\\\Livewire\\\\RoadMap\\\\IssueForm\\:\\:\\$form\\.$#"
+			count: 2
+			path: app/Http/Livewire/RoadMap/IssueForm.php
+
+		-
+			message: "#^Called 'pluck' on Laravel collection, but could have been retrieved as a query\\.$#"
+			count: 6
+			path: app/Http/Livewire/RoadMap/IssueForm.php
+
+		-
+			message: "#^Access to an undefined property App\\\\Http\\\\Livewire\\\\Ticket\\\\Attachments\\:\\:\\$form\\.$#"
+			count: 3
+			path: app/Http/Livewire/Ticket/Attachments.php
+
+		-
+			message: "#^Access to an undefined property App\\\\Http\\\\Livewire\\\\ValidateAccount\\:\\:\\$form\\.$#"
+			count: 2
+			path: app/Http/Livewire/ValidateAccount.php
+
+		-
+			message: "#^Access to an undefined property App\\\\Http\\\\Resources\\\\TicketCommentResource\\:\\:\\$content\\.$#"
+			count: 1
+			path: app/Http/Resources/TicketCommentResource.php
+
+		-
+			message: "#^Access to an undefined property App\\\\Http\\\\Resources\\\\TicketResource\\:\\:\\$content\\.$#"
+			count: 1
+			path: app/Http/Resources/TicketResource.php
+
+		-
+			message: "#^Parameter \\#1 \\$registrant of class App\\\\Notifications\\\\NewUserPendingApproval constructor expects App\\\\Models\\\\User, Illuminate\\\\Contracts\\\\Auth\\\\Authenticatable given\\.$#"
+			count: 1
+			path: app/Listeners/NotifyAdminsOfRegistration.php
+
+		-
+			message: "#^Access to an undefined property Illuminate\\\\Database\\\\Eloquent\\\\Model\\:\\:\\$email_verified_at\\.$#"
+			count: 1
+			path: app/Listeners/SocialRegistration.php
+
+		-
+			message: "#^Call to an undefined method Illuminate\\\\Database\\\\Eloquent\\\\Model\\:\\:syncRoles\\(\\)\\.$#"
+			count: 1
+			path: app/Listeners/SocialRegistration.php
+
+		-
+			message: "#^Access to an undefined property App\\\\Models\\\\Project\\:\\:\\$contributors\\.$#"
+			count: 1
+			path: app/Models/Project.php
+
+		-
+			message: "#^Access to an undefined property App\\\\Models\\\\Project\\:\\:\\$currentSprint\\.$#"
+			count: 1
+			path: app/Models/Project.php
+
+		-
+			message: "#^Left side of && is always true\\.$#"
+			count: 1
+			path: app/Models/Sprint.php
+
+		-
+			message: "#^Right side of && is always true\\.$#"
+			count: 1
+			path: app/Models/Sprint.php
+
+		-
+			message: "#^Access to an undefined property App\\\\Models\\\\Ticket\\:\\:\\$content\\.$#"
+			count: 1
+			path: app/Models/Ticket.php
+
+		-
+			message: "#^Access to an undefined property App\\\\Models\\\\Ticket\\:\\:\\$estimationInSeconds\\.$#"
+			count: 1
+			path: app/Models/Ticket.php
+
+		-
+			message: "#^Access to an undefined property App\\\\Models\\\\Ticket\\:\\:\\$estimationProgress\\.$#"
+			count: 1
+			path: app/Models/Ticket.php
+
+		-
+			message: "#^Access to an undefined property App\\\\Models\\\\TicketComment\\:\\:\\$content\\.$#"
+			count: 1
+			path: app/Models/TicketComment.php
+
+		-
+			message: "#^PHPDoc tag @param references unknown parameter\\: \\$ticket$#"
+			count: 1
+			path: app/Notifications/TicketCommented.php
+
+		-
+			message: "#^Expression on left side of \\?\\? is not nullable\\.$#"
+			count: 1
+			path: app/Notifications/TicketCreated.php
+
+		-
+			message: "#^Access to an undefined property App\\\\Models\\\\Ticket\\:\\:\\$watchers\\.$#"
+			count: 1
+			path: app/Observers/TicketCommentObserver.php
+
+		-
+			message: "#^Access to an undefined property App\\\\Models\\\\Ticket\\:\\:\\$watchers\\.$#"
+			count: 2
+			path: app/Observers/TicketObserver.php
+
+		-
+			message: "#^Using nullsafe method call on non\\-nullable type Illuminate\\\\Database\\\\Eloquent\\\\Collection\\<int, App\\\\Models\\\\Ticket\\>\\. Use \\-\\> instead\\.$#"
+			count: 1
+			path: app/Observers/TicketObserver.php
+
+		-
+			message: "#^Method App\\\\Policies\\\\ActivityPolicy\\:\\:forceDelete\\(\\) should return bool\\|Illuminate\\\\Auth\\\\Access\\\\Response but return statement is missing\\.$#"
+			count: 1
+			path: app/Policies/ActivityPolicy.php
+
+		-
+			message: "#^Method App\\\\Policies\\\\ActivityPolicy\\:\\:restore\\(\\) should return bool\\|Illuminate\\\\Auth\\\\Access\\\\Response but return statement is missing\\.$#"
+			count: 1
+			path: app/Policies/ActivityPolicy.php
+
+		-
+			message: "#^Method App\\\\Policies\\\\ProjectStatusPolicy\\:\\:forceDelete\\(\\) should return bool\\|Illuminate\\\\Auth\\\\Access\\\\Response but return statement is missing\\.$#"
+			count: 1
+			path: app/Policies/ProjectStatusPolicy.php
+
+		-
+			message: "#^Method App\\\\Policies\\\\ProjectStatusPolicy\\:\\:restore\\(\\) should return bool\\|Illuminate\\\\Auth\\\\Access\\\\Response but return statement is missing\\.$#"
+			count: 1
+			path: app/Policies/ProjectStatusPolicy.php
+
+		-
+			message: "#^Class App\\\\Notifications\\\\CustomVerifyEmail does not have a constructor and must be instantiated without any parameters\\.$#"
+			count: 1
+			path: app/Providers/AppServiceProvider.php
+
+		-
+			message: "#^Unsafe call to private method App\\\\Services\\\\Analytics\\\\CompletionResolver\\:\\:statusQuery\\(\\) through static\\:\\:\\.$#"
+			count: 1
+			path: app/Services/Analytics/CompletionResolver.php
+
+		-
+			message: "#^Access to an undefined property App\\\\Models\\\\TicketHour\\:\\:\\$hours\\.$#"
+			count: 2
+			path: app/Services/Analytics/ResourceUtilizationReport.php
+
+		-
+			message: "#^Method App\\\\Services\\\\Analytics\\\\ResourceUtilizationReport\\:\\:perUser\\(\\) should return Illuminate\\\\Support\\\\Collection\\<int, array\\{user_id\\: int, user_name\\: string\\|null, hours_logged\\: float, utilization_pct\\: float\\}\\> but returns Illuminate\\\\Support\\\\Collection\\<int, array\\{user_id\\: int, user_name\\: mixed, hours_logged\\: float, utilization_pct\\: float\\}\\>\\.$#"
+			count: 1
+			path: app/Services/Analytics/ResourceUtilizationReport.php

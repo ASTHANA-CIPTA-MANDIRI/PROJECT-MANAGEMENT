@@ -9,7 +9,7 @@ on:
 jobs:
 
   lint:
-    name: Code style (Pint)
+    name: Code style & static analysis
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -25,6 +25,9 @@ jobs:
 
       - name: Check code style
         run: vendor/bin/pint --test app tests
+
+      - name: Static analysis (PHPStan/Larastan)
+        run: vendor/bin/phpstan analyse --no-progress
 
   phpunit:
     name: Tests
