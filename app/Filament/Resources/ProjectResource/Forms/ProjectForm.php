@@ -85,7 +85,18 @@ class ProjectForm
                     ->searchable()
                     ->options(fn () => ProjectStatus::all()->pluck('name', 'id')->toArray())
                     ->default(fn () => ProjectStatus::where('is_default', true)->first()?->id)
-                    ->required(),
+                    ->required()
+                    // Let users add a status inline instead of leaving the form.
+                    ->createOptionForm([
+                        Forms\Components\TextInput::make('name')
+                            ->label(__('Status name'))
+                            ->required()
+                            ->maxLength(255),
+                        Forms\Components\ColorPicker::make('color')
+                            ->label(__('Color'))
+                            ->default('#cecece'),
+                    ])
+                    ->createOptionUsing(fn (array $data) => ProjectStatus::create($data)->getKey()),
             ]);
     }
 
