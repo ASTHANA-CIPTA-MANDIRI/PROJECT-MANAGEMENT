@@ -45,7 +45,7 @@ class ResourcePagesTest extends TestCase
         $modules = [
             'permission', 'project', 'project status', 'role', 'ticket',
             'ticket priority', 'ticket status', 'ticket type', 'user',
-            'activity', 'sprint',
+            'activity', 'sprint', 'label',
         ];
 
         $names = [];
@@ -350,6 +350,32 @@ class ResourcePagesTest extends TestCase
         Livewire::test(
             \App\Filament\Resources\TicketPriorityResource\Pages\EditTicketPriority::class,
             ['record' => $priority->getRouteKey()]
+        )->assertSuccessful();
+    }
+
+    // -------------------------------------------------------------- Labels
+
+    public function test_the_label_list_page_renders(): void
+    {
+        \App\Models\Label::factory()->count(3)->create();
+
+        Livewire::test(\App\Filament\Resources\LabelResource\Pages\ListLabels::class)
+            ->assertSuccessful();
+    }
+
+    public function test_the_label_create_page_renders(): void
+    {
+        Livewire::test(\App\Filament\Resources\LabelResource\Pages\CreateLabel::class)
+            ->assertSuccessful();
+    }
+
+    public function test_the_label_edit_page_renders(): void
+    {
+        $label = \App\Models\Label::factory()->create();
+
+        Livewire::test(
+            \App\Filament\Resources\LabelResource\Pages\EditLabel::class,
+            ['record' => $label->getRouteKey()]
         )->assertSuccessful();
     }
 }

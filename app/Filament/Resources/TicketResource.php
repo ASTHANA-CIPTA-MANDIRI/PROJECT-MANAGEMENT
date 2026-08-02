@@ -31,7 +31,7 @@ class TicketResource extends Resource
     public static function getEloquentQuery(): \Illuminate\Database\Eloquent\Builder
     {
         return parent::getEloquentQuery()
-            ->with(['project', 'owner', 'responsible', 'status', 'type', 'priority']);
+            ->with(['project', 'owner', 'responsible', 'status', 'type', 'priority', 'labels']);
     }
 
     protected static function getNavigationLabel(): string
@@ -112,6 +112,14 @@ class TicketResource extends Resource
                         '))
                 ->sortable()
                 ->searchable(),
+
+            Tables\Columns\TextColumn::make('labels')
+                ->label(__('Labels'))
+                ->formatStateUsing(fn ($record) => new HtmlString(
+                    $record->labels
+                        ->map(fn ($label) => '<span class="inline-block text-white text-xs px-2 py-0.5 rounded-full mr-1 mb-1" style="background-color: '.e($label->color).'">'.e($label->name).'</span>')
+                        ->implode('') ?: '-'
+                )),
 
             Tables\Columns\TextColumn::make('created_at')
                 ->label(__('Created at'))

@@ -41,6 +41,16 @@
                     </span>
                 </div>
             </div>
+            @if($record->labels->count())
+                <div class="w-full flex items-center flex-wrap gap-2">
+                    @foreach($record->labels as $label)
+                        <span class="px-2 py-1 rounded-full text-xs text-white"
+                              style="background-color: {{ $label->color }};">
+                            {{ $label->name }}
+                        </span>
+                    @endforeach
+                </div>
+            @endif
             <div class="w-full flex flex-col gap-0 pt-5">
                 <span class="text-gray-500 text-sm font-medium">
                     {{ __('Content') }}
