@@ -100,6 +100,11 @@ class Ticket extends Model implements HasMedia
         return $this->hasMany(TicketRelation::class, 'ticket_id', 'id');
     }
 
+    public function labels(): BelongsToMany
+    {
+        return $this->belongsToMany(Label::class);
+    }
+
     public function hours(): HasMany
     {
         return $this->hasMany(TicketHour::class, 'ticket_id', 'id');

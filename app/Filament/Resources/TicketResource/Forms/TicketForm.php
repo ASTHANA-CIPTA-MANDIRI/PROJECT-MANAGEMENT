@@ -39,6 +39,7 @@ class TicketForm
                             self::statusTypePriority(),
                         ]),
                     self::content(),
+                    self::labelsSelect(),
                     self::estimation(),
                     self::relationsRepeater(),
                 ]),
@@ -158,6 +159,27 @@ class TicketForm
             ->label(__('Ticket content'))
             ->required()
             ->columnSpan(2);
+    }
+
+    private static function labelsSelect(): Forms\Components\Select
+    {
+        return Forms\Components\Select::make('labels')
+            ->label(__('Labels'))
+            ->multiple()
+            ->relationship('labels', 'name')
+            ->preload()
+            ->searchable()
+            ->columnSpan(2)
+            // Create a new label inline (name + color) without leaving the form.
+            ->createOptionForm([
+                Forms\Components\TextInput::make('name')
+                    ->label(__('Label name'))
+                    ->required()
+                    ->maxLength(255),
+                Forms\Components\ColorPicker::make('color')
+                    ->label(__('Color'))
+                    ->default('#3b82f6'),
+            ]);
     }
 
     private static function estimation(): Forms\Components\Grid

@@ -119,6 +119,23 @@ class CustomPagesTest extends TestCase
             ->assertSuccessful();
     }
 
+    public function test_the_kanban_board_filters_tickets_by_label(): void
+    {
+        $project = $this->kanbanProject();
+        $label = \App\Models\Label::factory()->create();
+
+        $labeled = Ticket::factory()->create(['project_id' => $project->id, 'owner_id' => $this->user->id]);
+        $labeled->labels()->attach($label);
+        $plain = Ticket::factory()->create(['project_id' => $project->id, 'owner_id' => $this->user->id]);
+
+        $board = Livewire::test(Kanban::class, ['project' => $project]);
+        $board->set('labels', [$label->id]);
+        $ids = $board->instance()->getRecords()->pluck('id');
+
+        $this->assertTrue($ids->contains($labeled->id), 'labelled ticket should show');
+        $this->assertFalse($ids->contains($plain->id), 'unlabelled ticket should be filtered out');
+    }
+
     // ----------------------------------------------------------------- scrum
 
     public function test_the_scrum_board_renders_for_a_scrum_project(): void

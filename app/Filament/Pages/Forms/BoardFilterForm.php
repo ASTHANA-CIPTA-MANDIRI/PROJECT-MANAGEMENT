@@ -2,6 +2,7 @@
 
 namespace App\Filament\Pages\Forms;
 
+use App\Models\Label;
 use App\Models\TicketPriority;
 use App\Models\TicketType;
 use App\Models\User;
@@ -43,6 +44,11 @@ class BoardFilterForm
                         ->label(__('Ticket priorities'))
                         ->multiple()
                         ->options(TicketPriority::all()->pluck('name', 'id')),
+
+                    Select::make('labels')
+                        ->label(__('Labels'))
+                        ->multiple()
+                        ->options(Label::all()->pluck('name', 'id')),
 
                     Toggle::make('includeNotAffectedTickets')
                         ->label(__('Show only not affected tickets'))

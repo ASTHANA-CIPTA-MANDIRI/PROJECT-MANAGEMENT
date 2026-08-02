@@ -24,6 +24,8 @@ trait KanbanScrumHelper
 
     public $priorities = [];
 
+    public $labels = [];
+
     public $includeNotAffectedTickets = false;
 
     public bool $ticket = false;
@@ -103,7 +105,7 @@ trait KanbanScrumHelper
         if ($this->project->type === 'scrum') {
             $query->where('sprint_id', $this->project->currentSprint->id);
         }
-        $query->with(['project', 'owner', 'responsible', 'status', 'type', 'priority', 'epic']);
+        $query->with(['project', 'owner', 'responsible', 'status', 'type', 'priority', 'epic', 'labels']);
         $query->where('project_id', $this->project->id);
         if (count($this->users)) {
             $query->where(function ($query) {
@@ -116,6 +118,9 @@ trait KanbanScrumHelper
         }
         if (count($this->priorities)) {
             $query->whereIn('priority_id', $this->priorities);
+        }
+        if (count($this->labels)) {
+            $query->whereHas('labels', fn ($q) => $q->whereIn('labels.id', $this->labels));
         }
         if ($this->includeNotAffectedTickets) {
             $query->whereNull('responsible_id');
@@ -144,6 +149,7 @@ trait KanbanScrumHelper
                 'priority' => $item->priority,
                 'epic' => $item->epic,
                 'relations' => $item->relations,
+                'labels' => $item->labels,
                 'totalLoggedHours' => $item->totalLoggedSeconds ? $item->totalLoggedHours : null,
             ]);
     }

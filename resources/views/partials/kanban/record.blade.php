@@ -15,6 +15,16 @@
             <span class="title">{{ $record['title'] }}</span>
         </a>
     </div>
+    @if($record['labels']?->count())
+        <div class="record-labels" style="display:flex;flex-wrap:wrap;gap:.25rem;margin:.35rem 0;">
+            @foreach($record['labels'] as $label)
+                <span class="text-white text-xs px-2 py-0.5 rounded-full"
+                      style="background-color: {{ $label->color }};">
+                    {{ $label->name }}
+                </span>
+            @endforeach
+        </div>
+    @endif
     <div class="record-footer">
         <div class="record-type-code">
             @php($epic = $record['epic'])
