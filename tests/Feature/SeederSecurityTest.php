@@ -8,6 +8,7 @@ use App\Models\Role;
 use App\Models\User;
 use App\Settings\GeneralSettings;
 use Database\Seeders\DefaultUserSeeder;
+use Database\Seeders\EmployeeRoleSeeder;
 use Database\Seeders\PermissionsSeeder;
 use Illuminate\Auth\Events\Registered;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -22,6 +23,24 @@ class SeederSecurityTest extends TestCase
     {
         $this->seed(DefaultUserSeeder::class);
         $this->seed(PermissionsSeeder::class);
+    }
+
+    public function test_employee_role_is_a_coherent_worker_role(): void
+    {
+        $this->seed(PermissionsSeeder::class);
+        $this->seed(EmployeeRoleSeeder::class);
+
+        $role = Role::findByName('Employee');
+
+        // Can view whatever it can list — no "List without View" 403 footgun.
+        $this->assertTrue($role->hasPermissionTo('List tickets'));
+        $this->assertTrue($role->hasPermissionTo('View ticket'));
+        $this->assertTrue($role->hasPermissionTo('View project'));
+
+        // Not an administrator: no destructive or user/role management.
+        $this->assertFalse($role->hasPermissionTo('Delete ticket'));
+        $this->assertFalse($role->hasPermissionTo('Update user'));
+        $this->assertFalse($role->hasPermissionTo('Delete role'));
     }
 
     public function test_seeding_creates_a_super_admin_role_with_all_permissions(): void
