@@ -23,6 +23,11 @@ class Kernel extends ConsoleKernel
         $schedule->command('cleanup:old-activities --days=90')
             ->weeklyOn(1, '02:00')
             ->withoutOverlapping();
+
+        // Remind ticket owners & responsibles of tickets due tomorrow or today.
+        $schedule->command('tickets:due-date-reminders')
+            ->dailyAt('08:00')
+            ->withoutOverlapping();
     }
 
     /**
