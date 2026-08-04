@@ -121,6 +121,13 @@ class TicketResource extends Resource
                         ->implode('') ?: '-'
                 )),
 
+            Tables\Columns\TextColumn::make('due_date')
+                ->label(__('Due date'))
+                ->formatStateUsing(fn ($record) => $record->due_date
+                    ? new HtmlString('<span class="inline-block text-white text-xs px-2 py-0.5 rounded-full" style="background-color: '.($record->isOverdue ? '#ef4444' : '#9ca3af').'">'.e($record->due_date->format('Y-m-d')).'</span>')
+                    : '-')
+                ->sortable(),
+
             Tables\Columns\TextColumn::make('created_at')
                 ->label(__('Created at'))
                 ->dateTime()

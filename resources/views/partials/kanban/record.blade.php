@@ -15,6 +15,15 @@
             <span class="title">{{ $record['title'] }}</span>
         </a>
     </div>
+    @if($record['due_date'])
+        <div class="record-due-date"
+             style="display:inline-flex;align-items:center;gap:.25rem;margin:.35rem 0;padding:.125rem .5rem;
+                    border-radius:9999px;font-size:.75rem;color:#fff;
+                    background-color: {{ $record['is_overdue'] ? '#ef4444' : '#9ca3af' }};">
+            <x-heroicon-o-calendar class="w-3 h-3" />
+            {{ $record['due_date']->format(__('Y-m-d')) }}
+        </div>
+    @endif
     @if($record['labels']?->count())
         <div class="record-labels" style="display:flex;flex-wrap:wrap;gap:.25rem;margin:.35rem 0;">
             @foreach($record['labels'] as $label)

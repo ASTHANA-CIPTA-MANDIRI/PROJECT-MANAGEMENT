@@ -40,6 +40,19 @@
                         {{ $record->type->name }}
                     </span>
                 </div>
+                @if($record->due_date)
+                    <div @class([
+                            'px-2 py-1 rounded flex items-center gap-1 text-center text-xs text-white',
+                            'bg-danger-500' => $record->isOverdue,
+                            'bg-gray-400' => ! $record->isOverdue,
+                        ])>
+                        <x-heroicon-o-calendar class="w-3 h-3"/>
+                        {{ __('Due') }} {{ $record->due_date->format(__('Y-m-d')) }}
+                        @if($record->isOverdue)
+                            ({{ __('Overdue') }})
+                        @endif
+                    </div>
+                @endif
             </div>
             @if($record->labels->count())
                 <div class="w-full flex items-center flex-wrap gap-2">

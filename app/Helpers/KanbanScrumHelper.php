@@ -150,6 +150,8 @@ trait KanbanScrumHelper
                 'epic' => $item->epic,
                 'relations' => $item->relations,
                 'labels' => $item->labels,
+                'due_date' => $item->due_date,
+                'is_overdue' => $item->isOverdue,
                 'totalLoggedHours' => $item->totalLoggedSeconds ? $item->totalLoggedHours : null,
             ]);
     }

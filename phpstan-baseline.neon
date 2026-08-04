@@ -56,6 +56,11 @@ parameters:
 			path: app/Filament/Pages/Kanban.php
 
 		-
+			message: "#^Access to an undefined property App\\\\Models\\\\Ticket\\:\\:\\$isOverdue\\.$#"
+			count: 1
+			path: app/Filament/Pages/Kanban.php
+
+		-
 			message: "#^Access to an undefined property App\\\\Models\\\\Ticket\\:\\:\\$totalLoggedHours\\.$#"
 			count: 1
 			path: app/Filament/Pages/Kanban.php
@@ -97,6 +102,11 @@ parameters:
 
 		-
 			message: "#^Access to an undefined property App\\\\Models\\\\Project\\:\\:\\$nextSprint\\.$#"
+			count: 1
+			path: app/Filament/Pages/Scrum.php
+
+		-
+			message: "#^Access to an undefined property App\\\\Models\\\\Ticket\\:\\:\\$isOverdue\\.$#"
 			count: 1
 			path: app/Filament/Pages/Scrum.php
 

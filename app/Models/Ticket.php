@@ -38,7 +38,11 @@ class Ticket extends Model implements HasMedia
     protected $fillable = [
         'name', 'content', 'owner_id', 'responsible_id',
         'status_id', 'project_id', 'code', 'order', 'type_id',
-        'priority_id', 'estimation', 'epic_id', 'sprint_id',
+        'priority_id', 'estimation', 'epic_id', 'sprint_id', 'due_date',
+    ];
+
+    protected $casts = [
+        'due_date' => 'date',
     ];
 
     /**
@@ -137,6 +141,17 @@ class Ticket extends Model implements HasMedia
 
                 return $users->unique('id');
             }
+        );
+    }
+
+    /**
+     * True once the due date's day has fully passed. A ticket due "today" is
+     * not yet overdue — only a due date strictly before today counts.
+     */
+    public function isOverdue(): Attribute
+    {
+        return new Attribute(
+            get: fn () => $this->due_date !== null && $this->due_date->lt(now()->startOfDay())
         );
     }
 

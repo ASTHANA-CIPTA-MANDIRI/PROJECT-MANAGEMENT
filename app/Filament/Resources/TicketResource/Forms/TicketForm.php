@@ -40,7 +40,7 @@ class TicketForm
                         ]),
                     self::content(),
                     self::labelsSelect(),
-                    self::estimation(),
+                    self::estimationAndDueDate(),
                     self::relationsRepeater(),
                 ]),
         ];
@@ -182,7 +182,7 @@ class TicketForm
             ]);
     }
 
-    private static function estimation(): Forms\Components\Grid
+    private static function estimationAndDueDate(): Forms\Components\Grid
     {
         return Forms\Components\Grid::make()
             ->columnSpan(2)
@@ -191,6 +191,10 @@ class TicketForm
                 Forms\Components\TextInput::make('estimation')
                     ->label(__('Estimation time'))
                     ->numeric()
+                    ->columnSpan(2),
+
+                Forms\Components\DatePicker::make('due_date')
+                    ->label(__('Due date'))
                     ->columnSpan(2),
             ]);
     }
