@@ -292,6 +292,11 @@ parameters:
 
 		-
 			message: "#^Access to an undefined property App\\\\Models\\\\Ticket\\:\\:\\$watchers\\.$#"
+			count: 2
+			path: app/Observers/TicketCommentObserver.php
+
+		-
+			message: "#^Access to an undefined property App\\\\Models\\\\TicketComment\\:\\:\\$content\\.$#"
 			count: 1
 			path: app/Observers/TicketCommentObserver.php
 

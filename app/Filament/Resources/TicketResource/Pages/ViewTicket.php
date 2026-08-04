@@ -162,6 +162,7 @@ class ViewTicket extends ViewRecord implements HasForms
             RichEditor::make('comment')
                 ->disableLabel()
                 ->placeholder(__('Type a new comment'))
+                ->helperText(__('Type @ to mention a project member.'))
                 ->required(),
         ];
     }

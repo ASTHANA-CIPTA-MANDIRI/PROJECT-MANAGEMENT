@@ -296,7 +296,7 @@
                             @endif
                         </div>
                         <div class="w-full prose">
-                            {!! \App\Support\HtmlSanitizer::clean($comment->content) !!}
+                            {!! \App\Support\Mentions::highlight(\App\Support\HtmlSanitizer::clean($comment->content), $record->watchers) !!}
                         </div>
                     </div>
                 @endforeach
@@ -371,5 +371,93 @@
                 .duration(6000)
                 .send()
         });
+    </script>
+
+    {{-- @mention autocomplete for the comment editor (Trix). Additive and
+         self-contained: it degrades to a plain editor if anything is missing. --}}
+    <script>
+        (function () {
+            const members = @json($record->watchers->pluck('name')->filter()->unique()->values());
+            if (! members.length) return;
+
+            let box = null, items = [], sel = 0, active = null;
+
+            function close() {
+                if (box) { box.remove(); box = null; }
+                items = []; sel = 0;
+            }
+
+            function query(editor) {
+                const range = editor.getSelectedRange();
+                if (! range || range[0] !== range[1]) return null;
+                const caret = range[0];
+                const before = editor.getDocument().toString().slice(0, caret);
+                const m = before.match(/@([^@\n]*)$/);
+                if (! m) return null;
+                return { text: m[1], at: caret - m[1].length - 1, caret: caret };
+            }
+
+            function paint() {
+                if (! box) return;
+                Array.from(box.children).forEach((c, i) => {
+                    c.style.background = i === sel ? '#eef2ff' : 'transparent';
+                });
+            }
+
+            function pick(editor, q, name) {
+                editor.setSelectedRange([q.at, q.caret]);
+                editor.insertString('@' + name + ' ');
+                close();
+            }
+
+            function open(editor, q) {
+                const needle = q.text.toLowerCase();
+                items = members.filter(n => n.toLowerCase().startsWith(needle)).slice(0, 8);
+                if (! items.length) { close(); return; }
+                sel = 0;
+
+                if (! box) {
+                    box = document.createElement('div');
+                    box.style.cssText = 'position:absolute;z-index:9999;min-width:180px;max-height:220px;overflow:auto;background:#fff;border:1px solid #e5e7eb;border-radius:.5rem;box-shadow:0 10px 25px rgba(0,0,0,.12);padding:.25rem;';
+                    document.body.appendChild(box);
+                }
+                box.innerHTML = '';
+                items.forEach((name) => {
+                    const btn = document.createElement('button');
+                    btn.type = 'button';
+                    btn.textContent = '@' + name;
+                    btn.style.cssText = 'display:block;width:100%;text-align:left;padding:.375rem .5rem;border-radius:.375rem;font-size:.875rem;cursor:pointer;background:transparent;border:none;color:#111827;';
+                    btn.addEventListener('mousedown', (ev) => { ev.preventDefault(); pick(editor, q, name); });
+                    box.appendChild(btn);
+                });
+                paint();
+
+                const rect = editor.getClientRectAtPosition(q.caret) || active.getBoundingClientRect();
+                box.style.left = (window.scrollX + rect.left) + 'px';
+                box.style.top = (window.scrollY + rect.bottom + 4) + 'px';
+            }
+
+            document.addEventListener('input', (e) => {
+                const el = e.target.closest && e.target.closest('trix-editor');
+                if (! el || ! el.editor) return;
+                active = el;
+                const q = query(el.editor);
+                q ? open(el.editor, q) : close();
+            });
+
+            document.addEventListener('keydown', (e) => {
+                if (! box || ! items.length) return;
+                const el = e.target.closest && e.target.closest('trix-editor');
+                if (! el || ! el.editor) return;
+                if (e.key === 'ArrowDown') { e.preventDefault(); sel = (sel + 1) % items.length; paint(); }
+                else if (e.key === 'ArrowUp') { e.preventDefault(); sel = (sel - 1 + items.length) % items.length; paint(); }
+                else if (e.key === 'Enter' || e.key === 'Tab') { e.preventDefault(); pick(el.editor, query(el.editor), items[sel]); }
+                else if (e.key === 'Escape') { close(); }
+            });
+
+            document.addEventListener('click', (e) => {
+                if (box && ! box.contains(e.target)) close();
+            });
+        })();
     </script>
 @endpush
