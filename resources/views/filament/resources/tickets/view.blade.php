@@ -377,7 +377,9 @@
          self-contained: it degrades to a plain editor if anything is missing. --}}
     <script>
         (function () {
-            const members = @json($record->watchers->pluck('name')->filter()->unique()->values());
+            // Each member carries its id so a pick is resolved unambiguously
+            // even when two members share the exact same display name.
+            const members = @json($record->watchers->filter(fn ($u) => $u->name)->unique('id')->map(fn ($u) => ['id' => $u->id, 'name' => $u->name])->values());
             if (! members.length) return;
 
             let box = null, items = [], sel = 0, active = null;
@@ -404,15 +406,18 @@
                 });
             }
 
-            function pick(editor, q, name) {
+            function pick(editor, q, member) {
                 editor.setSelectedRange([q.at, q.caret]);
-                editor.insertString('@' + name + ' ');
+                // The "#id" suffix makes this pick resolve unambiguously
+                // server-side even if another member shares the same name;
+                // it is never shown to users (stripped on display and on edit).
+                editor.insertString('@' + member.name + '#' + member.id + ' ');
                 close();
             }
 
             function open(editor, q) {
                 const needle = q.text.toLowerCase();
-                items = members.filter(n => n.toLowerCase().startsWith(needle)).slice(0, 8);
+                items = members.filter(m => m.name.toLowerCase().startsWith(needle)).slice(0, 8);
                 if (! items.length) { close(); return; }
                 sel = 0;
 
@@ -422,12 +427,12 @@
                     document.body.appendChild(box);
                 }
                 box.innerHTML = '';
-                items.forEach((name) => {
+                items.forEach((member) => {
                     const btn = document.createElement('button');
                     btn.type = 'button';
-                    btn.textContent = '@' + name;
+                    btn.textContent = '@' + member.name;
                     btn.style.cssText = 'display:block;width:100%;text-align:left;padding:.375rem .5rem;border-radius:.375rem;font-size:.875rem;cursor:pointer;background:transparent;border:none;color:#111827;';
-                    btn.addEventListener('mousedown', (ev) => { ev.preventDefault(); pick(editor, q, name); });
+                    btn.addEventListener('mousedown', (ev) => { ev.preventDefault(); pick(editor, q, member); });
                     box.appendChild(btn);
                 });
                 paint();

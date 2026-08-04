@@ -2,7 +2,9 @@
 
 namespace Tests\Feature;
 
+use App\Models\Permission;
 use App\Models\Project;
+use App\Models\Role;
 use App\Models\Ticket;
 use App\Models\TicketComment;
 use App\Models\User;
@@ -103,5 +105,86 @@ class MentionTest extends TestCase
         $html = Mentions::highlight('<p>No mentions here</p>', collect([$user]));
 
         $this->assertSame('<p>No mentions here</p>', $html);
+    }
+
+    // ------------------------------------------------- duplicate-name safety
+
+    public function test_an_id_tagged_mention_notifies_the_exact_user_even_with_a_duplicate_name(): void
+    {
+        $author = User::factory()->create();
+        $project = Project::factory()->create();
+        $jane1 = User::factory()->create(['name' => 'Jane Roe']);
+        $jane2 = User::factory()->create(['name' => 'Jane Roe']);
+        $project->users()->attach([$jane1->id, $jane2->id, $author->id], ['role' => 'employee']);
+        $ticket = Ticket::factory()->create(['project_id' => $project->id]);
+
+        TicketComment::factory()->create([
+            'ticket_id' => $ticket->id,
+            'user_id' => $author->id,
+            'content' => "<p>Hey @Jane Roe#{$jane2->id} please take a look</p>",
+        ]);
+
+        Notification::assertSentTo($jane2, UserMentioned::class);
+        Notification::assertNotSentTo($jane1, UserMentioned::class);
+    }
+
+    public function test_mentioned_resolves_an_id_tagged_mention_by_id_not_name(): void
+    {
+        $jane1 = User::factory()->create(['name' => 'Jane Roe']);
+        $jane2 = User::factory()->create(['name' => 'Jane Roe']);
+
+        $mentioned = Mentions::mentioned(
+            "Ping @Jane Roe#{$jane2->id} about this",
+            collect([$jane1, $jane2])
+        );
+
+        $this->assertCount(1, $mentioned);
+        $this->assertSame($jane2->id, $mentioned->first()->id);
+    }
+
+    public function test_highlight_hides_the_id_suffix_and_shows_only_the_name(): void
+    {
+        $user = User::factory()->create(['name' => 'Jane Roe']);
+
+        $html = Mentions::highlight("<p>Hi @Jane Roe#{$user->id}</p>", collect([$user]));
+
+        $this->assertStringNotContainsString('#'.$user->id, $html);
+        $this->assertStringContainsString('text-primary-600', $html);
+        $this->assertStringContainsString('@Jane Roe', $html);
+    }
+
+    public function test_strip_ids_removes_the_hidden_marker(): void
+    {
+        $html = Mentions::stripIds('<p>Hi @Jane Roe#42 there</p>');
+
+        $this->assertSame('<p>Hi @Jane Roe there</p>', $html);
+    }
+
+    public function test_editing_a_comment_loads_content_with_the_id_marker_stripped(): void
+    {
+        $owner = User::factory()->create(['name' => 'Jane Roe']);
+        $role = Role::create(['name' => 'Ticket viewer']);
+        $role->givePermissionTo([
+            Permission::firstOrCreate(['name' => 'List tickets']),
+            Permission::firstOrCreate(['name' => 'View ticket']),
+        ]);
+        $owner->assignRole($role);
+        app(\Spatie\Permission\PermissionRegistrar::class)->forgetCachedPermissions();
+
+        $ticket = Ticket::factory()->create(['owner_id' => $owner->id]);
+        $comment = TicketComment::factory()->create([
+            'ticket_id' => $ticket->id,
+            'user_id' => $owner->id,
+            'content' => "<p>Hi @Jane Roe#{$owner->id}</p>",
+        ]);
+
+        $this->actingAs($owner);
+
+        \Livewire\Livewire::test(
+            \App\Filament\Resources\TicketResource\Pages\ViewTicket::class,
+            ['record' => $ticket->getRouteKey()]
+        )
+            ->call('editComment', $comment->id)
+            ->assertSet('comment', '<p>Hi @Jane Roe</p>');
     }
 }

@@ -8,6 +8,7 @@ use App\Models\Activity;
 use App\Models\TicketComment;
 use App\Models\TicketHour;
 use App\Models\TicketSubscriber;
+use App\Support\Mentions;
 use Filament\Forms\Components\RichEditor;
 use Filament\Forms\Components\Select;
 use Filament\Forms\Components\Textarea;
@@ -199,8 +200,12 @@ class ViewTicket extends ViewRecord implements HasForms
 
     public function editComment(int $commentId): void
     {
+        $content = $this->record->comments->where('id', $commentId)->first()?->content;
+
         $this->form->fill([
-            'comment' => $this->record->comments->where('id', $commentId)->first()?->content,
+            // Drop the hidden "#id" mention marker so it never shows up as
+            // visible, editable text in the comment box.
+            'comment' => $content ? Mentions::stripIds($content) : $content,
         ]);
         $this->selectedCommentId = $commentId;
     }
