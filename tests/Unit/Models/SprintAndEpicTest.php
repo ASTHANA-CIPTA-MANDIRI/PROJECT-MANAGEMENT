@@ -41,6 +41,18 @@ class SprintAndEpicTest extends TestCase
         $this->assertSame($project->id, $sprint->fresh()->epic->project_id);
     }
 
+    public function test_two_sprints_cannot_share_the_same_epic(): void
+    {
+        $project = Project::factory()->create();
+        $first = Sprint::factory()->create(['project_id' => $project->id]);
+        $second = Sprint::factory()->create(['project_id' => $project->id]);
+
+        $this->expectException(\Illuminate\Database\QueryException::class);
+
+        $second->epic_id = $first->fresh()->epic_id;
+        $second->save();
+    }
+
     // ------------------------------------------------------ sprint basics
 
     public function test_a_sprint_belongs_to_a_project(): void
