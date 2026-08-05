@@ -18,6 +18,13 @@ return new class extends Migration
         });
     }
 
+    /**
+     * Not safely reversible once this migration has been up for a while:
+     * TicketObserver::updating() legitimately writes user_id = null for
+     * changes made via console/queue, so re-adding NOT NULL will fail
+     * (or silently corrupt data) on any DB that has real rows like that.
+     * Kept only for local rollback of a fresh, still-empty table.
+     */
     public function down(): void
     {
         Schema::table('ticket_activities', function (Blueprint $table) {
