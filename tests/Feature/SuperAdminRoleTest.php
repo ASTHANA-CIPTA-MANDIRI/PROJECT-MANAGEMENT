@@ -8,6 +8,7 @@ use App\Models\Role;
 use App\Models\User;
 use App\Settings\GeneralSettings;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\DB;
 use Livewire\Livewire;
 use Spatie\Permission\PermissionRegistrar;
 use Tests\TestCase;
@@ -60,6 +61,53 @@ class SuperAdminRoleTest extends TestCase
         // The dangling id is ignored, so it falls back to the named role.
         $this->assertNull(User::superAdminRoleId());
         $this->assertTrue($user->fresh()->isSuperAdmin());
+    }
+
+    // --------------------------------------------------- N+1 / caching
+
+    public function test_super_admin_role_id_is_resolved_only_once_per_request(): void
+    {
+        $role = Role::create(['name' => 'Owner']);
+        GeneralSettings::fake(['super_admin_role' => (string) $role->id]);
+
+        DB::enableQueryLog();
+        $first = User::superAdminRoleId();
+        $queriesAfterFirstCall = count(DB::getQueryLog());
+        $second = User::superAdminRoleId();
+        $queriesAfterSecondCall = count(DB::getQueryLog());
+        DB::disableQueryLog();
+
+        $this->assertSame((string) $role->id, $first);
+        $this->assertSame($first, $second);
+        $this->assertGreaterThan(0, $queriesAfterFirstCall, 'the first call should still hit the database');
+        $this->assertSame(
+            $queriesAfterFirstCall,
+            $queriesAfterSecondCall,
+            'a second call in the same request must be served from cache, not re-query'
+        );
+    }
+
+    public function test_is_super_admin_uses_the_eager_loaded_roles_relation_instead_of_querying(): void
+    {
+        $role = Role::create(['name' => 'Owner']);
+        GeneralSettings::fake(['super_admin_role' => (string) $role->id]);
+
+        $user = User::factory()->create();
+        $user->syncRoles([$role]);
+
+        $loaded = User::with('roles')->whereKey($user->id)->first();
+
+        // Warm the super-admin-role-id cache, as the first row of a users
+        // table listing would, so only the roles-relation query is measured.
+        User::superAdminRoleId();
+
+        DB::enableQueryLog();
+        $result = $loaded->isSuperAdmin();
+        $queryCount = count(DB::getQueryLog());
+        DB::disableQueryLog();
+
+        $this->assertTrue($result);
+        $this->assertSame(0, $queryCount, 'isSuperAdmin() must reuse the eager-loaded roles relation, not query');
     }
 
     // ------------------------------------------------ guardrails (no lock-out)

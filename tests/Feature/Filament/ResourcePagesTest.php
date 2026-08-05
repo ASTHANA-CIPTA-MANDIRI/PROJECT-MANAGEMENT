@@ -157,6 +157,16 @@ class ResourcePagesTest extends TestCase
             ->assertSuccessful();
     }
 
+    public function test_the_user_list_query_eager_loads_roles_and_socials_to_avoid_n_plus_one(): void
+    {
+        $eagerLoads = array_keys(
+            \App\Filament\Resources\UserResource::getEloquentQuery()->getEagerLoads()
+        );
+
+        $this->assertContains('roles', $eagerLoads);
+        $this->assertContains('socials', $eagerLoads);
+    }
+
     public function test_pending_approval_filter_shows_only_users_without_a_role(): void
     {
         // The admin ($this->admin) holds a role; a fresh registrant has none.

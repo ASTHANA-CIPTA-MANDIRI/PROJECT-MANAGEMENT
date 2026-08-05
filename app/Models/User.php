@@ -122,6 +122,14 @@ class User extends Authenticatable implements FilamentUser, MustVerifyEmail
     {
         $roleId = static::superAdminRoleId();
 
+        // Reuse an already eager-loaded roles relation instead of firing a
+        // fresh exists() query per user (e.g. per row of the users table).
+        if ($this->relationLoaded('roles')) {
+            return $roleId !== null
+                ? $this->roles->contains('id', $roleId)
+                : $this->roles->contains('name', 'Super Admin');
+        }
+
         return $roleId !== null
             ? $this->roles()->whereKey($roleId)->exists()
             : $this->hasRole('Super Admin');
@@ -129,8 +137,26 @@ class User extends Authenticatable implements FilamentUser, MustVerifyEmail
 
     /**
      * The configured Super Admin role id, or null when unset/unavailable.
+     *
+     * Cached for the lifetime of the container (i.e. per request/per test):
+     * the value can't change mid-request, but isSuperAdmin() may be called
+     * once per row of a users table, and without this the dangling-reference
+     * check below would run one query per row.
      */
     public static function superAdminRoleId(): ?string
+    {
+        $cacheKey = static::class.'@superAdminRoleId';
+        if (app()->bound($cacheKey)) {
+            return app($cacheKey)['id'];
+        }
+
+        $id = static::resolveSuperAdminRoleId();
+        app()->instance($cacheKey, ['id' => $id]);
+
+        return $id;
+    }
+
+    private static function resolveSuperAdminRoleId(): ?string
     {
         try {
             $id = app(\App\Settings\GeneralSettings::class)->super_admin_role ?: null;
