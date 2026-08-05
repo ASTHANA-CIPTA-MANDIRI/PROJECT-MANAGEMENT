@@ -40,7 +40,13 @@ class SendDueDateReminders extends Command
         $sent = 0;
 
         Ticket::query()
-            ->whereDate('due_date', $date->toDateString())
+            // A half-open range on the raw column is sargable on every driver;
+            // whereDate() wraps the column in DATE(...), which defeats a
+            // B-tree index on MySQL. (Eloquent's date cast stores full
+            // datetime strings on SQLite, so a plain equality check here
+            // isn't portable — the range still works regardless.)
+            ->where('due_date', '>=', $date)
+            ->where('due_date', '<', $date->copy()->addDay())
             ->whereHas('status', fn ($query) => $query->where('is_final', false))
             ->with(['owner', 'responsible'])
             ->chunkById(200, function ($tickets) use ($isDueToday, &$sent) {
