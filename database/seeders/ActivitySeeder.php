@@ -10,23 +10,23 @@ class ActivitySeeder extends Seeder
     private array $data = [
         [
             'name' => 'Programming',
-            'description' => 'Programming related activities'
+            'description' => 'Programming related activities',
         ],
         [
             'name' => 'Testing',
-            'description' => 'Testing related activities'
+            'description' => 'Testing related activities',
         ],
         [
             'name' => 'Learning',
-            'description' => 'Activities related to learning and training'
+            'description' => 'Activities related to learning and training',
         ],
         [
             'name' => 'Research',
-            'description' => 'Activities related to research'
+            'description' => 'Activities related to research',
         ],
         [
             'name' => 'Other',
-            'description' => 'Other activities'
+            'description' => 'Other activities',
         ],
     ];
 
@@ -38,7 +38,7 @@ class ActivitySeeder extends Seeder
     public function run()
     {
         foreach ($this->data as $item) {
-            Activity::firstOrCreate($item);
+            Activity::firstOrCreate(['name' => $item['name']], $item);
         }
     }
 }
