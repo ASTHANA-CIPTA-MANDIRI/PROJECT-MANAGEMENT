@@ -64,7 +64,7 @@ class ProjectResource extends Resource
                 Tables\Columns\TextColumn::make('cover')
                     ->label(__('Cover image'))
                     ->formatStateUsing(fn ($state) => new HtmlString('
-                            <div style=\'background-image: url("'.$state.'")\'
+                            <div style=\'background-image: url("'.e($state).'")\'
                                  class="w-8 h-8 bg-cover bg-center bg-no-repeat"></div>
                         ')),
 

@@ -96,6 +96,20 @@ class XssEscapingTest extends TestCase
             ->assertSee(self::PAYLOAD);
     }
 
+    public function test_project_cover_url_markup_is_escaped_in_the_project_list(): void
+    {
+        // No media uploaded, so Project::cover() falls back to a ui-avatars
+        // URL built from the raw name, which is what formatStateUsing prints.
+        Project::factory()->create([
+            'owner_id' => $this->user->id,
+            'name' => self::PAYLOAD,
+        ]);
+
+        Livewire::test(\App\Filament\Resources\ProjectResource\Pages\ListProjects::class)
+            ->assertSuccessful()
+            ->assertDontSeeHtml(self::PAYLOAD);
+    }
+
     public function test_project_name_markup_is_escaped_in_the_latest_projects_and_favorites_widgets(): void
     {
         $project = Project::factory()->create(['owner_id' => $this->user->id, 'name' => self::PAYLOAD]);
