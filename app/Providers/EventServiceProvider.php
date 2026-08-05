@@ -5,15 +5,21 @@ namespace App\Providers;
 use App\Listeners\AssignDefaultRole;
 use App\Listeners\NotifyAdminsOfRegistration;
 use App\Listeners\SocialRegistration;
+use App\Models\ProjectStatus;
 use App\Models\Sprint;
 use App\Models\Ticket;
 use App\Models\TicketComment;
+use App\Models\TicketPriority;
 use App\Models\TicketStatus;
+use App\Models\TicketType;
 use App\Models\User;
+use App\Observers\ProjectStatusObserver;
 use App\Observers\SprintObserver;
 use App\Observers\TicketCommentObserver;
 use App\Observers\TicketObserver;
+use App\Observers\TicketPriorityObserver;
 use App\Observers\TicketStatusObserver;
+use App\Observers\TicketTypeObserver;
 use App\Observers\UserObserver;
 use DutchCodingCompany\FilamentSocialite\Events\Registered as SocialRegistered;
 use Illuminate\Auth\Events\Registered;
@@ -49,6 +55,9 @@ class EventServiceProvider extends ServiceProvider
         TicketComment::observe(TicketCommentObserver::class);
         Sprint::observe(SprintObserver::class);
         TicketStatus::observe(TicketStatusObserver::class);
+        ProjectStatus::observe(ProjectStatusObserver::class);
+        TicketType::observe(TicketTypeObserver::class);
+        TicketPriority::observe(TicketPriorityObserver::class);
         User::observe(UserObserver::class);
     }
 
