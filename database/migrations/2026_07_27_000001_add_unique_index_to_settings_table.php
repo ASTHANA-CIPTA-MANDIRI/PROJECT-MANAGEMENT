@@ -3,6 +3,7 @@
 use Illuminate\Database\Migrations\Migration;
 use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Schema;
 
 /**
@@ -34,18 +35,24 @@ return new class extends Migration
      * Drop any pre-existing duplicate (group, name) rows before enforcing
      * uniqueness — keeping the lowest id — so the index can be added on a
      * database that already accumulated duplicates. Portable across drivers.
+     * Each removed row is logged (full column set) so a lost payload can be
+     * recovered from the log if it turns out to matter.
      */
     private function removeDuplicateSettings(): void
     {
         $seen = [];
 
-        DB::table('settings')->orderBy('id')->get(['id', 'group', 'name'])
+        DB::table('settings')->orderBy('id')->get()
             ->each(function ($row) use (&$seen) {
                 $key = $row->group.'|'.$row->name;
                 if (isset($seen[$key])) {
+                    Log::warning('Migrasi unique-index settings: menghapus baris duplikat (group, name)', [
+                        'kept_id' => $seen[$key],
+                        'deleted_row' => (array) $row,
+                    ]);
                     DB::table('settings')->where('id', $row->id)->delete();
                 } else {
-                    $seen[$key] = true;
+                    $seen[$key] = $row->id;
                 }
             });
     }
