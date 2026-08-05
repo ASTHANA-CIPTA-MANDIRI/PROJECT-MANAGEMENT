@@ -117,18 +117,44 @@ class ProjectPolicyTest extends TestCase
 
     // -------------------------------------------------------------- delete
 
-    public function test_deleting_requires_the_delete_permission(): void
+    public function test_owner_with_permission_can_delete_the_project(): void
+    {
+        $user = $this->userWithPermissions(['Delete project']);
+        $project = Project::factory()->create(['owner_id' => $user->id]);
+
+        $this->assertTrue($user->can('delete', $project));
+    }
+
+    public function test_a_member_with_the_manage_role_can_delete_the_project(): void
+    {
+        $user = $this->userWithPermissions(['Delete project']);
+        $project = Project::factory()->create();
+        $project->users()->attach($user->id, ['role' => $this->manageRole()]);
+
+        $this->assertTrue($user->can('delete', $project));
+    }
+
+    public function test_a_plain_member_cannot_delete_the_project(): void
+    {
+        $user = $this->userWithPermissions(['Delete project']);
+        $project = Project::factory()->create();
+        $project->users()->attach($user->id, ['role' => 'employee']);
+
+        $this->assertFalse($user->can('delete', $project));
+    }
+
+    public function test_an_unrelated_user_cannot_delete_the_project(): void
     {
         $user = $this->userWithPermissions(['Delete project']);
         $project = Project::factory()->create();
 
-        $this->assertTrue($user->can('delete', $project));
+        $this->assertFalse($user->can('delete', $project));
     }
 
     public function test_deleting_is_denied_without_the_permission(): void
     {
         $user = $this->userWithoutPermissions();
-        $project = Project::factory()->create();
+        $project = Project::factory()->create(['owner_id' => $user->id]);
 
         $this->assertFalse($user->can('delete', $project));
     }

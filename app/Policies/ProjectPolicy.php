@@ -69,7 +69,14 @@ class ProjectPolicy
      */
     public function delete(User $user, Project $project)
     {
-        return $user->can('Delete project');
+        return $user->can('Delete project')
+            && (
+                $project->owner_id === $user->id
+                ||
+                $project->users()->where('users.id', $user->id)
+                    ->where('role', config('system.projects.affectations.roles.can_manage'))
+                    ->count()
+            );
     }
 
     /**
