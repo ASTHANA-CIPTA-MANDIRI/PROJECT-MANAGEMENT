@@ -72,7 +72,7 @@ class LatestTickets extends BaseWidget
                         '.($record->responsible ? '
                         <div class="flex items-center gap-3">
                             <div class="flex items-center gap-1 text-xs text-gray-400">'
-                        .view('components.user-avatar', ['user' => $record->responsible])
+                        .view('components.user-avatar', ['user' => $record->responsible])->render()
                         .'<span>'.e($record->responsible?->name).'</span>'
                         .'</div>
                         </div>' : '').'
