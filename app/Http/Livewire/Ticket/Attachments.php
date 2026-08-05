@@ -48,7 +48,9 @@ class Attachments extends Component implements HasForms, HasTable
                 ->hint(__('Important: If a file has the same name, it will be replaced'))
                 ->helperText(__('Here you can attach all files needed for this ticket'))
                 ->multiple()
-                ->disablePreview(),
+                ->disablePreview()
+                ->acceptedFileTypes(config('system.tickets.attachments.accepted_mime_types'))
+                ->maxSize(config('system.max_file_size')),
         ];
     }
 

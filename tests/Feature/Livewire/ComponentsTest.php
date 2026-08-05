@@ -15,6 +15,7 @@ use App\Models\Ticket;
 use App\Models\TicketHour;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\Notification;
 use Livewire\Livewire;
 use Spatie\Permission\PermissionRegistrar;
@@ -129,6 +130,38 @@ class ComponentsTest extends TestCase
         $ticket = Ticket::factory()->create(['owner_id' => $this->user->id]);
 
         Livewire::test(Attachments::class, ['ticket' => $ticket])->assertSuccessful();
+    }
+
+    public function test_the_attachments_component_rejects_a_disallowed_file_type(): void
+    {
+        $ticket = Ticket::factory()->create(['owner_id' => $this->user->id]);
+
+        Livewire::test(Attachments::class, ['ticket' => $ticket])
+            ->set('attachments', [UploadedFile::fake()->create('evil.svg', 10, 'image/svg+xml')])
+            ->call('perform')
+            ->assertHasErrors(['attachments']);
+    }
+
+    public function test_the_attachments_component_rejects_a_file_over_the_max_size(): void
+    {
+        $ticket = Ticket::factory()->create(['owner_id' => $this->user->id]);
+
+        Livewire::test(Attachments::class, ['ticket' => $ticket])
+            ->set('attachments', [
+                UploadedFile::fake()->create('big.pdf', config('system.max_file_size') + 1, 'application/pdf'),
+            ])
+            ->call('perform')
+            ->assertHasErrors(['attachments']);
+    }
+
+    public function test_the_attachments_component_accepts_an_allowed_file(): void
+    {
+        $ticket = Ticket::factory()->create(['owner_id' => $this->user->id]);
+
+        Livewire::test(Attachments::class, ['ticket' => $ticket])
+            ->set('attachments', [UploadedFile::fake()->create('document.pdf', 100, 'application/pdf')])
+            ->call('perform')
+            ->assertHasNoErrors();
     }
 
     // ---------------------------------------------------------- time logged
