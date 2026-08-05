@@ -116,7 +116,7 @@ class ProjectTest extends TestCase
 
     public function test_cover_returns_the_uploaded_media_url(): void
     {
-        Storage::fake('public');
+        Storage::fake('media');
         $project = Project::factory()->create(['name' => 'Acme']);
         $media = $project->addMediaFromString('binary-image-data')
             ->usingFileName('cover.png')

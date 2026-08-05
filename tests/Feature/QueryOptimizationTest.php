@@ -146,7 +146,7 @@ class QueryOptimizationTest extends TestCase
 
     public function test_latest_projects_widget_eager_loads_cover_media(): void
     {
-        Storage::fake('public');
+        Storage::fake('media');
         $owner = User::factory()->create();
         $projects = Project::factory()->count(5)->create(['owner_id' => $owner->id]);
         // Give a couple of them a real cover so the media-present path runs too.

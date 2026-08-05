@@ -44,6 +44,18 @@ return [
             'throw' => false,
         ],
 
+        // Ticket attachments and project covers live here. Deliberately kept
+        // out of the "public" disk (symlinked to public/storage, served
+        // directly by the web server with no authorization check) - access
+        // instead goes through the authenticated media.show route, see
+        // App\Support\Media\AuthorizedUrlGenerator.
+        'media' => [
+            'driver' => 'local',
+            'root' => storage_path('app/media'),
+            'visibility' => 'private',
+            'throw' => false,
+        ],
+
         's3' => [
             'driver' => 's3',
             'key' => env('AWS_ACCESS_KEY_ID'),
