@@ -83,8 +83,8 @@ class ProjectResource extends Resource
                     ->formatStateUsing(fn ($record) => new HtmlString('
                             <div class="flex items-center gap-2">
                                 <span class="filament-tables-color-column relative flex h-6 w-6 rounded-md"
-                                    style="background-color: '.$record->status->color.'"></span>
-                                <span>'.$record->status->name.'</span>
+                                    style="background-color: '.e($record->status->color).'"></span>
+                                <span>'.e($record->status->name).'</span>
                             </div>
                         '))
                     ->sortable()

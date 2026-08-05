@@ -41,9 +41,9 @@ class FavoriteProjects extends BaseWidget
             $contributorsCount = $project->contributors->count();
             $cards[] = Card::make('', new HtmlString('
                     <div class="flex items-center gap-2 -mt-2 text-lg">
-                        <div style=\'background-image: url("'.$project->cover.'")\'
+                        <div style=\'background-image: url("'.e($project->cover).'")\'
                              class="w-8 h-8 bg-cover bg-center bg-no-repeat"></div>
-                        <span>'.$project->name.'</span>
+                        <span>'.e($project->name).'</span>
                     </div>
                 '))
                 ->color('success')

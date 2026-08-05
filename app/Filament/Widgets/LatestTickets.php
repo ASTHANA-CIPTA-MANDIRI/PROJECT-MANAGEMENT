@@ -59,21 +59,21 @@ class LatestTickets extends BaseWidget
                 ->formatStateUsing(fn ($record) => new HtmlString('
                     <div class="flex flex-col gap-1">
                         <span class="text-gray-400 font-medium text-xs">
-                            '.$record->project->name.'
+                            '.e($record->project->name).'
                         </span>
                         <span>
                             <a href="'.route('filament.resources.tickets.share', $record->code)
                     .'" target="_blank" class="text-primary-500 text-sm hover:underline">'
-                    .$record->code
+                    .e($record->code)
                     .'</a>
                             <span class="text-sm text-gray-400">|</span> '
-                    .$record->name.'
+                    .e($record->name).'
                         </span>
                         '.($record->responsible ? '
                         <div class="flex items-center gap-3">
                             <div class="flex items-center gap-1 text-xs text-gray-400">'
                         .view('components.user-avatar', ['user' => $record->responsible])
-                        .'<span>'.$record->responsible?->name.'</span>'
+                        .'<span>'.e($record->responsible?->name).'</span>'
                         .'</div>
                         </div>' : '').'
                     </div>
@@ -84,8 +84,8 @@ class LatestTickets extends BaseWidget
                 ->formatStateUsing(fn ($record) => new HtmlString('
                             <div class="flex items-center gap-2 mt-1">
                                 <span class="filament-tables-color-column relative flex h-6 w-6 rounded-md"
-                                    style="background-color: '.$record->status->color.'"
-                                    title="'.$record->status->name.'"></span>
+                                    style="background-color: '.e($record->status->color).'"
+                                    title="'.e($record->status->name).'"></span>
                             </div>
                         ')),
 
@@ -98,8 +98,8 @@ class LatestTickets extends BaseWidget
                 ->formatStateUsing(fn ($record) => new HtmlString('
                             <div class="flex items-center gap-2 mt-1">
                                 <span class="filament-tables-color-column relative flex h-6 w-6 rounded-md"
-                                    style="background-color: '.$record->priority->color.'"
-                                    title="'.$record->priority->name.'"></span>
+                                    style="background-color: '.e($record->priority->color).'"
+                                    title="'.e($record->priority->name).'"></span>
                             </div>
                         ')),
         ];

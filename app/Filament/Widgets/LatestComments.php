@@ -61,15 +61,15 @@ class LatestComments extends BaseWidget
                     return new HtmlString('
                     <div class="flex flex-col gap-1">
                         <span class="text-gray-400 font-medium text-xs">
-                            '.$state->project->name.'
+                            '.e($state->project->name).'
                         </span>
                         <span>
                             <a href="'.route('filament.resources.tickets.share', $state->code)
                         .'" target="_blank" class="text-primary-500 text-sm hover:underline">'
-                        .$state->code
+                        .e($state->code)
                         .'</a>
                             <span class="text-sm text-gray-400">|</span> '
-                        .$state->name.'
+                        .e($state->name).'
                         </span>
                     </div>
                 ');

@@ -57,9 +57,9 @@ class LatestProjects extends BaseWidget
                 ->label(__('Project name'))
                 ->formatStateUsing(fn ($record) => new HtmlString('
                             <div class="w-full flex items-center gap-2">
-                                <div style=\'background-image: url("'.$record->cover.'")\'
+                                <div style=\'background-image: url("'.e($record->cover).'")\'
                                  class="w-8 h-8 bg-cover bg-center bg-no-repeat"></div>
-                                '.$record->name.'
+                                '.e($record->name).'
                             </div>
                         ')),
 
@@ -71,8 +71,8 @@ class LatestProjects extends BaseWidget
                 ->formatStateUsing(fn ($record) => new HtmlString('
                             <div class="flex items-center gap-2">
                                 <span class="filament-tables-color-column relative flex h-6 w-6 rounded-md"
-                                    style="background-color: '.$record->status->color.'"></span>
-                                <span>'.$record->status->name.'</span>
+                                    style="background-color: '.e($record->status->color).'"></span>
+                                <span>'.e($record->status->name).'</span>
                             </div>
                         ')),
         ];

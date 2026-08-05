@@ -60,23 +60,23 @@ class LatestActivities extends BaseWidget
                     return new HtmlString('
                     <div class="flex flex-col gap-1">
                         <span class="text-gray-400 font-medium text-xs">
-                            '.$state->project->name.'
+                            '.e($state->project->name).'
                         </span>
                         <span>
                             <a href="'.route('filament.resources.tickets.share', $state->code)
                         .'" target="_blank" class="text-primary-500 text-sm hover:underline">'
-                        .$state->code
+                        .e($state->code)
                         .'</a>
                             <span class="text-sm text-gray-400">|</span> '
-                        .$state->name.'
+                        .e($state->name).'
                         </span>
                         <div class="w-full flex items-center gap-2 text-sm">
-                            <span style="color: '.$record->oldStatus->color.'">'
-                                .$record->oldStatus->name
+                            <span style="color: '.e($record->oldStatus->color).'">'
+                                .e($record->oldStatus->name)
                             .'</span>
                             <span class="text-gray-500">'.__('To').'</span>
-                            <span style="color: '.$record->newStatus->color.'">
-                                '.$record->newStatus->name.'
+                            <span style="color: '.e($record->newStatus->color).'">
+                                '.e($record->newStatus->name).'
                             </span>
                         </div>
                     </div>
