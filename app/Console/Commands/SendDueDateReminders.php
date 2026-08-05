@@ -41,6 +41,7 @@ class SendDueDateReminders extends Command
 
         Ticket::query()
             ->whereDate('due_date', $date->toDateString())
+            ->whereHas('status', fn ($query) => $query->where('is_final', false))
             ->with(['owner', 'responsible'])
             ->chunkById(200, function ($tickets) use ($isDueToday, &$sent) {
                 foreach ($tickets as $ticket) {

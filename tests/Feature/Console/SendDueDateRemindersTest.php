@@ -3,6 +3,7 @@
 namespace Tests\Feature\Console;
 
 use App\Models\Ticket;
+use App\Models\TicketStatus;
 use App\Models\User;
 use App\Notifications\TicketDueDateReminder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -84,6 +85,22 @@ class SendDueDateRemindersTest extends TestCase
     {
         $owner = User::factory()->create();
         Ticket::factory()->create(['owner_id' => $owner->id, 'due_date' => null]);
+
+        $this->artisan('tickets:due-date-reminders', ['--date' => now()->toDateString()])
+            ->assertSuccessful();
+
+        Notification::assertNotSentTo($owner, TicketDueDateReminder::class);
+    }
+
+    public function test_it_does_not_notify_for_a_ticket_in_a_final_status(): void
+    {
+        $owner = User::factory()->create();
+        $doneStatus = TicketStatus::factory()->final()->create();
+        Ticket::factory()->create([
+            'owner_id' => $owner->id,
+            'due_date' => now(),
+            'status_id' => $doneStatus->id,
+        ]);
 
         $this->artisan('tickets:due-date-reminders', ['--date' => now()->toDateString()])
             ->assertSuccessful();

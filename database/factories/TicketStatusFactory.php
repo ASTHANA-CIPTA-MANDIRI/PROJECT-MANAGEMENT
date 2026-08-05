@@ -19,6 +19,7 @@ class TicketStatusFactory extends Factory
             'name' => fake()->unique()->word(),
             'color' => fake()->hexColor(),
             'is_default' => false,
+            'is_final' => false,
             'order' => 0,
             // Null means a global status shared by all "default" projects.
             'project_id' => null,
@@ -27,7 +28,16 @@ class TicketStatusFactory extends Factory
 
     public function default(): static
     {
-        return $this->state(fn() => ['is_default' => true]);
+        return $this->state(fn () => ['is_default' => true]);
+    }
+
+    /**
+     * A status considered "done" — tickets in it should stop receiving
+     * due-date reminders.
+     */
+    public function final(): static
+    {
+        return $this->state(fn () => ['is_final' => true]);
     }
 
     /**
@@ -35,6 +45,6 @@ class TicketStatusFactory extends Factory
      */
     public function forProject(Project $project): static
     {
-        return $this->state(fn() => ['project_id' => $project->id]);
+        return $this->state(fn () => ['project_id' => $project->id]);
     }
 }

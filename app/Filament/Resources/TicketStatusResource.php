@@ -56,6 +56,12 @@ class TicketStatusResource extends Resource
                                         __('If checked, this status will be automatically affected to new projects')
                                     ),
 
+                                Forms\Components\Checkbox::make('is_final')
+                                    ->label(__('Final status'))
+                                    ->helperText(
+                                        __('If checked, tickets in this status are considered done and will no longer receive due-date reminders')
+                                    ),
+
                                 Forms\Components\TextInput::make('order')
                                     ->label(__('Status order'))
                                     ->integer()
@@ -87,6 +93,11 @@ class TicketStatusResource extends Resource
 
                 Tables\Columns\IconColumn::make('is_default')
                     ->label(__('Default status'))
+                    ->boolean()
+                    ->sortable(),
+
+                Tables\Columns\IconColumn::make('is_final')
+                    ->label(__('Final status'))
                     ->boolean()
                     ->sortable(),
 
