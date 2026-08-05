@@ -59,4 +59,14 @@ class TicketStatusPolicy
     {
         return $user->can('Delete ticket status');
     }
+
+    /**
+     * Determine whether the user can bulk delete models.
+     *
+     * @return \Illuminate\Auth\Access\Response|bool
+     */
+    public function deleteAny(User $user)
+    {
+        return $user->can('Delete ticket status');
+    }
 }

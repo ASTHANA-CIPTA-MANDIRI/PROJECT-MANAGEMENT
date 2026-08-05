@@ -132,4 +132,16 @@ class ProjectPolicyTest extends TestCase
 
         $this->assertFalse($user->can('delete', $project));
     }
+
+    // ----------------------------------------------------------- deleteAny
+
+    public function test_bulk_deleting_requires_the_delete_permission(): void
+    {
+        $this->assertTrue($this->userWithPermissions(['Delete project'])->can('deleteAny', Project::class));
+    }
+
+    public function test_bulk_deleting_is_denied_without_the_permission(): void
+    {
+        $this->assertFalse($this->userWithoutPermissions()->can('deleteAny', Project::class));
+    }
 }

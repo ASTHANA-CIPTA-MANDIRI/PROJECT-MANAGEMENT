@@ -106,4 +106,16 @@ class SprintPolicyTest extends TestCase
             $this->userWithoutPermissions()->can('delete', Sprint::factory()->create())
         );
     }
+
+    // ----------------------------------------------------------- deleteAny
+
+    public function test_bulk_deleting_requires_the_delete_permission(): void
+    {
+        $this->assertTrue($this->userWithPermissions(['Delete sprint'])->can('deleteAny', Sprint::class));
+    }
+
+    public function test_bulk_deleting_is_denied_without_the_permission(): void
+    {
+        $this->assertFalse($this->userWithoutPermissions()->can('deleteAny', Sprint::class));
+    }
 }

@@ -61,6 +61,16 @@ class ActivityPolicy
     }
 
     /**
+     * Determine whether the user can bulk delete models.
+     *
+     * @return \Illuminate\Auth\Access\Response|bool
+     */
+    public function deleteAny(User $user)
+    {
+        return $user->can('Delete activity');
+    }
+
+    /**
      * Determine whether the user can restore the model.
      *
      * @return \Illuminate\Auth\Access\Response|bool

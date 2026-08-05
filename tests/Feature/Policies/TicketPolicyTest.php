@@ -148,6 +148,18 @@ class TicketPolicyTest extends TestCase
         $this->assertFalse($this->userWithoutPermissions()->can('delete', Ticket::factory()->create()));
     }
 
+    // ----------------------------------------------------------- deleteAny
+
+    public function test_bulk_deleting_requires_the_delete_permission(): void
+    {
+        $this->assertTrue($this->userWithPermissions(['Delete ticket'])->can('deleteAny', Ticket::class));
+    }
+
+    public function test_bulk_deleting_is_denied_without_the_permission(): void
+    {
+        $this->assertFalse($this->userWithoutPermissions()->can('deleteAny', Ticket::class));
+    }
+
     // ------------------------------------------- regression: guest context
 
     /**

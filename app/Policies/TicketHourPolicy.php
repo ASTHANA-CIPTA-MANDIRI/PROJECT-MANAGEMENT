@@ -2,11 +2,11 @@
 
 namespace App\Policies;
 
-use App\Models\ProjectStatus;
+use App\Models\TicketHour;
 use App\Models\User;
 use Illuminate\Auth\Access\HandlesAuthorization;
 
-class ProjectStatusPolicy
+class TicketHourPolicy
 {
     use HandlesAuthorization;
 
@@ -17,7 +17,7 @@ class ProjectStatusPolicy
      */
     public function viewAny(User $user)
     {
-        return $user->can('List project statuses');
+        return $user->can('List timesheet data');
     }
 
     /**
@@ -25,9 +25,9 @@ class ProjectStatusPolicy
      *
      * @return \Illuminate\Auth\Access\Response|bool
      */
-    public function view(User $user, ProjectStatus $projectStatus)
+    public function view(User $user, TicketHour $ticketHour)
     {
-        return $user->can('View project status');
+        return $user->can('List timesheet data') && $ticketHour->user_id === $user->id;
     }
 
     /**
@@ -37,7 +37,7 @@ class ProjectStatusPolicy
      */
     public function create(User $user)
     {
-        return $user->can('Create project status');
+        return $user->can('List timesheet data');
     }
 
     /**
@@ -45,9 +45,9 @@ class ProjectStatusPolicy
      *
      * @return \Illuminate\Auth\Access\Response|bool
      */
-    public function update(User $user, ProjectStatus $projectStatus)
+    public function update(User $user, TicketHour $ticketHour)
     {
-        return $user->can('Update project status');
+        return $user->can('List timesheet data') && $ticketHour->user_id === $user->id;
     }
 
     /**
@@ -55,9 +55,9 @@ class ProjectStatusPolicy
      *
      * @return \Illuminate\Auth\Access\Response|bool
      */
-    public function delete(User $user, ProjectStatus $projectStatus)
+    public function delete(User $user, TicketHour $ticketHour)
     {
-        return $user->can('Delete project status');
+        return $user->can('List timesheet data') && $ticketHour->user_id === $user->id;
     }
 
     /**
@@ -67,26 +67,6 @@ class ProjectStatusPolicy
      */
     public function deleteAny(User $user)
     {
-        return $user->can('Delete project status');
-    }
-
-    /**
-     * Determine whether the user can restore the model.
-     *
-     * @return \Illuminate\Auth\Access\Response|bool
-     */
-    public function restore(User $user, ProjectStatus $projectStatus)
-    {
-        //
-    }
-
-    /**
-     * Determine whether the user can permanently delete the model.
-     *
-     * @return \Illuminate\Auth\Access\Response|bool
-     */
-    public function forceDelete(User $user, ProjectStatus $projectStatus)
-    {
-        //
+        return $user->can('List timesheet data');
     }
 }

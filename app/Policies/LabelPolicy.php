@@ -34,4 +34,9 @@ class LabelPolicy
     {
         return $user->can('Delete label');
     }
+
+    public function deleteAny(User $user)
+    {
+        return $user->can('Delete label');
+    }
 }
