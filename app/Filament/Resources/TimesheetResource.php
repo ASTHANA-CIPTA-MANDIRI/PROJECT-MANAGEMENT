@@ -42,6 +42,15 @@ class TimesheetResource extends Resource
         return auth()->user()->can('List timesheet data');
     }
 
+    /**
+     * TicketHourPolicy only lets a user view/update/delete their own logged
+     * hours, so the list must not surface anyone else's rows either.
+     */
+    public static function getEloquentQuery(): \Illuminate\Database\Eloquent\Builder
+    {
+        return parent::getEloquentQuery()->where('user_id', auth()->id());
+    }
+
     public static function form(Form $form): Form
     {
         return $form

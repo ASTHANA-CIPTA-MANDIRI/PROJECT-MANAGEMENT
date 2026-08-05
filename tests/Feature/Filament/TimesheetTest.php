@@ -112,6 +112,53 @@ class TimesheetTest extends TestCase
         $this->assertEqualsWithDelta(5.0, $other->fresh()->totalLoggedInHours, 0.001);
     }
 
+    /**
+     * TicketHourPolicy only lets a user view/edit/delete their own entries;
+     * the listing must not leak other users' hours into the table either.
+     */
+    public function test_the_timesheet_list_only_shows_the_current_users_own_entries(): void
+    {
+        $this->logHours(1);
+        $ownEntry = TicketHour::where('user_id', $this->user->id)->sole();
+
+        $other = User::factory()->create();
+        $ticket = Ticket::factory()->create(['owner_id' => $other->id]);
+        $othersEntry = TicketHour::factory()->hours(5)->create([
+            'ticket_id' => $ticket->id,
+            'user_id' => $other->id,
+        ]);
+
+        Livewire::test(ListTimesheet::class)
+            ->assertCanSeeTableRecords([$ownEntry])
+            ->assertCanNotSeeTableRecords([$othersEntry]);
+    }
+
+    /**
+     * The edit route/page must reject access to someone else's entry, not
+     * just hide it from the list. Since the eloquent query is scoped to the
+     * current user (TicketHourPolicy::update() would deny it anyway), the
+     * record simply cannot be resolved for a foreign route key.
+     */
+    public function test_editing_someone_elses_logged_hours_is_forbidden(): void
+    {
+        $other = User::factory()->create();
+        $ticket = Ticket::factory()->create(['owner_id' => $other->id]);
+        $othersEntry = TicketHour::factory()->hours(5)->create([
+            'ticket_id' => $ticket->id,
+            'user_id' => $other->id,
+        ]);
+
+        try {
+            Livewire::test(
+                \App\Filament\Resources\TimesheetResource\Pages\EditTimesheet::class,
+                ['record' => $othersEntry->getRouteKey()]
+            );
+            $this->fail('Expected resolving another user\'s timesheet entry to fail.');
+        } catch (\Throwable $e) {
+            $this->assertStringContainsString('No query results for model', $e->getMessage());
+        }
+    }
+
     // ----------------------------------------------------------- report widgets
 
     /**
