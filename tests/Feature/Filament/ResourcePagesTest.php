@@ -195,6 +195,27 @@ class ResourcePagesTest extends TestCase
         )->assertSuccessful();
     }
 
+    // -------------------------------------------------------------- Timesheet
+
+    public function test_the_timesheet_list_page_renders(): void
+    {
+        \App\Models\TicketHour::factory()->count(3)->create(['user_id' => $this->admin->id]);
+
+        Livewire::test(\App\Filament\Resources\TimesheetResource\Pages\ListTimesheet::class)
+            ->assertSuccessful();
+    }
+
+    public function test_the_timesheet_list_query_eager_loads_user_activity_and_ticket(): void
+    {
+        $eagerLoads = array_keys(
+            \App\Filament\Resources\TimesheetResource::getEloquentQuery()->getEagerLoads()
+        );
+
+        $this->assertContains('user', $eagerLoads);
+        $this->assertContains('activity', $eagerLoads);
+        $this->assertContains('ticket', $eagerLoads);
+    }
+
     // ------------------------------------------------------------------ Roles
 
     public function test_the_role_list_page_renders(): void
