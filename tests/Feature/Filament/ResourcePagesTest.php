@@ -224,6 +224,15 @@ class ResourcePagesTest extends TestCase
             ->assertSuccessful();
     }
 
+    public function test_the_role_list_query_eager_loads_permissions_to_avoid_n_plus_one(): void
+    {
+        $eagerLoads = array_keys(
+            \App\Filament\Resources\RoleResource::getEloquentQuery()->getEagerLoads()
+        );
+
+        $this->assertContains('permissions', $eagerLoads);
+    }
+
     public function test_the_role_create_page_renders(): void
     {
         Livewire::test(\App\Filament\Resources\RoleResource\Pages\CreateRole::class)
