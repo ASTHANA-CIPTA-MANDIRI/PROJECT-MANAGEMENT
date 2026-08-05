@@ -2,6 +2,7 @@
 
 namespace Tests\Feature;
 
+use App\Models\Epic;
 use App\Models\Project;
 use App\Models\Sprint;
 use App\Models\Ticket;
@@ -193,7 +194,28 @@ class ProjectWorkflowTest extends TestCase
 
         $project->delete();
 
-        // The relation uses withTrashed(), so history stays readable.
-        $this->assertNotNull($ticket->fresh()->project);
+        // The relation uses withTrashed(), so history stays readable even
+        // though the ticket itself is now soft-deleted too (see below).
+        $this->assertNotNull(Ticket::withTrashed()->find($ticket->id)->project);
+    }
+
+    public function test_deleting_a_project_soft_deletes_its_tickets_sprints_and_epics(): void
+    {
+        $project = Project::factory()->scrum()->create();
+        $ticket = Ticket::factory()->create(['project_id' => $project->id]);
+        $sprint = Sprint::factory()->create(['project_id' => $project->id]);
+        $epic = Epic::factory()->create(['project_id' => $project->id]);
+
+        $project->delete();
+
+        $this->assertSoftDeleted($ticket);
+        $this->assertSoftDeleted($sprint);
+        $this->assertSoftDeleted($epic);
+
+        // Gone from the default (non-trashed) query on the project too, not
+        // just orphaned rows pointing at a trashed project.
+        $this->assertNull(Ticket::find($ticket->id));
+        $this->assertNull(Sprint::find($sprint->id));
+        $this->assertNull(Epic::find($epic->id));
     }
 }
