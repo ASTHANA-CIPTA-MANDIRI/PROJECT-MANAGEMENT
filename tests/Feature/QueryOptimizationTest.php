@@ -191,4 +191,26 @@ class QueryOptimizationTest extends TestCase
         // One query total: the SUM is computed in SQL, not per ticket.
         $this->assertSame(1, $queryCount, "Expected a single aggregate query, ran {$queryCount}");
     }
+
+    public function test_timesheet_time_logged_table_eager_loads_relations(): void
+    {
+        $ticket = Ticket::factory()->create();
+        TicketHour::factory()->count(5)->create(['ticket_id' => $ticket->id]);
+
+        DB::connection()->enableQueryLog();
+
+        // Mirrors Livewire\Timesheet\TimeLogged::getTableQuery's eager-load set.
+        $hours = $ticket->hours()->with(['user', 'activity', 'ticket'])->getQuery()->get();
+        foreach ($hours as $hour) {
+            $hour->user;
+            $hour->activity;
+            $hour->ticket;
+        }
+
+        $queryCount = count(DB::connection()->getQueryLog());
+        DB::connection()->disableQueryLog();
+
+        // 1 hours query + 3 eager-loaded relations = 4, not 1 + 5*3 = 16.
+        $this->assertLessThanOrEqual(4, $queryCount, "Expected eager loading, ran {$queryCount} queries");
+    }
 }

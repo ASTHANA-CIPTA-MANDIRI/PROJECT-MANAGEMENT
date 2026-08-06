@@ -25,7 +25,7 @@ class TimeLogged extends Component implements HasTable
 
     protected function getTableQuery(): Builder
     {
-        return $this->ticket->hours()->getQuery();
+        return $this->ticket->hours()->with(['user', 'activity', 'ticket'])->getQuery();
     }
 
     protected function getTableColumns(): array
