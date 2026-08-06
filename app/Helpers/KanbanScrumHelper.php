@@ -80,23 +80,23 @@ trait KanbanScrumHelper
             $query->whereNull('project_id');
         }
 
-        return $query->orderBy('order')
-            ->get()
-            ->map(function ($item) {
-                $query = Ticket::query();
-                if ($this->project) {
-                    $query->where('project_id', $this->project->id);
-                }
-                $query->where('status_id', $item->id);
+        $statuses = $query->orderBy('order')->get();
 
-                return [
-                    'id' => $item->id,
-                    'title' => $item->name,
-                    'color' => $item->color,
-                    'size' => $query->count(),
-                    'add_ticket' => $item->is_default && auth()->user()->can('Create ticket'),
-                ];
-            });
+        // One grouped COUNT instead of one query per status.
+        $ticketCounts = Ticket::query()
+            ->when($this->project, fn ($q) => $q->where('project_id', $this->project->id))
+            ->whereIn('status_id', $statuses->pluck('id'))
+            ->groupBy('status_id')
+            ->selectRaw('status_id, count(*) as aggregate')
+            ->pluck('aggregate', 'status_id');
+
+        return $statuses->map(fn ($item) => [
+            'id' => $item->id,
+            'title' => $item->name,
+            'color' => $item->color,
+            'size' => (int) ($ticketCounts[$item->id] ?? 0),
+            'add_ticket' => $item->is_default && auth()->user()->can('Create ticket'),
+        ]);
     }
 
     public function getRecords(): Collection
