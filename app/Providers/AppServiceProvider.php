@@ -92,7 +92,7 @@ class AppServiceProvider extends ServiceProvider
         ]);
 
         // Force HTTPS over HTTP
-        if (env('APP_FORCE_HTTPS') ?? false) {
+        if (config('app.force_https')) {
             URL::forceScheme('https');
         }
 
@@ -147,8 +147,8 @@ class AppServiceProvider extends ServiceProvider
             // setLocale (not Config::set) so the translator's active locale is
             // updated too, applying the configured site language app-wide.
             app()->setLocale($settings->site_language ?? config('app.fallback_locale'));
-            Config::set('app.name', $settings->site_name ?? env('APP_NAME'));
-            Config::set('filament.brand', $settings->site_name ?? env('APP_NAME'));
+            Config::set('app.name', $settings->site_name ?? config('app.name'));
+            Config::set('filament.brand', $settings->site_name ?? config('app.name'));
             Config::set(
                 'app.logo',
                 $settings->site_logo ? asset('storage/'.$settings->site_logo) : asset('favicon.ico')
