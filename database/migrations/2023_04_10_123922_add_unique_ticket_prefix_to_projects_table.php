@@ -26,7 +26,7 @@ return new class extends Migration
     public function down()
     {
         Schema::table('projects', function (Blueprint $table) {
-            //
+            $table->dropUnique(['ticket_prefix']);
         });
     }
 };
