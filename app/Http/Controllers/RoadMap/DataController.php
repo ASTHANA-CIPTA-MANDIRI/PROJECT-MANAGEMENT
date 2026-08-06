@@ -25,7 +25,12 @@ class DataController extends Controller
         if (! $project) {
             return response()->json([]);
         }
-        $epics = Epic::where('project_id', $project->id)->get();
+        // Eager-load what epicObj()/ticketObj() read per row: tickets.hours
+        // feeds completudePercentage, tickets.responsible feeds pRes — without
+        // this each ticket fires its own hours + responsible query.
+        $epics = Epic::where('project_id', $project->id)
+            ->with(['tickets.hours', 'tickets.responsible'])
+            ->get();
 
         return response()->json($this->formatResponse($epics, $project));
     }
@@ -43,6 +48,7 @@ class DataController extends Controller
             }
         }
         $tickets = Ticket::where('project_id', $project->id)->whereNull('epic_id')
+            ->with(['hours', 'responsible'])
             ->orderBy('epic_id')->orderBy('id')->get();
         foreach ($tickets as $ticket) {
             $results->push(collect($this->ticketObj(null, $ticket)));
