@@ -83,13 +83,11 @@ class TicketResource extends Resource
 
             Tables\Columns\TextColumn::make('status.name')
                 ->label(__('Status'))
-                ->formatStateUsing(fn ($record) => new HtmlString('
-                            <div class="flex items-center gap-2 mt-1">
-                                <span class="filament-tables-color-column relative flex h-6 w-6 rounded-md"
-                                    style="background-color: '.e($record->status->color).'"></span>
-                                <span>'.e($record->status->name).'</span>
-                            </div>
-                        '))
+                ->formatStateUsing(fn ($record) => view('components.color-badge', [
+                    'color' => $record->status->color,
+                    'label' => $record->status->name,
+                    'class' => 'mt-1',
+                ]))
                 ->sortable()
                 ->searchable(),
 
@@ -103,13 +101,11 @@ class TicketResource extends Resource
 
             Tables\Columns\TextColumn::make('priority.name')
                 ->label(__('Priority'))
-                ->formatStateUsing(fn ($record) => new HtmlString('
-                            <div class="flex items-center gap-2 mt-1">
-                                <span class="filament-tables-color-column relative flex h-6 w-6 rounded-md"
-                                    style="background-color: '.e($record->priority->color).'"></span>
-                                <span>'.e($record->priority->name).'</span>
-                            </div>
-                        '))
+                ->formatStateUsing(fn ($record) => view('components.color-badge', [
+                    'color' => $record->priority->color,
+                    'label' => $record->priority->name,
+                    'class' => 'mt-1',
+                ]))
                 ->sortable()
                 ->searchable(),
 

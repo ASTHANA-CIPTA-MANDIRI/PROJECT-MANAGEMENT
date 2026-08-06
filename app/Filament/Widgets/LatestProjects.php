@@ -63,13 +63,10 @@ class LatestProjects extends BaseWidget
 
             Tables\Columns\TextColumn::make('status.name')
                 ->label(__('Project status'))
-                ->formatStateUsing(fn ($record) => new HtmlString('
-                            <div class="flex items-center gap-2">
-                                <span class="filament-tables-color-column relative flex h-6 w-6 rounded-md"
-                                    style="background-color: '.e($record->status->color).'"></span>
-                                <span>'.e($record->status->name).'</span>
-                            </div>
-                        ')),
+                ->formatStateUsing(fn ($record) => view('components.color-badge', [
+                    'color' => $record->status->color,
+                    'label' => $record->status->name,
+                ])),
         ];
     }
 }
