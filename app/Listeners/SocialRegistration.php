@@ -2,12 +2,13 @@
 
 namespace App\Listeners;
 
-use App\Models\Role;
-use App\Settings\GeneralSettings;
+use App\Listeners\Concerns\AssignsDefaultRole;
 use DutchCodingCompany\FilamentSocialite\Events\Registered;
 
 class SocialRegistration
 {
+    use AssignsDefaultRole;
+
     /**
      * Create the event listener.
      *
@@ -32,9 +33,6 @@ class SocialRegistration
         // Assign the configured default role so the newly registered social
         // user has permissions and can access the panel. Without a role, the
         // user would be blocked by User::canAccessFilament().
-        $defaultRoleSettings = app(GeneralSettings::class)->default_role;
-        if ($defaultRoleSettings && $defaultRole = Role::where('id', $defaultRoleSettings)->first()) {
-            $user->syncRoles([$defaultRole]);
-        }
+        $this->assignDefaultRole($user);
     }
 }
