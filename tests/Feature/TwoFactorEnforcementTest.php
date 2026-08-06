@@ -87,4 +87,9 @@ class TwoFactorEnforcementTest extends TestCase
 
         $this->get(route('filament.pages.dashboard'))->assertSuccessful();
     }
+
+    public function test_the_policy_is_enabled_by_default(): void
+    {
+        $this->assertTrue(config('system.security.require_2fa_for_super_admin'));
+    }
 }

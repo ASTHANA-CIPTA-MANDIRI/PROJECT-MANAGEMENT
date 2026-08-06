@@ -7,7 +7,7 @@ return [
 
         // Require Super Admins to set up two-factor authentication before they
         // can use the panel (they are redirected to their profile to enable it).
-        'require_2fa_for_super_admin' => (bool) env('REQUIRE_2FA_FOR_SUPER_ADMIN', false),
+        'require_2fa_for_super_admin' => (bool) env('REQUIRE_2FA_FOR_SUPER_ADMIN', true),
 
     ],
 
