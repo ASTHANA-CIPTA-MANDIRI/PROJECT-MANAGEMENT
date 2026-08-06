@@ -146,10 +146,7 @@ class TicketResource extends Resource
                 Tables\Filters\SelectFilter::make('project_id')
                     ->label(__('Project'))
                     ->multiple()
-                    ->options(fn () => Project::where('owner_id', auth()->user()->id)
-                        ->orWhereHas('users', function ($query) {
-                            return $query->where('users.id', auth()->user()->id);
-                        })->pluck('name', 'id')->toArray()),
+                    ->options(fn () => Project::accessibleBy(auth()->user())->pluck('name', 'id')->toArray()),
 
                 Tables\Filters\SelectFilter::make('owner_id')
                     ->label(__('Owner'))

@@ -247,4 +247,49 @@ class ProjectTest extends TestCase
 
         $this->assertSoftDeleted('projects', ['id' => $project->id]);
     }
+
+    // ------------------------------------------------------- accessibleBy scope
+
+    public function test_accessible_by_includes_projects_the_user_owns(): void
+    {
+        $owner = User::factory()->create();
+        $project = Project::factory()->create(['owner_id' => $owner->id]);
+
+        $this->assertTrue(Project::accessibleBy($owner)->whereKey($project->id)->exists());
+    }
+
+    public function test_accessible_by_includes_projects_the_user_is_a_member_of(): void
+    {
+        $member = User::factory()->create();
+        $project = Project::factory()->create();
+        $project->users()->attach($member->id, ['role' => 'developer']);
+
+        $this->assertTrue(Project::accessibleBy($member)->whereKey($project->id)->exists());
+    }
+
+    public function test_accessible_by_excludes_projects_the_user_has_no_relation_to(): void
+    {
+        $stranger = User::factory()->create();
+        $project = Project::factory()->create();
+
+        $this->assertFalse(Project::accessibleBy($stranger)->whereKey($project->id)->exists());
+    }
+
+    public function test_accessible_by_composes_inside_a_where_has_closure(): void
+    {
+        $member = User::factory()->create();
+        $ownProject = Project::factory()->create();
+        $ownProject->users()->attach($member->id, ['role' => 'developer']);
+        $foreignProject = Project::factory()->create();
+
+        Ticket::factory()->create(['project_id' => $ownProject->id]);
+        Ticket::factory()->create(['project_id' => $foreignProject->id]);
+
+        $visibleProjectIds = Ticket::query()
+            ->whereHas('project', fn ($query) => $query->accessibleBy($member))
+            ->pluck('project_id');
+
+        $this->assertTrue($visibleProjectIds->contains($ownProject->id));
+        $this->assertFalse($visibleProjectIds->contains($foreignProject->id));
+    }
 }

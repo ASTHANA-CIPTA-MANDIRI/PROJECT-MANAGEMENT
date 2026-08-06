@@ -56,11 +56,7 @@ class TicketForm
                 $project = Project::where('id', $get('project_id'))->first();
                 $set('status_id', self::defaultStatusId($project));
             })
-            ->options(fn () => Project::where('owner_id', auth()->user()->id)
-                ->orWhereHas('users', function ($query) {
-                    return $query->where('users.id', auth()->user()->id);
-                })->pluck('name', 'id')->toArray()
-            )
+            ->options(fn () => Project::accessibleBy(auth()->user())->pluck('name', 'id')->toArray())
             ->default(fn () => request()->get('project'))
             ->required();
     }

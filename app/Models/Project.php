@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Casts\Attribute;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
@@ -55,6 +56,18 @@ class Project extends Model implements HasMedia
     public function users(): BelongsToMany
     {
         return $this->belongsToMany(User::class, 'project_users', 'project_id', 'user_id')->withPivot(['role']);
+    }
+
+    /**
+     * Projects the given user owns or is a member of. The single source of
+     * truth for "does this user have access to this project" query logic,
+     * usable standalone (Project::accessibleBy($user)) or nested inside a
+     * whereHas('project', ...) closure on a related model.
+     */
+    public function scopeAccessibleBy(Builder $query, User $user): Builder
+    {
+        return $query->where(fn (Builder $query) => $query->where('owner_id', $user->id)
+            ->orWhereHas('users', fn (Builder $query) => $query->where('users.id', $user->id)));
     }
 
     public function tickets(): HasMany

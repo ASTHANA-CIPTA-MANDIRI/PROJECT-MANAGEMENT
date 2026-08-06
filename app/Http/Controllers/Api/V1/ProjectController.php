@@ -22,10 +22,7 @@ class ProjectController extends ApiController
         $user = $request->user();
 
         $query = Project::query()
-            ->where(function ($q) use ($user) {
-                $q->where('owner_id', $user->id)
-                    ->orWhereHas('users', fn ($u) => $u->where('users.id', $user->id));
-            })
+            ->accessibleBy($user)
             ->with(['owner', 'status'])
             ->withCount('tickets');
 

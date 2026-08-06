@@ -16,12 +16,7 @@ class DataController extends Controller
      */
     public function data(Project $project): JsonResponse
     {
-        $project = Project::where(function ($query) {
-            return $query->where('owner_id', auth()->user()->id)
-                ->orWhereHas('users', function ($query) {
-                    return $query->where('users.id', auth()->user()->id);
-                });
-        })->where('id', $project->id)->first();
+        $project = Project::accessibleBy(auth()->user())->where('id', $project->id)->first();
         if (! $project) {
             return response()->json([]);
         }

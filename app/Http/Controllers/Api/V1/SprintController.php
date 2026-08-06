@@ -24,10 +24,7 @@ class SprintController extends ApiController
         $user = $request->user();
 
         $query = Sprint::query()
-            ->whereHas('project', function ($q) use ($user) {
-                $q->where('owner_id', $user->id)
-                    ->orWhereHas('users', fn ($u) => $u->where('users.id', $user->id));
-            });
+            ->whereHas('project', fn ($q) => $q->accessibleBy($user));
 
         $this->applyFilters($query, $request, ['project_id', 'epic_id']);
         $this->applySorting($query, $request, ['name', 'starts_at', 'ends_at', 'created_at'], 'starts_at');

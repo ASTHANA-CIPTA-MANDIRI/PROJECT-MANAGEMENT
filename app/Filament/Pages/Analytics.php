@@ -67,10 +67,7 @@ class Analytics extends Page
         $user = auth()->user();
 
         return Project::query()
-            ->where(function ($q) use ($user) {
-                $q->where('owner_id', $user->id)
-                    ->orWhereHas('users', fn ($u) => $u->where('users.id', $user->id));
-            })
+            ->accessibleBy($user)
             ->orderBy('name')
             ->pluck('name', 'id');
     }

@@ -41,12 +41,7 @@ class LatestProjects extends BaseWidget
             // extra query per row (N+1).
             ->with(['owner', 'status', 'media'])
             ->limit(5)
-            ->where(function ($query) {
-                return $query->where('owner_id', auth()->user()->id)
-                    ->orWhereHas('users', function ($query) {
-                        return $query->where('users.id', auth()->user()->id);
-                    });
-            })
+            ->accessibleBy(auth()->user())
             ->latest();
     }
 
