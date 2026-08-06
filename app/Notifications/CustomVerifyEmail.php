@@ -20,13 +20,13 @@ class CustomVerifyEmail extends VerifyEmail
         $verificationUrl = $this->verificationUrl($notifiable);
 
         return (new MailMessage)
-            ->subject('Verifikasi Alamat Email Anda')
-            ->greeting('Halo '.$notifiable->name.'!')
-            ->line('Terima kasih telah mendaftar di Rencanakan.')
-            ->line('Untuk menyelesaikan proses pendaftaran dan mulai menggunakan layanan kami, silakan verifikasi email Anda dengan mengklik tombol di bawah ini:')
-            ->action('Verifikasi Email', $verificationUrl)
-            ->line('Jika Anda tidak mendaftar di Rencanakan, abaikan email ini.')
-            ->salutation('Terima kasih, Tim Rencanakan');
+            ->subject(__('Verify Your Email Address'))
+            ->greeting(__('Hello :name!', ['name' => $notifiable->name]))
+            ->line(__('Thank you for registering at Rencanakan.'))
+            ->line(__('To complete your registration and start using our services, please verify your email by clicking the button below:'))
+            ->action(__('Verify Email'), $verificationUrl)
+            ->line(__('If you did not register at Rencanakan, please ignore this email.'))
+            ->salutation(__('Thanks, Rencanakan Team'));
     }
 
     /**

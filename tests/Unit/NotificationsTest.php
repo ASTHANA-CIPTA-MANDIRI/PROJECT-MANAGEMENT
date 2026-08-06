@@ -207,6 +207,23 @@ class NotificationsTest extends TestCase
         $this->assertStringContainsString('Fajar', $mail->greeting);
     }
 
+    public function test_the_verify_email_mail_is_translated_to_the_active_locale(): void
+    {
+        $user = User::factory()->create();
+
+        app()->setLocale('id');
+        $indonesian = (new CustomVerifyEmail)->toMail($user);
+
+        app()->setLocale('en');
+        $english = (new CustomVerifyEmail)->toMail($user);
+
+        // Guards against re-introducing hardcoded Indonesian strings: the
+        // subject must actually follow the active locale instead of always
+        // rendering the same text regardless of app locale.
+        $this->assertSame('Verifikasi Alamat Email Anda', $indonesian->subject);
+        $this->assertSame('Verify Your Email Address', $english->subject);
+    }
+
     public function test_the_user_created_notification_exposes_an_array_representation(): void
     {
         $user = User::create([
