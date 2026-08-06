@@ -150,7 +150,7 @@ return [
                 'filterableAttributes' => ['project_id'],
             ],
             \App\Models\TicketComment::class => [
-                'filterableAttributes' => ['ticket_id'],
+                'filterableAttributes' => ['ticket_id', 'project_id'],
             ],
         ],
     ],

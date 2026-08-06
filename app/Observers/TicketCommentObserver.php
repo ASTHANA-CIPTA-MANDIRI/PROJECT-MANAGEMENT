@@ -13,6 +13,18 @@ use App\Support\Mentions;
  */
 class TicketCommentObserver
 {
+    /**
+     * Denormalize the owning ticket's project_id so SearchService can scope
+     * comment search by project without pulling every ticket id into memory
+     * first (see TicketComment::toSearchableArray).
+     */
+    public function creating(TicketComment $comment): void
+    {
+        if (! $comment->project_id) {
+            $comment->project_id = $comment->ticket->project_id;
+        }
+    }
+
     public function created(TicketComment $comment): void
     {
         // Members named with "@" get the more specific mention notice; the

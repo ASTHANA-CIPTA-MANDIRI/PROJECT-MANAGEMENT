@@ -8,6 +8,7 @@ use App\Models\TicketComment;
 use App\Models\User;
 use App\Services\Search\SearchService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Notification;
 use Laravel\Sanctum\Sanctum;
 use Tests\TestCase;
@@ -90,6 +91,37 @@ class SearchTest extends TestCase
         $results = (new SearchService)->search($user, 'Falcon');
 
         $this->assertCount(0, $results['comments']);
+    }
+
+    public function test_comment_search_scopes_by_project_id_without_plucking_ticket_ids(): void
+    {
+        $user = User::factory()->create();
+        $project = Project::factory()->create(['owner_id' => $user->id]);
+        $ticket = Ticket::factory()->create(['project_id' => $project->id]);
+        TicketComment::factory()->create(['ticket_id' => $ticket->id, 'content' => 'Zephyr note']);
+
+        $ticketPluckQueries = 0;
+        DB::listen(function ($query) use (&$ticketPluckQueries) {
+            if (str_contains($query->sql, 'select "id" from "tickets"')) {
+                $ticketPluckQueries++;
+            }
+        });
+
+        $results = (new SearchService)->search($user, 'Zephyr');
+
+        $this->assertCount(1, $results['comments']);
+        // No more pulling every accessible project's ticket ids into memory.
+        $this->assertSame(0, $ticketPluckQueries);
+    }
+
+    public function test_ticket_comment_denormalizes_project_id_from_its_ticket(): void
+    {
+        $project = Project::factory()->create();
+        $ticket = Ticket::factory()->create(['project_id' => $project->id]);
+
+        $comment = TicketComment::factory()->create(['ticket_id' => $ticket->id]);
+
+        $this->assertSame($project->id, $comment->project_id);
     }
 
     public function test_a_project_member_can_search_the_project(): void

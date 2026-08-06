@@ -30,6 +30,12 @@ class TicketComment extends Model
     /**
      * The data indexed for full-text search (Laravel Scout).
      *
+     * project_id is denormalized onto this table (see the
+     * add_project_id_to_ticket_comments_table migration and
+     * TicketCommentObserver::creating()) so SearchService can scope comment
+     * search directly by project_id instead of first pulling every
+     * accessible project's ticket ids into memory.
+     *
      * @return array<string, mixed>
      */
     public function toSearchableArray(): array
@@ -38,6 +44,7 @@ class TicketComment extends Model
             'id' => $this->id,
             'content' => strip_tags((string) $this->content),
             'ticket_id' => $this->ticket_id,
+            'project_id' => $this->project_id,
         ];
     }
 

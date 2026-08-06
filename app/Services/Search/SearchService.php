@@ -50,15 +50,14 @@ class SearchService
             ->take($limit)
             ->get();
 
-        $ticketIds = Ticket::whereIn('project_id', $projectIds)->pluck('id')->all();
-
-        $comments = $ticketIds === []
-            ? collect()
-            : TicketComment::search($query)
-                ->whereIn('ticket_id', $ticketIds)
-                ->take($limit)
-                ->get()
-                ->load('ticket:id,project_id');
+        // Filtered by project_id directly (denormalized onto the comment's
+        // search index, see TicketComment::toSearchableArray) instead of
+        // first pulling every accessible project's ticket ids into memory.
+        $comments = TicketComment::search($query)
+            ->whereIn('project_id', $projectIds)
+            ->take($limit)
+            ->get()
+            ->load('ticket:id,project_id');
 
         return compact('projects', 'tickets', 'comments');
     }
