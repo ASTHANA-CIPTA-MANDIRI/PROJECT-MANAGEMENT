@@ -16,6 +16,7 @@ use App\Services\Analytics\TimelineForecast;
 use App\Services\Analytics\VelocityReport;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Carbon;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Notification;
 use Tests\TestCase;
 
@@ -91,6 +92,28 @@ class AnalyticsTest extends TestCase
         $this->assertSame(0.0, (new VelocityReport($project))->averageVelocity());
     }
 
+    public function test_velocity_per_sprint_uses_one_query_for_all_sprints_tickets(): void
+    {
+        $project = $this->project();
+        $sprints = Sprint::factory()->count(3)->ended()->create(['project_id' => $project->id]);
+        foreach ($sprints as $sprint) {
+            Ticket::factory()->estimated(5)->create(['project_id' => $project->id, 'sprint_id' => $sprint->id, 'status_id' => $this->done->id]);
+        }
+
+        $ticketQueries = 0;
+        DB::listen(function ($query) use (&$ticketQueries) {
+            if (str_contains($query->sql, 'select * from "tickets"')) {
+                $ticketQueries++;
+            }
+        });
+
+        $rows = (new VelocityReport($project))->perSprint();
+
+        $this->assertCount(3, $rows);
+        // One query for every sprint's tickets, not one per sprint (N+1).
+        $this->assertSame(1, $ticketQueries);
+    }
+
     // ------------------------------------------------------------ burndown
 
     public function test_burndown_starts_at_total_and_burns_to_zero(): void
@@ -122,6 +145,36 @@ class AnalyticsTest extends TestCase
         // Ideal line runs from total to 0.
         $this->assertEqualsWithDelta(10.0, $data['ideal'][0], 0.01);
         $this->assertEqualsWithDelta(0.0, $data['ideal'][4], 0.01);
+    }
+
+    public function test_burndown_uses_one_query_for_all_tickets_activity_history(): void
+    {
+        $this->actingAs(User::factory()->create());
+        $project = $this->project();
+
+        $start = Carbon::parse('2026-03-02');
+        $sprint = Sprint::factory()->create([
+            'project_id' => $project->id,
+            'starts_at' => $start,
+            'ends_at' => $start->copy()->addDays(4),
+        ]);
+
+        $t1 = Ticket::factory()->estimated(4)->create(['project_id' => $project->id, 'sprint_id' => $sprint->id, 'status_id' => $this->todo->id]);
+        $t2 = Ticket::factory()->estimated(6)->create(['project_id' => $project->id, 'sprint_id' => $sprint->id, 'status_id' => $this->todo->id]);
+        $this->completeOn($t1, $start->copy()->addDays(1));
+        $this->completeOn($t2, $start->copy()->addDays(3));
+
+        $activityQueries = 0;
+        DB::listen(function ($query) use (&$activityQueries) {
+            if (str_contains($query->sql, 'select * from "ticket_activities"')) {
+                $activityQueries++;
+            }
+        });
+
+        (new BurndownReport($sprint->fresh()))->data();
+
+        // One query for every ticket's activity history, not one per ticket (N+1).
+        $this->assertSame(1, $activityQueries);
     }
 
     private function completeOn(Ticket $ticket, Carbon $date): void

@@ -30,9 +30,12 @@ class BurndownReport
         $tickets = Ticket::query()->where('sprint_id', $this->sprint->id)->get();
         $total = round((float) $tickets->sum('estimation'), 2);
 
-        // The day each ticket was completed (null if not completed yet).
+        // The day each ticket was completed (null if not completed yet). One
+        // query for every ticket's activity history instead of one per ticket.
+        $completedAtByTicket = $this->completedAtByTicket($tickets);
         $completedAt = $tickets->mapWithKeys(
-            fn (Ticket $t) => [$t->id => $this->completedAt($t)]
+            fn (Ticket $t) => [$t->id => $completedAtByTicket->get($t->id)
+                ?? ($t->status_id === $this->completedStatusId ? $t->updated_at : null)]
         );
 
         $start = $this->sprint->starts_at->copy()->startOfDay();
@@ -68,27 +71,25 @@ class BurndownReport
     }
 
     /**
-     * When a ticket entered the completed status (latest such transition), or
-     * its updated_at if it is currently completed without a recorded activity.
+     * When each ticket entered the completed status (latest such transition
+     * per ticket). Missing keys mean no recorded activity; the caller falls
+     * back to the ticket's updated_at when it is currently completed.
+     *
+     * @param  \Illuminate\Support\Collection<int, Ticket>  $tickets
+     * @return \Illuminate\Support\Collection<int, Carbon>
      */
-    private function completedAt(Ticket $ticket): ?Carbon
+    private function completedAtByTicket($tickets)
     {
         if (! $this->completedStatusId) {
-            return null;
+            return collect();
         }
 
-        $activity = TicketActivity::query()
-            ->where('ticket_id', $ticket->id)
+        return TicketActivity::query()
+            ->whereIn('ticket_id', $tickets->pluck('id'))
             ->where('new_status_id', $this->completedStatusId)
             ->orderByDesc('created_at')
-            ->first();
-
-        if ($activity) {
-            return $activity->created_at;
-        }
-
-        return $ticket->status_id === $this->completedStatusId
-            ? $ticket->updated_at
-            : null;
+            ->get()
+            ->groupBy('ticket_id')
+            ->map(fn ($activities) => $activities->first()->created_at);
     }
 }

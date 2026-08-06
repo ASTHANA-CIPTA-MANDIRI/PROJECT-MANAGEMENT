@@ -28,22 +28,27 @@ class VelocityReport
      */
     public function perSprint(): Collection
     {
-        return $this->project->sprints()
-            ->orderBy('starts_at')
-            ->get()
-            ->map(function (Sprint $sprint) {
-                $tickets = Ticket::query()->where('sprint_id', $sprint->id)->get();
-                $completed = $tickets->where('status_id', $this->completedStatusId);
+        $sprints = $this->project->sprints()->orderBy('starts_at')->get();
 
-                return [
-                    'sprint_id' => $sprint->id,
-                    'sprint_name' => $sprint->name,
-                    'committed_points' => round((float) $tickets->sum('estimation'), 2),
-                    'completed_points' => round((float) $completed->sum('estimation'), 2),
-                    'completed_count' => $completed->count(),
-                    'is_closed' => (bool) $sprint->ended_at,
-                ];
-            });
+        // One query for every sprint's tickets instead of one query per sprint.
+        $ticketsBySprint = Ticket::query()
+            ->whereIn('sprint_id', $sprints->pluck('id'))
+            ->get()
+            ->groupBy('sprint_id');
+
+        return $sprints->map(function (Sprint $sprint) use ($ticketsBySprint) {
+            $tickets = $ticketsBySprint->get($sprint->id, collect());
+            $completed = $tickets->where('status_id', $this->completedStatusId);
+
+            return [
+                'sprint_id' => $sprint->id,
+                'sprint_name' => $sprint->name,
+                'committed_points' => round((float) $tickets->sum('estimation'), 2),
+                'completed_points' => round((float) $completed->sum('estimation'), 2),
+                'completed_count' => $completed->count(),
+                'is_closed' => (bool) $sprint->ended_at,
+            ];
+        });
     }
 
     /**
