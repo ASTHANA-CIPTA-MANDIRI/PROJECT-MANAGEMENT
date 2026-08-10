@@ -8,6 +8,7 @@ use App\Models\Ticket;
 use App\Models\TicketStatus;
 use Filament\Facades\Filament;
 use Illuminate\Contracts\Support\Htmlable;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\HtmlString;
@@ -71,7 +72,12 @@ trait KanbanScrumHelper
         return BoardFilterForm::schema();
     }
 
-    public function getStatuses(): Collection
+    /**
+     * The statuses that make up the columns of the board being viewed: the
+     * project's own set when it configures custom statuses, the shared global
+     * set otherwise.
+     */
+    protected function statusesQuery(): Builder
     {
         $query = TicketStatus::query();
         if ($this->project && $this->project->status_type === 'custom') {
@@ -80,7 +86,12 @@ trait KanbanScrumHelper
             $query->whereNull('project_id');
         }
 
-        $statuses = $query->orderBy('order')->get();
+        return $query;
+    }
+
+    public function getStatuses(): Collection
+    {
+        $statuses = $this->statusesQuery()->orderBy('order')->get();
 
         // One grouped COUNT instead of one query per status.
         $ticketCounts = Ticket::query()
@@ -151,19 +162,53 @@ trait KanbanScrumHelper
             ]);
     }
 
+    /**
+     * Resolve a ticket the current user is really allowed to drag on this
+     * board.
+     *
+     * $record comes straight from the browser, so the lookup is scoped to the
+     * cards this board actually shows - the project's tickets, and on a scrum
+     * board only those in the current sprint (see getRecords()) - before the
+     * ticket policy has the final say.
+     */
+    protected function authorizedBoardTicket(int $record): ?Ticket
+    {
+        if (! $this->project) {
+            return null;
+        }
+
+        $ticket = $this->project->tickets()
+            ->when(
+                $this->project->type === 'scrum',
+                fn ($query) => $query->where('sprint_id', $this->project->currentSprint?->id)
+            )
+            ->whereKey($record)
+            ->first();
+
+        return $ticket && auth()->user()->can('update', $ticket) ? $ticket : null;
+    }
+
     public function recordUpdated(int $record, int $newIndex, int $newStatus): void
     {
-        $ticket = Ticket::find($record);
-        if ($ticket) {
-            // Atomic: the ticket update and the status-change activity it
-            // triggers (Ticket::updating) commit together.
-            DB::transaction(function () use ($ticket, $newIndex, $newStatus) {
-                $ticket->order = $newIndex;
-                $ticket->status_id = $newStatus;
-                $ticket->save();
-            });
-            Filament::notify('success', __('Ticket updated'));
+        $ticket = $this->authorizedBoardTicket($record);
+
+        // The target column has to be one of this board's own statuses too,
+        // otherwise a tampered event could park a ticket on a status it can
+        // never be shown in again.
+        if (! $ticket || ! $this->statusesQuery()->whereKey($newStatus)->exists()) {
+            Filament::notify('danger', __('You are not allowed to move this ticket'));
+
+            return;
         }
+
+        // Atomic: the ticket update and the status-change activity it
+        // triggers (Ticket::updating) commit together.
+        DB::transaction(function () use ($ticket, $newIndex, $newStatus) {
+            $ticket->order = $newIndex;
+            $ticket->status_id = $newStatus;
+            $ticket->save();
+        });
+        Filament::notify('success', __('Ticket updated'));
     }
 
     public function isMultiProject(): bool
