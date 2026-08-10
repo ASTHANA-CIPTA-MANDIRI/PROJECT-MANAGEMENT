@@ -193,4 +193,26 @@ class CustomPagesTest extends TestCase
 
         Livewire::test(Board::class)->assertSuccessful();
     }
+
+    public function test_the_board_redirects_to_the_chosen_project(): void
+    {
+        $project = $this->scrumProject();
+
+        Livewire::test(Board::class)
+            ->set('project', $project->id)
+            ->assertRedirect(route('filament.pages.scrum/{project}', ['project' => $project]));
+    }
+
+    /**
+     * The selected id arrives from the browser: a project the user cannot reach
+     * must not be resolved, even though it never appears in the select.
+     */
+    public function test_the_board_refuses_a_project_the_user_cannot_access(): void
+    {
+        $foreign = Project::factory()->create();
+
+        Livewire::test(Board::class)
+            ->set('project', $foreign->id)
+            ->assertNoRedirect();
+    }
 }

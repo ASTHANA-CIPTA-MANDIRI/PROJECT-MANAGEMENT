@@ -3,6 +3,7 @@
 namespace App\Filament\Pages;
 
 use App\Models\Project;
+use Filament\Facades\Filament;
 use Filament\Forms\Components\Card;
 use Filament\Forms\Components\Grid;
 use Filament\Forms\Components\Select;
@@ -70,7 +71,17 @@ class Board extends AuthorizedPage implements HasForms
     public function search(): void
     {
         $data = $this->form->getState();
-        $project = Project::find($data['project']);
+
+        // The select only offers accessible projects, but the id arrives from
+        // the browser: re-scope it instead of trusting the payload.
+        $project = Project::accessibleBy(auth()->user())->find($data['project']);
+
+        if (! $project) {
+            Filament::notify('danger', __('This project is not available'));
+
+            return;
+        }
+
         if ($project->type === 'scrum') {
             $this->redirect(route('filament.pages.scrum/{project}', ['project' => $project]));
         } else {
