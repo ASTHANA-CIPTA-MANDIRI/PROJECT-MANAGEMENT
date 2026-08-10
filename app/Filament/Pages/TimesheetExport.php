@@ -9,13 +9,15 @@ use Filament\Forms\Components\DatePicker;
 use Filament\Forms\Components\Grid;
 use Filament\Forms\Concerns\InteractsWithForms;
 use Filament\Forms\Contracts\HasForms;
-use Filament\Pages\Page;
 use Maatwebsite\Excel\Facades\Excel;
 use Symfony\Component\HttpFoundation\BinaryFileResponse;
 
-class TimesheetExport extends Page implements HasForms
+class TimesheetExport extends AuthorizedPage implements HasForms
 {
     use InteractsWithForms;
+
+    /** Same permission as the timesheet list this page dumps to CSV. */
+    protected static ?string $permission = 'List timesheet data';
 
     protected static ?string $slug = 'timesheet-export';
 

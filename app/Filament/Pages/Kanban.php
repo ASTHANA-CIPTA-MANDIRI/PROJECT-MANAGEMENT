@@ -8,10 +8,13 @@ use Filament\Facades\Filament;
 use Filament\Forms\Concerns\InteractsWithForms;
 use Filament\Forms\Contracts\HasForms;
 use Filament\Pages\Actions\Action;
-use Filament\Pages\Page;
 use Illuminate\Contracts\Support\Htmlable;
 
-class Kanban extends Page implements HasForms
+/**
+ * No page permission: access is decided per project in `mount()` (owner or
+ * member only).
+ */
+class Kanban extends AuthorizedPage implements HasForms
 {
     use InteractsWithForms, KanbanScrumHelper;
 

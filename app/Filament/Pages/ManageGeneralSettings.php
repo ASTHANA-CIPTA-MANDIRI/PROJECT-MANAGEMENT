@@ -2,6 +2,7 @@
 
 namespace App\Filament\Pages;
 
+use App\Filament\Pages\Concerns\AuthorizesPageAccess;
 use App\Models\Role;
 use App\Models\User;
 use App\Settings\GeneralSettings;
@@ -16,17 +17,27 @@ use Filament\Pages\Actions\Action;
 use Filament\Pages\SettingsPage;
 use Illuminate\Contracts\Support\Htmlable;
 use Illuminate\Support\HtmlString;
+use Illuminate\Validation\ValidationException;
 
 class ManageGeneralSettings extends SettingsPage
 {
+    // SettingsPage is not a Filament\Pages\Page subclass we own, so the shared
+    // concern is applied directly instead of extending AuthorizedPage.
+    use AuthorizesPageAccess;
+
+    /**
+     * Repointing the Super Admin role decides who User::isSuperAdmin() treats
+     * as the main administrator, so it is gated behind its own permission: a
+     * plain settings manager must not be able to promote a role they already
+     * hold.
+     */
+    public const SUPER_ADMIN_PERMISSION = 'Manage super admin settings';
+
+    protected static ?string $permission = 'Manage general settings';
+
     protected static ?string $navigationIcon = 'heroicon-o-cog';
 
     protected static string $settings = GeneralSettings::class;
-
-    protected static function shouldRegisterNavigation(): bool
-    {
-        return auth()->user()->can('Manage general settings');
-    }
 
     protected function getHeading(): string|Htmlable
     {
@@ -96,11 +107,16 @@ class ManageGeneralSettings extends SettingsPage
                                         ->searchable()
                                         ->reactive()
                                         ->rules(['nullable', 'exists:roles,id'])
+                                        ->visible(fn () => static::userCanManageSuperAdminRole())
                                         ->options(Role::all()->pluck('name', 'id')->toArray()),
 
                                     Placeholder::make('super_admin_status')
                                         ->label(__('Super Admin summary'))
-                                        ->content(fn (callable $get) => $this->superAdminSummary($get('super_admin_role'))),
+                                        ->content(fn (callable $get) => $this->superAdminSummary(
+                                            static::userCanManageSuperAdminRole()
+                                                ? $get('super_admin_role')
+                                                : app(GeneralSettings::class)->super_admin_role
+                                        )),
                                 ]),
                         ]),
                 ]),
@@ -110,6 +126,36 @@ class ManageGeneralSettings extends SettingsPage
     protected function getSaveFormAction(): Action
     {
         return parent::getSaveFormAction()->label(__('Save'));
+    }
+
+    public static function userCanManageSuperAdminRole(): bool
+    {
+        return (bool) auth()->user()?->can(self::SUPER_ADMIN_PERMISSION);
+    }
+
+    /**
+     * Last line of defence for the two privilege-escalation paths this form
+     * exposes. A crafted Livewire payload that smuggles `super_admin_role` into
+     * the form state is overwritten with the stored value, and the default role
+     * — handed to every new registrant — may not be pointed at the Super Admin
+     * role, which would otherwise turn "enable registration" into a self-service
+     * admin account.
+     */
+    protected function mutateFormDataBeforeSave(array $data): array
+    {
+        if (static::userCanManageSuperAdminRole()) {
+            return $data;
+        }
+
+        $data['super_admin_role'] = app(GeneralSettings::class)->super_admin_role;
+
+        if (filled($data['default_role'] ?? null) && Role::find($data['default_role'])?->isSuperAdminRole()) {
+            throw ValidationException::withMessages([
+                'data.default_role' => __('You are not allowed to make the Super Admin role the default role.'),
+            ]);
+        }
+
+        return $data;
     }
 
     private function getLanguages(): array

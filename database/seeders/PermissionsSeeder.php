@@ -26,7 +26,8 @@ class PermissionsSeeder extends Seeder
     ];
 
     private array $extraPermissions = [
-        'Manage general settings', 'Import from Jira',
+        'Manage general settings', 'Manage super admin settings',
+        'Import from Jira',
         'List timesheet data', 'View timesheet dashboard',
         'View analytics',
     ];

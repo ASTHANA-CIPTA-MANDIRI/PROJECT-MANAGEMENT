@@ -7,15 +7,16 @@ use App\Services\Analytics\BurndownReport;
 use App\Services\Analytics\ResourceUtilizationReport;
 use App\Services\Analytics\TimelineForecast;
 use App\Services\Analytics\VelocityReport;
-use Filament\Pages\Page;
 use Illuminate\Support\Collection;
 
 /**
  * Advanced reporting: team velocity, sprint burn-down, resource utilization and
  * a timeline forecast for a selected project.
  */
-class Analytics extends Page
+class Analytics extends AuthorizedPage
 {
+    protected static ?string $permission = 'View analytics';
+
     protected static ?string $navigationIcon = 'heroicon-o-chart-square-bar';
 
     protected static ?string $slug = 'analytics';
@@ -40,15 +41,8 @@ class Analytics extends Page
         return __('Management');
     }
 
-    protected static function shouldRegisterNavigation(): bool
-    {
-        return auth()->user()->can('View analytics');
-    }
-
     public function mount(): void
     {
-        abort_unless(auth()->user()->can('View analytics'), 403);
-
         $this->projectId = $this->accessibleProjects()->keys()->first();
         $this->sprintId = $this->sprintOptions()->keys()->last();
     }

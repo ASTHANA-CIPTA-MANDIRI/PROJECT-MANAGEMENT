@@ -8,10 +8,13 @@ use Filament\Forms\Components\Grid;
 use Filament\Forms\Components\Select;
 use Filament\Forms\Concerns\InteractsWithForms;
 use Filament\Forms\Contracts\HasForms;
-use Filament\Pages\Page;
 use Illuminate\Contracts\Support\Htmlable;
 
-class Board extends Page implements HasForms
+/**
+ * No page permission: the project picker only ever offers projects the user
+ * owns or belongs to (`Project::accessibleBy`).
+ */
+class Board extends AuthorizedPage implements HasForms
 {
     use InteractsWithForms;
 

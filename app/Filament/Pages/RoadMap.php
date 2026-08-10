@@ -8,10 +8,13 @@ use Carbon\Carbon;
 use Filament\Forms\Components\Select;
 use Filament\Forms\Concerns\InteractsWithForms;
 use Filament\Forms\Contracts\HasForms;
-use Filament\Pages\Page;
 use Illuminate\Database\Eloquent\Builder;
 
-class RoadMap extends Page implements HasForms
+/**
+ * No page permission: every query is scoped to projects the user can access
+ * (`projectQuery()`).
+ */
+class RoadMap extends AuthorizedPage implements HasForms
 {
     use InteractsWithForms;
 

@@ -7,13 +7,14 @@ use App\Jobs\ImportJiraTicketsJob;
 use App\Services\JiraImportService;
 use Filament\Forms\Concerns\InteractsWithForms;
 use Filament\Forms\Contracts\HasForms;
-use Filament\Pages\Page;
 use Illuminate\Contracts\Support\Htmlable;
 use Illuminate\Support\Str;
 
-class JiraImport extends Page implements HasForms
+class JiraImport extends AuthorizedPage implements HasForms
 {
     use InteractsWithForms;
+
+    protected static ?string $permission = 'Import from Jira';
 
     protected static ?string $navigationIcon = 'heroicon-o-cloud-download';
 
@@ -53,11 +54,6 @@ class JiraImport extends Page implements HasForms
     public function mount(): void
     {
         $this->form->fill();
-    }
-
-    protected static function shouldRegisterNavigation(): bool
-    {
-        return auth()->user()->can('Import from Jira');
     }
 
     protected function getSubheading(): string|Htmlable|null

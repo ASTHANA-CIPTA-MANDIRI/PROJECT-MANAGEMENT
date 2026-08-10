@@ -180,6 +180,7 @@
     "Y-m-d g:i A": "Y-m-d g:i A",
     "You are not allowed to delete this comment": "Anda tidak diizinkan menghapus komentar ini",
     "You are not allowed to edit this comment": "Anda tidak diizinkan mengubah komentar ini",
+    "You are not allowed to make the Super Admin role the default role.": "Anda tidak diizinkan menjadikan peran Super Admin sebagai peran default.",
     "You are not allowed to move this ticket": "Anda tidak diizinkan memindahkan tiket ini",
     "You have a pending email verification for :email.": "Anda memiliki verifikasi email yang tertunda untuk :email.",
     "You subscribed to the ticket": "Anda berlangganan Tugas",
