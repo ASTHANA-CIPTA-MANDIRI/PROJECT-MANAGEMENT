@@ -112,6 +112,11 @@ class ManageGeneralSettings extends SettingsPage
 
                                     Placeholder::make('super_admin_status')
                                         ->label(__('Super Admin summary'))
+                                        // Without the dedicated permission the select above is hidden,
+                                        // so say why rather than making the setting look missing.
+                                        ->helperText(fn () => static::userCanManageSuperAdminRole()
+                                            ? null
+                                            : __('Changing which role counts as Super Admin requires the “:permission” permission.', ['permission' => self::SUPER_ADMIN_PERMISSION]))
                                         ->content(fn (callable $get) => $this->superAdminSummary(
                                             static::userCanManageSuperAdminRole()
                                                 ? $get('super_admin_role')

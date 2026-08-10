@@ -181,7 +181,9 @@ class CustomPageAuthorizationTest extends TestCase
 
         Livewire::test(ManageGeneralSettings::class)
             ->assertSuccessful()
-            ->assertDontSee('Super Admin role');
+            ->assertDontSee('Super Admin role')
+            // ...but the page says why, so the setting does not just look missing.
+            ->assertSee(ManageGeneralSettings::SUPER_ADMIN_PERMISSION);
     }
 
     public function test_a_super_admin_settings_manager_can_repoint_the_role(): void
