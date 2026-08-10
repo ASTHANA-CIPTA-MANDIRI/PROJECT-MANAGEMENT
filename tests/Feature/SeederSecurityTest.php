@@ -7,6 +7,7 @@ use App\Models\Permission;
 use App\Models\Role;
 use App\Models\User;
 use App\Settings\GeneralSettings;
+use Database\Seeders\DatabaseSeeder;
 use Database\Seeders\DefaultUserSeeder;
 use Database\Seeders\EmployeeRoleSeeder;
 use Database\Seeders\PermissionsSeeder;
@@ -89,5 +90,70 @@ class SeederSecurityTest extends TestCase
         $admin = User::where('email', 'admin@example.com')->first();
 
         $this->assertFalse(Hash::check('123', $admin->password), 'admin must not keep the old weak password');
+    }
+
+    public function test_the_full_seed_runs_and_gives_each_seeded_account_its_role(): void
+    {
+        $this->seed(DatabaseSeeder::class);
+
+        $admin = User::where('email', 'admin@example.com')->first();
+        $worker = User::where('email', 'user@example.com')->first();
+
+        $this->assertTrue($admin->hasRole('Super Admin'));
+        $this->assertTrue($worker->hasRole('Employee'));
+
+        // The demo worker must never outrank the admin, nor take the
+        // User::first() slot PermissionsSeeder uses to bootstrap Super Admin.
+        $this->assertFalse($worker->hasRole('Super Admin'));
+        $this->assertTrue($admin->is(User::first()));
+    }
+
+    public function test_the_seeded_worker_falls_back_to_a_generated_password(): void
+    {
+        // This is about the seeder's own fallback, so ignore whatever the
+        // developer happens to have pinned in their .env.
+        $pinned = getenv('SEED_USER_PASSWORD');
+        putenv('SEED_USER_PASSWORD');
+        unset($_ENV['SEED_USER_PASSWORD'], $_SERVER['SEED_USER_PASSWORD']);
+
+        try {
+            $this->seed(DatabaseSeeder::class);
+
+            $worker = User::where('email', 'user@example.com')->first();
+
+            $this->assertFalse(Hash::check('password123', $worker->password), 'no hard-coded default may ship');
+            $this->assertFalse(Hash::check('123', $worker->password));
+            $this->assertFalse(Hash::check('password', $worker->password));
+        } finally {
+            if ($pinned !== false) {
+                putenv("SEED_USER_PASSWORD={$pinned}");
+                $_ENV['SEED_USER_PASSWORD'] = $pinned;
+                $_SERVER['SEED_USER_PASSWORD'] = $pinned;
+            }
+        }
+    }
+
+    public function test_the_demo_worker_is_not_seeded_in_production(): void
+    {
+        app()->detectEnvironment(fn () => 'production');
+
+        // Called directly: db:seed asks for confirmation in production.
+        app(DefaultUserSeeder::class)->run();
+
+        $this->assertNull(User::where('email', 'user@example.com')->first());
+        $this->assertNotNull(User::where('email', 'admin@example.com')->first());
+    }
+
+    public function test_re_seeding_keeps_a_role_an_admin_changed_by_hand(): void
+    {
+        $this->seed(DatabaseSeeder::class);
+
+        $worker = User::where('email', 'user@example.com')->first();
+        $worker->syncRoles([]);
+
+        $this->seed(DefaultUserSeeder::class);
+
+        $this->assertCount(0, $worker->fresh()->roles, 'a re-seed must not re-grant a revoked role');
+        $this->assertSame(1, User::where('email', 'user@example.com')->count());
     }
 }
