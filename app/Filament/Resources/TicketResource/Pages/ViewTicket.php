@@ -168,14 +168,46 @@ class ViewTicket extends ViewRecord implements HasForms
         ];
     }
 
+    /**
+     * Resolve a comment the current user is really allowed to edit or delete.
+     *
+     * Both $commentId and $selectedCommentId arrive from the client, so the
+     * lookup is scoped to the ticket being viewed and then matched against the
+     * same rule the view uses to show the Edit/Delete buttons.
+     */
+    protected function authorizedComment(?int $commentId): ?TicketComment
+    {
+        if (! $commentId) {
+            return null;
+        }
+
+        $comment = $this->record->comments()->whereKey($commentId)->first();
+
+        if (! $comment) {
+            return null;
+        }
+
+        return $comment->user_id === auth()->user()->id || $this->isAdministrator()
+            ? $comment
+            : null;
+    }
+
     public function submitComment(): void
     {
         $data = $this->form->getState();
         if ($this->selectedCommentId) {
-            TicketComment::where('id', $this->selectedCommentId)
-                ->update([
-                    'content' => $data['comment'],
-                ]);
+            if (! $comment = $this->authorizedComment($this->selectedCommentId)) {
+                $this->cancelEditComment();
+                $this->notify('danger', __('You are not allowed to edit this comment'));
+
+                return;
+            }
+
+            // Saved on the model instance (not the query builder) so the
+            // content mutator - and with it HtmlSanitizer - still runs.
+            $comment->update([
+                'content' => $data['comment'],
+            ]);
         } else {
             TicketComment::create([
                 'user_id' => auth()->user()->id,
@@ -200,7 +232,13 @@ class ViewTicket extends ViewRecord implements HasForms
 
     public function editComment(int $commentId): void
     {
-        $content = $this->record->comments->where('id', $commentId)->first()?->content;
+        if (! $comment = $this->authorizedComment($commentId)) {
+            $this->notify('danger', __('You are not allowed to edit this comment'));
+
+            return;
+        }
+
+        $content = $comment->content;
 
         $this->form->fill([
             // Drop the hidden "#id" mention marker so it never shows up as
@@ -233,7 +271,13 @@ class ViewTicket extends ViewRecord implements HasForms
 
     public function doDeleteComment(int $commentId): void
     {
-        TicketComment::where('id', $commentId)->delete();
+        if (! $comment = $this->authorizedComment($commentId)) {
+            $this->notify('danger', __('You are not allowed to delete this comment'));
+
+            return;
+        }
+
+        $comment->delete();
         $this->record->refresh();
         $this->notify('success', __('Comment deleted'));
     }

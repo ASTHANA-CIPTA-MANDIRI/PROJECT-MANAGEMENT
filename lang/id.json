@@ -178,6 +178,8 @@
     "View ticket": "Lihat Tugas",
     "Welcome to :app platform.": "Selamat datang di platform :app.",
     "Y-m-d g:i A": "Y-m-d g:i A",
+    "You are not allowed to delete this comment": "Anda tidak diizinkan menghapus komentar ini",
+    "You are not allowed to edit this comment": "Anda tidak diizinkan mengubah komentar ini",
     "You have a pending email verification for :email.": "Anda memiliki verifikasi email yang tertunda untuk :email.",
     "You subscribed to the ticket": "Anda berlangganan Tugas",
     "You unsubscribed from the ticket": "Anda berhenti berlangganan Tugas",
