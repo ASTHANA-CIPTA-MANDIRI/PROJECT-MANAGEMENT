@@ -68,6 +68,10 @@ FROM base AS app
 
 COPY . .
 COPY --from=vendor /app/vendor ./vendor
+# The package manifest composer's post-autoload-dump hook already produced.
+# Laravel would rebuild it lazily on first use, but that would race between
+# the FPM workers and the queue worker on a cold start.
+COPY --from=vendor /app/bootstrap/cache ./bootstrap/cache
 COPY --from=assets /app/public/build ./public/build
 
 # .env only supplies defaults; real configuration is injected as environment
@@ -79,11 +83,19 @@ COPY --from=assets /app/public/build ./public/build
 #     image is a key every installation shares, and whoever pulls the image
 #     can forge session cookies and signed URLs on any instance that never
 #     replaced it. APP_KEY is required at runtime instead — see run.sh.
-#   * .env.example's local defaults are not kept. This image is published
-#     publicly, so it must not default to APP_DEBUG=true, which would render
+#   * .env.example's local defaults are not kept. An image gets copied and
+#     shared, so it must not default to APP_DEBUG=true, which would render
 #     stack traces containing configuration values to anonymous visitors.
+#
+# LOG_CHANNEL is switched to stderr as well: the default `daily` writes log
+# files inside the container, where they are invisible to `docker logs` and
+# lost when it is recreated.
 RUN cp .env.example .env && \
-    sed -i 's/^APP_ENV=.*/APP_ENV=production/; s/^APP_DEBUG=.*/APP_DEBUG=false/' .env
+    sed -i \
+        -e 's/^APP_ENV=.*/APP_ENV=production/' \
+        -e 's/^APP_DEBUG=.*/APP_DEBUG=false/' \
+        -e 's/^LOG_CHANNEL=.*/LOG_CHANNEL=stderr/' \
+        .env
 
 COPY docker/nginx.conf /etc/nginx/nginx.conf
 COPY docker/php-fpm.conf /etc/php/8.2/fpm/php-fpm-docker.conf
@@ -106,5 +118,11 @@ RUN mkdir -p \
 USER www-data
 
 EXPOSE 8000
+
+# Checks that nginx is accepting connections, which is what fails if supervisor
+# cannot start a process. It deliberately does not request a page: that would
+# make container health depend on the database being reachable.
+HEALTHCHECK --interval=30s --timeout=5s --start-period=60s --retries=3 \
+    CMD php -r 'exit(@fsockopen("127.0.0.1", 8000) ? 0 : 1);'
 
 CMD ["bash", "./run.sh"]

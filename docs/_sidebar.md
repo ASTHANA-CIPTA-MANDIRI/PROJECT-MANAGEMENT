@@ -15,8 +15,10 @@
   - [Tickets configuration](/customization?id=tickets-configuration)
   - [Social authentication](/customization?id=social-authentication)
 - [Docker](/docker?id=docker)
-    - [Build image locally](/docker?id=build-image-locally)
-    - [Use the Docker hub image](/docker?id=use-the-docker-hub-image)
+    - [Build and run the image](/docker?id=build-and-run-the-image)
+    - [Configuration](/docker?id=configuration)
+    - [Seeding a fresh installation](/docker?id=seeding-a-fresh-installation)
+    - [What runs inside the container](/docker?id=what-runs-inside-the-container)
 - **Architecture & reference**
 - [Architecture (C4)](/architecture?id=architecture)
     - [System Context](/architecture?id=level-1-—-system-context)

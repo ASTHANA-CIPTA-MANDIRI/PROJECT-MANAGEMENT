@@ -1,0 +1,166 @@
+name: Docker image
+
+# Builds the image and exercises it. Nothing is published anywhere: this
+# repository releases over SSH (see deploy-staging.yml / deploy-production.yml),
+# and the workflow that used to push to Docker Hub was removed because it
+# shipped a build-time APP_KEY and the repository's .git history inside a
+# public image.
+#
+# The point of this workflow is that Dockerfile bugs surface here rather than
+# on someone's machine: the assertions below are the ones that need a built
+# image and therefore cannot live in the PHP test suite.
+
+on:
+  push:
+    branches: [ main ]
+    paths:
+      - 'Dockerfile'
+      - '.dockerignore'
+      - 'run.sh'
+      - 'docker/**'
+      - 'composer.json'
+      - 'composer.lock'
+      - 'package.json'
+      - 'package-lock.json'
+      - '.github/workflows/docker-build.yml'
+  pull_request:
+    paths:
+      - 'Dockerfile'
+      - '.dockerignore'
+      - 'run.sh'
+      - 'docker/**'
+      - 'composer.json'
+      - 'composer.lock'
+      - 'package.json'
+      - 'package-lock.json'
+      - '.github/workflows/docker-build.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: docker-build-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    name: Build and smoke-test the image
+    runs-on: ubuntu-latest
+
+    steps:
+      # Third-party actions are pinned to a commit SHA, not a tag: a tag can be
+      # moved to point at different code after review.
+      - name: Check out the repository
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+
+      - name: Set up Buildx
+        uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f # v3
+
+      - name: Build the image
+        uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8 # v6
+        with:
+          context: .
+          push: false
+          load: true
+          tags: helper:ci
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: nginx configuration is valid
+        run: docker run --rm helper:ci nginx -t -c /etc/nginx/nginx.conf
+
+      - name: PHP-FPM configuration is valid
+        run: docker run --rm helper:ci php-fpm8.2 -t -y /etc/php/8.2/fpm/php-fpm-docker.conf
+
+      - name: Laravel boots inside the image
+        run: docker run --rm helper:ci php artisan --version
+
+      - name: The front-end assets were built into the image
+        run: docker run --rm helper:ci test -f public/build/manifest.json
+
+      - name: The image does not run as root
+        run: |
+          user="$(docker run --rm helper:ci id -un)"
+          if [ "$user" != "www-data" ]; then
+            echo "::error::the container runs as ${user}, expected www-data"
+            exit 1
+          fi
+
+      - name: The image carries no application key
+        run: |
+          key="$(docker run --rm helper:ci sh -c 'grep "^APP_KEY=" .env || true')"
+          if [ "$key" != "APP_KEY=" ]; then
+            echo "::error::the image ships an APP_KEY (${key}); it must be injected at runtime"
+            exit 1
+          fi
+
+      - name: The image carries no repository history and no host .env
+        run: |
+          for path in .git .github .env.bak node_modules tests; do
+            if docker run --rm helper:ci test -e "$path"; then
+              echo "::error::${path} was copied into the image"
+              exit 1
+            fi
+          done
+
+      - name: The image is not in debug mode
+        run: |
+          docker run --rm helper:ci sh -c 'grep -q "^APP_DEBUG=false" .env && grep -q "^APP_ENV=production" .env'
+
+      - name: The entrypoint refuses to start without an application key
+        run: |
+          if docker run --rm helper:ci bash ./run.sh > entrypoint.log 2>&1; then
+            echo "::error::the entrypoint started without an APP_KEY"
+            cat entrypoint.log
+            exit 1
+          fi
+          grep -q "APP_KEY is not set" entrypoint.log
+
+      - name: It serves requests end to end
+        run: |
+          docker network create helper-ci
+
+          docker run -d --name helper-db --network helper-ci \
+            -e MYSQL_DATABASE=helper \
+            -e MYSQL_USER=helper \
+            -e MYSQL_PASSWORD=helper \
+            -e MYSQL_ROOT_PASSWORD=helper \
+            mysql:5.7 --default-storage-engine innodb
+
+          docker run -d --name helper-app --network helper-ci -p 8000:8000 \
+            -e APP_KEY="base64:$(openssl rand -base64 32)" \
+            -e DB_CONNECTION=mysql \
+            -e DB_HOST=helper-db \
+            -e DB_DATABASE=helper \
+            -e DB_USERNAME=helper \
+            -e DB_PASSWORD=helper \
+            helper:ci
+
+          # run.sh retries the migration for up to a minute while MySQL starts.
+          for attempt in $(seq 1 60); do
+            status="$(curl -s -o /dev/null -w '%{http_code}' http://127.0.0.1:8000/ || true)"
+            if [ "$status" != "000" ]; then
+              echo "HTTP ${status} after ${attempt} attempt(s)"
+              break
+            fi
+            sleep 3
+          done
+
+          if [ "${status:-000}" = "000" ]; then
+            echo "::error::the application never answered on port 8000"
+            docker logs helper-app
+            exit 1
+          fi
+
+          # Any HTTP status proves nginx -> PHP-FPM -> Laravel is wired up; 5xx
+          # means it is wired up and broken.
+          if [ "$status" -ge 500 ]; then
+            echo "::error::the application answered HTTP ${status}"
+            docker logs helper-app
+            exit 1
+          fi
+
+      - name: Container logs
+        if: always()
+        run: docker logs helper-app || true

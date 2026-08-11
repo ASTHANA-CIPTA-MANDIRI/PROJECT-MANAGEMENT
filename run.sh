@@ -47,6 +47,12 @@ done
 #
 #     docker compose exec <service> php artisan db:seed
 
-php artisan optimize:clear
+# Only caches that live inside this container are cleared. `optimize:clear`
+# would be wrong here: it also runs `cache:clear`, which empties the
+# application cache store — shared between every container when CACHE_DRIVER
+# is redis or database, so restarting one instance would wipe it for all of
+# them, and an unreachable store would abort this script outright.
+php artisan config:clear
+php artisan view:clear
 
 exec /usr/bin/supervisord -c /etc/supervisor/supervisord.conf

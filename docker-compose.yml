@@ -2,6 +2,11 @@ version: "3.3"
 
 volumes:
   mysql_data:
+  # Uploaded files (spatie/laravel-medialibrary stores them under
+  # storage/app/media). Without this they live only in the container's writable
+  # layer and are lost the moment it is recreated — including on every
+  # `docker compose up --build`.
+  storage_data:
 
 services:
   sqldb:
@@ -53,8 +58,11 @@ services:
       - MAIL_ENCRYPTION=tls
     depends_on:
       - sqldb
-    restart: "no"
+    # The entrypoint retries the migration while MySQL starts, but the
+    # container should also come back on its own after a crash or a reboot.
+    restart: unless-stopped
     ports:
       - 8000:8000
     volumes:
+      - storage_data:/app/storage/app
       - /etc/localtime:/etc/localtime

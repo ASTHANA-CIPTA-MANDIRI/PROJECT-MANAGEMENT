@@ -77,27 +77,36 @@ class DockerImageHardeningTest extends TestCase
 
     public function test_the_entrypoint_does_not_serve_with_the_php_dev_server(): void
     {
-        $runScript = $this->file('run.sh');
-
         $this->assertStringNotContainsString(
             'artisan serve',
-            $runScript,
+            $this->instructions('run.sh'),
             'artisan serve is PHP\'s single-threaded development server.'
         );
-        $this->assertStringContainsString('supervisord', $runScript);
+        $this->assertStringContainsString('supervisord', $this->file('run.sh'));
     }
 
     public function test_the_image_builds_the_front_end_assets(): void
     {
         // Building at run time meant the published image shipped without any
         // compiled assets at all.
-        $this->assertStringContainsString('npm run build', $this->file('Dockerfile'));
-        $this->assertStringNotContainsString('npm run build', $this->file('run.sh'));
+        $this->assertStringContainsString('npm run build', $this->instructions('Dockerfile'));
+        $this->assertStringNotContainsString('npm run build', $this->instructions('run.sh'));
     }
 
     public function test_the_container_does_not_run_as_root(): void
     {
         $this->assertStringContainsString('USER www-data', $this->file('Dockerfile'));
+    }
+
+    public function test_the_entrypoint_does_not_flush_the_shared_cache_store(): void
+    {
+        // optimize:clear includes cache:clear. With CACHE_DRIVER=redis or
+        // database that store is shared, so restarting one container would
+        // empty the application cache for every other one.
+        $runScript = $this->instructions('run.sh');
+
+        $this->assertStringNotContainsString('optimize:clear', $runScript);
+        $this->assertStringNotContainsString('cache:clear', $runScript);
     }
 
     public function test_no_workflow_uses_an_unpinned_third_party_action(): void
@@ -107,6 +116,25 @@ class DockerImageHardeningTest extends TestCase
                 '@master',
                 file_get_contents($workflow),
                 basename($workflow).' pins an action to a moving branch, so its code can change under us.'
+            );
+        }
+    }
+
+    public function test_the_image_build_workflow_pins_every_action_to_a_commit(): void
+    {
+        $workflow = $this->file('.github/workflows/docker-build.yml');
+
+        preg_match_all('/uses:\s*(\S+)/', $workflow, $matches);
+
+        $this->assertNotEmpty($matches[1], 'The image build workflow uses no actions at all.');
+
+        foreach ($matches[1] as $use) {
+            [, $ref] = explode('@', $use, 2) + [1 => ''];
+
+            $this->assertMatchesRegularExpression(
+                '/^[0-9a-f]{40}$/',
+                $ref,
+                "{$use} is pinned to a tag, and a tag can be moved to point at different code after review."
             );
         }
     }
