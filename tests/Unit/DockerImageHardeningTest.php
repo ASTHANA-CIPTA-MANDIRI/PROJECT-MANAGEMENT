@@ -1,19 +1,23 @@
 <?php
 
-namespace Tests\Feature;
+namespace Tests\Unit;
 
-use Tests\TestCase;
+use PHPUnit\Framework\TestCase;
 
 /**
  * Guards the properties of the container image that cannot be asserted from
  * inside the application: what ends up baked into a published artifact, and
  * what the entrypoint does to the database on every start.
+ *
+ * These assertions only read files off disk, so this extends PHPUnit's own
+ * TestCase — booting the Laravel application (and with it base_path()) would
+ * buy nothing.
  */
 class DockerImageHardeningTest extends TestCase
 {
     private function file(string $relativePath): string
     {
-        $path = base_path($relativePath);
+        $path = dirname(__DIR__, 2).'/'.$relativePath;
 
         $this->assertFileExists($path);
 
@@ -98,7 +102,7 @@ class DockerImageHardeningTest extends TestCase
 
     public function test_no_workflow_uses_an_unpinned_third_party_action(): void
     {
-        foreach (glob(base_path('.github/workflows/*.yml')) as $workflow) {
+        foreach (glob(dirname(__DIR__, 2).'/.github/workflows/*.yml') as $workflow) {
             $this->assertStringNotContainsString(
                 '@master',
                 file_get_contents($workflow),
