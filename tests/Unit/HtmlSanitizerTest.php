@@ -60,4 +60,30 @@ class HtmlSanitizerTest extends TestCase
 
         $this->assertSame($once, $twice);
     }
+
+    public function test_html_purifier_is_installed(): void
+    {
+        $this->assertTrue(
+            class_exists(\HTMLPurifier::class),
+            'HTMLPurifier is missing; every ticket/comment write would fatal.'
+        );
+    }
+
+    /**
+     * HTMLPurifier used to be pulled in only as a transitive dependency of
+     * phpspreadsheet (via maatwebsite/excel). Dropping the Excel export — or a
+     * major bump that stops requiring phpspreadsheet — would silently remove
+     * the only sanitizer this app has, so it must stay a direct requirement.
+     */
+    public function test_html_purifier_is_a_direct_composer_requirement(): void
+    {
+        // Plain PHPUnit TestCase: no application container, so no base_path().
+        $composer = json_decode(file_get_contents(dirname(__DIR__, 2).'/composer.json'), true, 512, JSON_THROW_ON_ERROR);
+
+        $this->assertArrayHasKey(
+            'ezyang/htmlpurifier',
+            $composer['require'] ?? [],
+            'ezyang/htmlpurifier must be declared in composer.json "require", not inherited transitively.'
+        );
+    }
 }
