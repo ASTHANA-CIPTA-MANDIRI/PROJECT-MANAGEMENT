@@ -89,8 +89,22 @@ class RoadMap extends AuthorizedPage implements HasForms
     public function filter(): void
     {
         $data = $this->form->getState();
-        $project = $data['selectedProject'];
-        $this->project = Project::where('id', $project)->first();
+
+        // The select's options are scoped, but its posted value is just client
+        // state — re-resolve it through the same scoped query rather than
+        // trusting the id that came back.
+        $project = $this->projectQuery()->whereKey($data['selectedProject'])->first();
+
+        if (! $project) {
+            // Either the id was tampered with, or the user has no projects at
+            // all. Keep whatever was selected instead of switching to (and
+            // then dereferencing) nothing.
+            $this->form->fill(['selectedProject' => $this->project?->id]);
+
+            return;
+        }
+
+        $this->project = $project;
         $this->dispatchBrowserEvent('projectChanged', [
             'url' => route('road-map.data', $this->project),
             'start_date' => Carbon::parse($this->project->epicsFirstDate)->subYear()->format('Y-m-d'),
@@ -110,9 +124,15 @@ class RoadMap extends AuthorizedPage implements HasForms
         $this->epic->project_id = $this->project->id;
     }
 
+    /**
+     * Public Livewire listener: the epic id arrives straight from the browser,
+     * so it is resolved through the project scope and 404s otherwise.
+     */
     public function updateEpic(int $epicId): void
     {
-        $this->epic = Epic::where('id', $epicId)->first();
+        $this->epic = Epic::query()
+            ->whereHas('project', fn (Builder $query) => $query->accessibleBy(auth()->user()))
+            ->findOrFail($epicId);
     }
 
     public function closeDialog(bool $refresh): void
