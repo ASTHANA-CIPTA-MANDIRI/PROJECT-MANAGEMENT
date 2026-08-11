@@ -49,6 +49,13 @@ class Analytics extends AuthorizedPage
 
     public function updatedProjectId(): void
     {
+        // $projectId is a public Livewire property, so the client can post any
+        // id it likes. Drop anything the user cannot reach instead of leaving
+        // it selected.
+        if (! $this->currentProject()) {
+            $this->projectId = null;
+        }
+
         // When the project changes, reset the burn-down to its latest sprint.
         $this->sprintId = $this->sprintOptions()->keys()->last();
     }
@@ -77,9 +84,20 @@ class Analytics extends AuthorizedPage
             ->pluck('name', 'id');
     }
 
+    /**
+     * The selected project, but only if the current user may see it. Every
+     * report below goes through here, so this is the single place that decides
+     * whose data the page is allowed to render.
+     */
     public function currentProject(): ?Project
     {
-        return $this->projectId ? Project::find($this->projectId) : null;
+        if (! $this->projectId) {
+            return null;
+        }
+
+        return Project::accessibleBy(auth()->user())
+            ->whereKey($this->projectId)
+            ->first();
     }
 
     // --------------------------------------------------------- report data

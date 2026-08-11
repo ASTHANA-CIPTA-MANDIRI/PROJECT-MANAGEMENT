@@ -8,6 +8,7 @@ use App\Models\Project;
 use App\Models\Role;
 use App\Models\Sprint;
 use App\Models\Ticket;
+use App\Models\TicketHour;
 use App\Models\TicketStatus;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -97,6 +98,117 @@ class AnalyticsPageTest extends TestCase
         Livewire::test(Analytics::class)
             ->set('projectId', $b->id)
             ->assertSet('sprintId', $sprintB->id);
+    }
+
+    /**
+     * Builds a project belonging to somebody else, with enough data that any
+     * leak is visible: outstanding estimation, a closed sprint, and logged
+     * hours attributed to a named person.
+     */
+    private function someoneElsesProjectWithData(): Project
+    {
+        $stranger = User::factory()->create(['name' => 'Stranger Danger']);
+        $project = Project::factory()->create(['owner_id' => $stranger->id]);
+
+        $todo = TicketStatus::factory()->create(['order' => 1]);
+        $done = TicketStatus::factory()->create(['order' => 5]);
+
+        $sprint = Sprint::factory()->ended()->create([
+            'project_id' => $project->id,
+            'starts_at' => now()->subDays(14),
+            'ends_at' => now()->subDays(1),
+        ]);
+
+        Ticket::factory()->estimated(5)->create([
+            'project_id' => $project->id,
+            'sprint_id' => $sprint->id,
+            'status_id' => $done->id,
+        ]);
+        $open = Ticket::factory()->estimated(15)->create([
+            'project_id' => $project->id,
+            'status_id' => $todo->id,
+        ]);
+
+        TicketHour::factory()->hours(7.5)->create([
+            'ticket_id' => $open->id,
+            'user_id' => $stranger->id,
+        ]);
+
+        return $project;
+    }
+
+    public function test_it_refuses_a_project_the_user_cannot_access(): void
+    {
+        $user = $this->userWithAnalytics();
+        Project::factory()->create(['owner_id' => $user->id]);
+        $theirs = $this->someoneElsesProjectWithData();
+
+        $this->actingAs($user);
+
+        $page = Livewire::test(Analytics::class)->set('projectId', $theirs->id);
+
+        // The selection itself is discarded, not merely ignored downstream.
+        $page->assertSet('projectId', null);
+        $this->assertNull($page->instance()->currentProject());
+    }
+
+    public function test_it_leaks_no_report_data_for_an_inaccessible_project(): void
+    {
+        $user = $this->userWithAnalytics();
+        Project::factory()->create(['owner_id' => $user->id]);
+        $theirs = $this->someoneElsesProjectWithData();
+
+        $this->actingAs($user);
+
+        $page = Livewire::test(Analytics::class)->set('projectId', $theirs->id)->instance();
+
+        $this->assertSame([], $page->velocity());
+        // The proof-of-concept for this bug read 15.0 here.
+        $this->assertEquals(0, $page->forecast()['remaining_points']);
+        $this->assertFalse($page->forecast()['confident']);
+
+        // Resource utilization carries people's names and logged hours.
+        $this->assertTrue($page->utilization()->isEmpty());
+
+        $this->assertSame(
+            ['total' => 0, 'labels' => [], 'ideal' => [], 'remaining' => []],
+            $page->burndown()
+        );
+        $this->assertTrue($page->sprintOptions()->isEmpty());
+    }
+
+    public function test_a_stranger_sprint_cannot_be_burned_down_through_the_sprint_id(): void
+    {
+        $user = $this->userWithAnalytics();
+        $mine = Project::factory()->create(['owner_id' => $user->id]);
+        $theirs = $this->someoneElsesProjectWithData();
+        $theirSprint = $theirs->sprints()->first();
+
+        $this->actingAs($user);
+
+        $page = Livewire::test(Analytics::class)
+            ->assertSet('projectId', $mine->id)
+            ->set('sprintId', $theirSprint->id)
+            ->instance();
+
+        $this->assertSame(
+            ['total' => 0, 'labels' => [], 'ideal' => [], 'remaining' => []],
+            $page->burndown()
+        );
+    }
+
+    public function test_a_project_member_still_sees_their_project(): void
+    {
+        $user = $this->userWithAnalytics();
+        $project = Project::factory()->create(); // owned by somebody else
+        $project->users()->attach($user->id, ['role' => 'developer']);
+
+        $this->actingAs($user);
+
+        $page = Livewire::test(Analytics::class)->set('projectId', $project->id);
+
+        $page->assertSet('projectId', $project->id);
+        $this->assertTrue($project->is($page->instance()->currentProject()));
     }
 
     public function test_the_page_renders_cleanly_for_a_project_without_data(): void
