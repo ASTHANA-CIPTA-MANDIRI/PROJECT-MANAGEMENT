@@ -242,77 +242,39 @@ trait KanbanScrumHelper
 
     protected function kanbanHeading(): string|Htmlable
     {
-        $heading = '<div class="w-full flex flex-col gap-1">';
-        $heading .= '<a href="'.route('filament.pages.board').'"
-                            class="text-primary-500 text-xs font-medium hover:underline">';
-        $heading .= __('Back to board');
-        $heading .= '</a>';
-        $heading .= '<div class="flex flex-col gap-1">';
-        $heading .= '<span>'.__('Kanban');
-        if ($this->project) {
-            $heading .= ' - '.$this->project->name.'</span>';
-        } else {
-            $heading .= '</span><span class="text-xs text-gray-400">'
-                .__('Only default statuses are listed when no projects selected')
-                .'</span>';
-        }
-        $heading .= '</div>';
-        $heading .= '</div>';
-
-        return new HtmlString($heading);
+        return $this->boardHeading(__('Kanban'));
     }
 
     protected function scrumHeading(): string|Htmlable
     {
-        $heading = '<div class="w-full flex flex-col gap-1">';
-        $heading .= '<a href="'.route('filament.pages.board').'"
-                            class="text-primary-500 text-xs font-medium hover:underline">';
-        $heading .= __('Back to board');
-        $heading .= '</a>';
-        $heading .= '<div class="flex flex-col gap-1">';
-        $heading .= '<span>'.__('Scrum');
-        if ($this->project) {
-            $heading .= ' - '.$this->project->name.'</span>';
-        } else {
-            $heading .= '</span><span class="text-xs text-gray-400">'
-                .__('Only default statuses are listed when no projects selected')
-                .'</span>';
-        }
-        $heading .= '</div>';
-        $heading .= '</div>';
+        return $this->boardHeading(__('Scrum'));
+    }
 
-        return new HtmlString($heading);
+    /**
+     * Rendered through Blade so the project name — free-form user input — is
+     * escaped by default instead of being concatenated into raw HTML.
+     */
+    private function boardHeading(string $title): Htmlable
+    {
+        return new HtmlString(
+            view('components.board-heading', [
+                'title' => $title,
+                'projectName' => $this->project?->name,
+            ])->render()
+        );
     }
 
     protected function scrumSubHeading(): string|Htmlable|null
     {
-        if ($this->project?->currentSprint) {
-            return new HtmlString(
-                '<div class="w-full flex flex-col gap-1">'
-                .'<div class="w-full flex items-center gap-2">'
-                .'<span class="bg-danger-500 px-2 py-1 rounded text-white text-sm">'
-                .$this->project->currentSprint->name
-                .'</span>'
-                .'<span class="text-xs text-gray-400">'
-                .__('Started at:').' '.$this->project->currentSprint->started_at->format(__('Y-m-d')).' - '
-                .__('Ends at:').' '.$this->project->currentSprint->ends_at->format(__('Y-m-d')).' - '
-                .($this->project->currentSprint->remaining ?
-                    (
-                        __('Remaining:').' '.$this->project->currentSprint->remaining.' '.__('days'))
-                    : ''
-                )
-                .'</span>'
-                .'</div>'
-                .($this->project->nextSprint ? '<span class="text-xs text-primary-500 font-medium">'
-                    .__('Next sprint:').' '.$this->project->nextSprint->name.' - '
-                    .__('Starts at:').' '.$this->project->nextSprint->starts_at->format(__('Y-m-d'))
-                    .' ('.__('in').' '.$this->project->nextSprint->starts_at->diffForHumans().')'
-                    .'</span>'
-                    .'</span>' : '')
-                .'</div>'
-            );
-        } else {
+        if (! $this->project?->currentSprint) {
             return null;
         }
+
+        return new HtmlString(
+            view('components.board-subheading', [
+                'sprint' => $this->project->currentSprint,
+                'nextSprint' => $this->project->nextSprint,
+            ])->render()
+        );
     }
 }

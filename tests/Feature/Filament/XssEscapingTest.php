@@ -125,4 +125,34 @@ class XssEscapingTest extends TestCase
             ->assertDontSeeHtml(self::PAYLOAD)
             ->assertSee(self::PAYLOAD);
     }
+
+    public function test_project_name_markup_is_escaped_in_the_kanban_board_heading(): void
+    {
+        $project = Project::factory()->create([
+            'owner_id' => $this->user->id,
+            'name' => self::PAYLOAD,
+        ]);
+
+        Livewire::test(\App\Filament\Pages\Kanban::class, ['project' => $project])
+            ->assertSuccessful()
+            ->assertDontSeeHtml(self::PAYLOAD)
+            ->assertSee(self::PAYLOAD);
+    }
+
+    public function test_project_and_sprint_names_are_escaped_in_the_scrum_board_heading(): void
+    {
+        $project = Project::factory()->scrum()->create([
+            'owner_id' => $this->user->id,
+            'name' => self::PAYLOAD,
+        ]);
+        \App\Models\Sprint::factory()->started()->create([
+            'project_id' => $project->id,
+            'name' => self::PAYLOAD,
+        ]);
+
+        Livewire::test(\App\Filament\Pages\Scrum::class, ['project' => $project->fresh()])
+            ->assertSuccessful()
+            ->assertDontSeeHtml(self::PAYLOAD)
+            ->assertSee(self::PAYLOAD);
+    }
 }
