@@ -25,22 +25,35 @@ abstract class TimeLoggedChartWidget extends BarChartWidget
         return auth()->user()->can('List tickets');
     }
 
-    /** Query for the records to sum logged hours for (must have an `hours` relation). */
+    /**
+     * Query for the records to sum logged hours for (must have an `hours`
+     * relation). Implementations must scope it to the current user.
+     */
     abstract protected function query(): Builder;
 
     /** Column selected alongside `id` and used as each bar's label. */
     abstract protected function labelColumn(): string;
 
+    /**
+     * Narrow which logged hours count towards a record's total. Records scoped
+     * by query() need no extra filter, so the default lets everything through.
+     */
+    protected function constrainHours(Builder $query): Builder
+    {
+        return $query;
+    }
+
     protected function getData(): array
     {
         $labelColumn = $this->labelColumn();
+        $hours = fn (Builder $query) => $this->constrainHours($query);
 
         // Sum the hours in SQL (withSum) instead of the totalLoggedInHours
         // accessor, which lazy-loads the hours relation per record (N+1). One
         // query, fetched once, cached for an hour.
         $rows = $this->remember('data', fn () => $this->query()
-            ->has('hours')
-            ->withSum('hours', 'value')
+            ->whereHas('hours', $hours)
+            ->withSum(['hours' => $hours], 'value')
             ->limit(10)
             ->get(['id', $labelColumn])
             ->map(fn ($record) => [

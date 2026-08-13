@@ -4,6 +4,7 @@ namespace App\Filament\Widgets;
 
 use App\Filament\Widgets\Concerns\WithCachedData;
 use Filament\Widgets\DoughnutChartWidget;
+use Illuminate\Database\Eloquent\Builder;
 
 abstract class TicketsGroupedByChartWidget extends DoughnutChartWidget
 {
@@ -31,8 +32,12 @@ abstract class TicketsGroupedByChartWidget extends DoughnutChartWidget
     {
         $model = static::groupingModel();
 
-        // Cached for one hour: counts change slowly relative to dashboard views.
-        $data = $this->remember('counts', fn () => $model::withCount('tickets')
+        // Only count tickets the viewer may see, like the dashboard tables do;
+        // an unscoped count would expose other tenants' volumes. Cached for one
+        // hour: counts change slowly relative to dashboard views.
+        $data = $this->remember('counts', fn () => $model::withCount([
+            'tickets' => fn (Builder $query) => $query->visibleTo(auth()->user()),
+        ])
             ->get(['id', 'name'])
             ->pluck('tickets_count', 'name'));
 

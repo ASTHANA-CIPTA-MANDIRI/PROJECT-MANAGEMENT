@@ -6,6 +6,7 @@ use Devaslanphp\FilamentAvatar\Core\HasAvatarUrl;
 use DutchCodingCompany\FilamentSocialite\Models\SocialiteUser;
 use Filament\Models\Contracts\FilamentUser;
 use Illuminate\Contracts\Auth\MustVerifyEmail;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Casts\Attribute;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Relations\BelongsToMany;
@@ -61,6 +62,18 @@ class User extends Authenticatable implements FilamentUser, MustVerifyEmail
     protected $casts = [
         'email_verified_at' => 'datetime',
     ];
+
+    /**
+     * Users the given user may see: themselves, plus everyone who owns or
+     * belongs to a project they can access. Keeps people from other tenants
+     * out of dashboard aggregations.
+     */
+    public function scopeVisibleTo(Builder $query, User $user): Builder
+    {
+        return $query->where(fn (Builder $query) => $query->whereKey($user->id)
+            ->orWhereHas('projectsOwning', fn (Builder $query) => $query->accessibleBy($user))
+            ->orWhereHas('projectsAffected', fn (Builder $query) => $query->accessibleBy($user)));
+    }
 
     public function projectsOwning(): HasMany
     {

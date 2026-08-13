@@ -4,6 +4,7 @@ namespace App\Models;
 
 use App\Support\HtmlSanitizer;
 use Carbon\CarbonInterval;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Casts\Attribute;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
@@ -52,6 +53,18 @@ class Ticket extends Model implements HasMedia
     protected function content(): Attribute
     {
         return Attribute::set(fn (?string $value) => HtmlSanitizer::clean($value));
+    }
+
+    /**
+     * Tickets the given user may see: the ones they own or are responsible
+     * for, plus every ticket of a project they own or belong to. Mirrors the
+     * filter the dashboard tables use, so aggregations agree with listings.
+     */
+    public function scopeVisibleTo(Builder $query, User $user): Builder
+    {
+        return $query->where(fn (Builder $query) => $query->where('owner_id', $user->id)
+            ->orWhere('responsible_id', $user->id)
+            ->orWhereHas('project', fn (Builder $query) => $query->accessibleBy($user)));
     }
 
     public function owner(): BelongsTo

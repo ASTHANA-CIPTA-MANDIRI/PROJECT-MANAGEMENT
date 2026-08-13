@@ -14,7 +14,9 @@ trait WithCachedData
     protected int $cacheTtl = 3600;
 
     /**
-     * Remember the result of $callback under a widget-scoped cache key.
+     * Remember the result of $callback under a key scoped to both the widget
+     * and the current viewer. Widget data is filtered per user, so a shared
+     * key would serve one user's figures to the next one.
      *
      * @template T
      *
@@ -23,7 +25,7 @@ trait WithCachedData
      */
     protected function remember(string $suffix, \Closure $callback)
     {
-        return Cache::remember($this->cacheKey($suffix), $this->cacheTtl, $callback);
+        return Cache::remember($this->userCacheKey($suffix), $this->cacheTtl, $callback);
     }
 
     /**

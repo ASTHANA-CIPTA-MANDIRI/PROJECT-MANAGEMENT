@@ -8,6 +8,7 @@ use App\Models\Role;
 use App\Models\Ticket;
 use App\Models\TicketComment;
 use App\Models\TicketHour;
+use App\Models\TicketType;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Notification;
@@ -68,6 +69,37 @@ class WidgetsTest extends TestCase
                 'user_id' => $this->user->id,
             ]);
         }
+    }
+
+    /**
+     * A second tenant: another user, their own project, ticket and logged
+     * hours. Nothing here may surface on $this->user's dashboard.
+     */
+    private function seedStranger(TicketType $type): array
+    {
+        $stranger = User::factory()->create(['name' => 'Orang Asing']);
+        $project = Project::factory()->create(['owner_id' => $stranger->id]);
+
+        $ticket = Ticket::factory()->create([
+            'project_id' => $project->id,
+            'owner_id' => $stranger->id,
+            'type_id' => $type->id,
+        ]);
+
+        TicketHour::factory()->hours(40)->create([
+            'ticket_id' => $ticket->id,
+            'user_id' => $stranger->id,
+        ]);
+
+        return [$stranger, $ticket];
+    }
+
+    /**
+     * Widget data is computed in a protected method; bind a closure to read it.
+     */
+    private function widgetData(string $widget): array
+    {
+        return (fn () => $this->getData())->call(new $widget);
     }
 
     public function test_the_favorite_projects_widget_renders(): void
@@ -131,6 +163,89 @@ class WidgetsTest extends TestCase
         $this->seedActivity();
 
         Livewire::test(\App\Filament\Widgets\UserTimeLogged::class)->assertSuccessful();
+    }
+
+    public function test_the_tickets_by_type_chart_only_counts_accessible_tickets(): void
+    {
+        $type = TicketType::factory()->create(['name' => 'Bug bersama']);
+        $project = Project::factory()->create(['owner_id' => $this->user->id]);
+        Ticket::factory()->create([
+            'project_id' => $project->id,
+            'owner_id' => $this->user->id,
+            'type_id' => $type->id,
+        ]);
+
+        // Three more tickets of the same type, in a project we cannot reach.
+        [$stranger] = $this->seedStranger($type);
+        Ticket::factory()->count(2)->create([
+            'project_id' => $stranger->projectsOwning()->first()->id,
+            'owner_id' => $stranger->id,
+            'type_id' => $type->id,
+        ]);
+
+        $data = $this->widgetData(\App\Filament\Widgets\TicketsByType::class);
+        $index = array_search($type->name, $data['labels'], true);
+
+        $this->assertNotFalse($index);
+        $this->assertSame(1, $data['datasets'][0]['data'][$index]);
+    }
+
+    public function test_the_ticket_time_logged_chart_hides_tickets_from_other_projects(): void
+    {
+        $this->seedActivity();
+        [, $strangerTicket] = $this->seedStranger(TicketType::factory()->create());
+
+        $data = $this->widgetData(\App\Filament\Widgets\TicketTimeLogged::class);
+
+        $this->assertNotEmpty($data['labels']);
+        $this->assertNotContains($strangerTicket->code, $data['labels']);
+    }
+
+    public function test_the_user_time_logged_chart_hides_users_from_other_projects(): void
+    {
+        $this->seedActivity();
+        [$stranger] = $this->seedStranger(TicketType::factory()->create());
+
+        $data = $this->widgetData(\App\Filament\Widgets\UserTimeLogged::class);
+
+        $this->assertContains($this->user->name, $data['labels']);
+        $this->assertNotContains($stranger->name, $data['labels']);
+    }
+
+    public function test_the_user_time_logged_chart_shows_members_of_a_shared_project(): void
+    {
+        $project = Project::factory()->create(['owner_id' => $this->user->id]);
+        $colleague = User::factory()->create(['name' => 'Rekan Proyek']);
+        $project->users()->attach($colleague->id, ['role' => 'member']);
+
+        $ticket = Ticket::factory()->create([
+            'project_id' => $project->id,
+            'owner_id' => $this->user->id,
+        ]);
+        TicketHour::factory()->hours(3)->create([
+            'ticket_id' => $ticket->id,
+            'user_id' => $colleague->id,
+        ]);
+
+        $data = $this->widgetData(\App\Filament\Widgets\UserTimeLogged::class);
+
+        $this->assertContains($colleague->name, $data['labels']);
+    }
+
+    public function test_widget_data_is_cached_per_user_not_globally(): void
+    {
+        $this->seedActivity();
+        [$stranger, $strangerTicket] = $this->seedStranger(TicketType::factory()->create());
+
+        // Warm the cache as the first user, then look again as the stranger:
+        // a shared cache key would hand over the first user's ticket codes.
+        $mine = $this->widgetData(\App\Filament\Widgets\TicketTimeLogged::class);
+
+        $this->actingAs($stranger);
+        $theirs = $this->widgetData(\App\Filament\Widgets\TicketTimeLogged::class);
+
+        $this->assertSame([$strangerTicket->code], $theirs['labels']);
+        $this->assertEmpty(array_intersect($mine['labels'], $theirs['labels']));
     }
 
     public function test_widgets_render_with_no_data_at_all(): void

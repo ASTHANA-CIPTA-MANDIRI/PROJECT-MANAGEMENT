@@ -16,7 +16,7 @@ class TicketTimeLogged extends TimeLoggedChartWidget
 
     protected function query(): Builder
     {
-        return Ticket::query();
+        return Ticket::query()->visibleTo(auth()->user());
     }
 
     protected function labelColumn(): string
