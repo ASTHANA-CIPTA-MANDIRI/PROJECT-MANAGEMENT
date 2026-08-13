@@ -5,9 +5,14 @@ namespace App\Providers;
 use App\Models\User;
 use App\Notifications\CustomVerifyEmail;
 use App\Settings\GeneralSettings;
+use App\Support\BulkDeleteAuthorizer;
 use DutchCodingCompany\FilamentSocialite\FilamentSocialite;
 use Filament\Facades\Filament;
+use Filament\Notifications\Notification;
+use Filament\Tables;
 use Illuminate\Auth\Notifications\VerifyEmail;
+use Illuminate\Database\Eloquent\Collection as EloquentCollection;
+use Illuminate\Database\Eloquent\Model;
 use Illuminate\Foundation\Vite;
 use Illuminate\Support\Facades\Config;
 use Illuminate\Support\Facades\DB;
@@ -89,6 +94,35 @@ class AppServiceProvider extends ServiceProvider
                                        type="image/x-icon"
                                        href="'.config('app.logo').'">'),
         ]);
+
+        // Every bulk delete — in every resource and relation manager, present
+        // and future — is filtered by the model's policy. Configured centrally
+        // because the gap is in Filament's own action, not in any one resource.
+        Tables\Actions\DeleteBulkAction::configureUsing(function (Tables\Actions\DeleteBulkAction $action): void {
+            $action->using(static function (EloquentCollection $records): void {
+                $denied = 0;
+
+                $records->each(function (Model $record) use (&$denied): void {
+                    if (! BulkDeleteAuthorizer::allows($record)) {
+                        $denied++;
+
+                        return;
+                    }
+
+                    $record->delete();
+                });
+
+                if ($denied > 0) {
+                    Notification::make()
+                        ->warning()
+                        ->title(__('Some records were not deleted'))
+                        ->body(__(':count record(s) you are not allowed to delete were skipped.', [
+                            'count' => $denied,
+                        ]))
+                        ->send();
+                }
+            });
+        });
 
         // Register navigation groups
         Filament::registerNavigationGroups([
