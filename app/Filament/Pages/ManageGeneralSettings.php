@@ -139,28 +139,72 @@ class ManageGeneralSettings extends SettingsPage
     }
 
     /**
-     * Last line of defence for the two privilege-escalation paths this form
-     * exposes. A crafted Livewire payload that smuggles `super_admin_role` into
-     * the form state is overwritten with the stored value, and the default role
-     * — handed to every new registrant — may not be pointed at the Super Admin
-     * role, which would otherwise turn "enable registration" into a self-service
-     * admin account.
+     * Last line of defence for the privilege-escalation paths this form exposes.
+     * A crafted Livewire payload that smuggles `super_admin_role` into the form
+     * state is overwritten with the stored value, and both role settings are
+     * then held to the same rule as every other role hand-out: you cannot point
+     * them at privileges you do not hold yourself.
      */
     protected function mutateFormDataBeforeSave(array $data): array
     {
-        if (static::userCanManageSuperAdminRole()) {
-            return $data;
+        if (! static::userCanManageSuperAdminRole()) {
+            $data['super_admin_role'] = app(GeneralSettings::class)->super_admin_role;
         }
 
-        $data['super_admin_role'] = app(GeneralSettings::class)->super_admin_role;
-
-        if (filled($data['default_role'] ?? null) && Role::find($data['default_role'])?->isSuperAdminRole()) {
-            throw ValidationException::withMessages([
-                'data.default_role' => __('You are not allowed to make the Super Admin role the default role.'),
-            ]);
-        }
+        $this->assertSuperAdminRoleIsNotSelfPromotion($data['super_admin_role'] ?? null);
+        $this->assertDefaultRoleIsGrantable($data['default_role'] ?? null);
 
         return $data;
+    }
+
+    /**
+     * Repointing "which role counts as Super Admin" at a role the actor already
+     * holds is a one-click self-promotion, so only a Super Admin may do it. The
+     * dedicated permission alone is not enough.
+     */
+    private function assertSuperAdminRoleIsNotSelfPromotion($roleId): void
+    {
+        $actor = auth()->user();
+
+        if (blank($roleId) || $actor === null || $actor->isSuperAdmin()) {
+            return;
+        }
+
+        // Only a change matters: an unchanged value must never block the save.
+        if ((string) $roleId === (string) app(GeneralSettings::class)->super_admin_role) {
+            return;
+        }
+
+        if ($actor->roles->pluck('id')->map('strval')->contains((string) $roleId)) {
+            throw ValidationException::withMessages([
+                'data.super_admin_role' => __('You cannot point the Super Admin role at a role you hold yourself.'),
+            ]);
+        }
+    }
+
+    /**
+     * The default role is handed to every new registrant, so pointing it at a
+     * role stronger than the actor's own turns "enable registration" into a
+     * self-service account carrying those privileges. Only a change is checked,
+     * so a value already stored never makes the settings form unsaveable.
+     */
+    private function assertDefaultRoleIsGrantable($roleId): void
+    {
+        if (blank($roleId) || (string) $roleId === (string) app(GeneralSettings::class)->default_role) {
+            return;
+        }
+
+        $role = Role::find($roleId);
+
+        if ($role && auth()->user()?->canGrantRole($role)) {
+            return;
+        }
+
+        throw ValidationException::withMessages([
+            'data.default_role' => $role?->isSuperAdminRole()
+                ? __('You are not allowed to make the Super Admin role the default role.')
+                : __('You cannot choose a default role holding permissions you do not have yourself.'),
+        ]);
     }
 
     private function getLanguages(): array
