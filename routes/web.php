@@ -25,6 +25,17 @@ Route::get('/validate-account/{user:creation_token}', function (User $user) {
         DispatchServingFilamentEvent::class,
     ]);
 
+// Second factor for a social login held back by SocialiteLoginController.
+// Public by necessity (nobody is authenticated yet); the parked session entry
+// is what makes it usable, and the component re-verifies it on every action.
+Route::get('/two-factor-challenge', fn () => view('two-factor-challenge'))
+    ->name('two-factor-challenge')
+    ->middleware([
+        'web',
+        'throttle:public',
+        DispatchServingFilamentEvent::class,
+    ]);
+
 // Login default redirection
 Route::redirect('/login-redirect', '/login')->name('login');
 

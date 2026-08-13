@@ -28,7 +28,14 @@ class AppServiceProvider extends ServiceProvider
      */
     public function register()
     {
-        //
+        // Route actions are resolved through the container, so binding the
+        // packaged socialite controller to our subclass makes the OAuth
+        // callback enforce two-factor authentication without having to
+        // redeclare the package's routes (and depend on registration order).
+        $this->app->bind(
+            \DutchCodingCompany\FilamentSocialite\Http\Controllers\SocialiteLoginController::class,
+            \App\Http\Controllers\Auth\SocialiteLoginController::class,
+        );
     }
 
     /**
