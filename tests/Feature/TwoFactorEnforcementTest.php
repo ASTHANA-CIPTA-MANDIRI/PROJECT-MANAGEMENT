@@ -5,6 +5,7 @@ namespace Tests\Feature;
 use App\Models\Role;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Env;
 use Tests\TestCase;
 
 /**
@@ -88,8 +89,39 @@ class TwoFactorEnforcementTest extends TestCase
         $this->get(route('filament.pages.dashboard'))->assertSuccessful();
     }
 
+    /**
+     * The policy must ship enabled. config() cannot answer that here: a
+     * developer's local .env may switch it off (this repo's does, on purpose),
+     * which would fail the test on their machine while the shipped default is
+     * still fine. Read the config file's fallback with the environment
+     * variable removed instead.
+     */
     public function test_the_policy_is_enabled_by_default(): void
     {
-        $this->assertTrue(config('system.security.require_2fa_for_super_admin'));
+        $repository = Env::getRepository();
+        $previous = $repository->get('REQUIRE_2FA_FOR_SUPER_ADMIN');
+        $repository->clear('REQUIRE_2FA_FOR_SUPER_ADMIN');
+
+        try {
+            $defaults = require config_path('system.php');
+        } finally {
+            if ($previous !== null) {
+                $repository->set('REQUIRE_2FA_FOR_SUPER_ADMIN', $previous);
+            }
+        }
+
+        $this->assertTrue($defaults['security']['require_2fa_for_super_admin']);
+    }
+
+    /**
+     * Deployments start from .env.example, so the policy has to be on there
+     * too — a config fallback alone would be overridden by a copied "false".
+     */
+    public function test_the_env_example_ships_the_policy_enabled(): void
+    {
+        $this->assertStringContainsString(
+            'REQUIRE_2FA_FOR_SUPER_ADMIN=true',
+            file_get_contents(base_path('.env.example'))
+        );
     }
 }
