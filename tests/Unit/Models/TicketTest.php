@@ -53,6 +53,31 @@ class TicketTest extends TestCase
         $this->assertSame('BBB-1', $ticketB->code);
     }
 
+    public function test_it_does_not_reuse_the_code_of_a_soft_deleted_ticket(): void
+    {
+        $project = Project::factory()->create(['ticket_prefix' => 'DEL']);
+
+        Ticket::factory()->create(['project_id' => $project->id]);
+        $second = Ticket::factory()->create(['project_id' => $project->id]);
+        $second->delete();
+
+        $third = Ticket::factory()->create(['project_id' => $project->id]);
+
+        $this->assertSame('DEL-3', $third->code);
+    }
+
+    public function test_it_does_not_reuse_the_code_of_a_force_deleted_ticket(): void
+    {
+        $project = Project::factory()->create(['ticket_prefix' => 'PRG']);
+
+        $first = Ticket::factory()->create(['project_id' => $project->id]);
+        $first->forceDelete();
+
+        $second = Ticket::factory()->create(['project_id' => $project->id]);
+
+        $this->assertSame('PRG-2', $second->code);
+    }
+
     public function test_the_first_ticket_of_a_project_gets_order_zero(): void
     {
         $project = Project::factory()->create();

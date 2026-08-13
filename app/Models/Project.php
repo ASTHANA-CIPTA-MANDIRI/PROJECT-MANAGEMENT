@@ -11,6 +11,7 @@ use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\SoftDeletes;
 use Illuminate\Support\Facades\Cache;
+use Illuminate\Support\Facades\DB;
 use Laravel\Scout\Searchable;
 use Spatie\MediaLibrary\HasMedia;
 use Spatie\MediaLibrary\InteractsWithMedia;
@@ -167,6 +168,29 @@ class Project extends Model implements HasMedia
                 return null;
             }
         );
+    }
+
+    /**
+     * Hand out the next ticket number for this project. The counter lives on
+     * the project row and is bumped under a row lock inside a transaction, so
+     * two simultaneous creations can never get the same number, and a number
+     * is never reused after its ticket is (soft) deleted.
+     */
+    public function allocateTicketNumber(): int
+    {
+        return DB::transaction(function () {
+            $next = (int) static::withTrashed()
+                ->whereKey($this->id)
+                ->lockForUpdate()
+                ->value('last_ticket_number') + 1;
+
+            static::withTrashed()->whereKey($this->id)
+                ->update(['last_ticket_number' => $next]);
+
+            $this->last_ticket_number = $next;
+
+            return $next;
+        });
     }
 
     /**

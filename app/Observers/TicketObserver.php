@@ -19,9 +19,10 @@ class TicketObserver
     public function creating(Ticket $ticket): void
     {
         $project = Project::where('id', $ticket->project_id)->first();
-        $count = Ticket::where('project_id', $project->id)->count();
         $order = $project->tickets?->last()?->order ?? -1;
-        $ticket->code = $project->ticket_prefix.'-'.($count + 1);
+        // Numbers come from the project's counter, never from a live count:
+        // deleting a ticket must not free its code for the next one.
+        $ticket->code = $project->ticket_prefix.'-'.$project->allocateTicketNumber();
         $ticket->order = $order + 1;
     }
 
