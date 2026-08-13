@@ -1,5 +1,12 @@
 <x-filament::page>
 
+    @php
+        // Build the board once per render: a single ticket query grouped by
+        // status, instead of re-querying inside the column loop.
+        $statuses = $this->getStatuses();
+        $recordsByStatus = $this->getRecords()->groupBy('status');
+    @endphp
+
     <div class="mx-auto w-full" wire:ignore>
         <details class="w-full bg-white open:bg-gray-200 duration-300">
             <summary
@@ -16,8 +23,8 @@
 
     <div class="kanban-container">
 
-        @foreach($this->getStatuses() as $status)
-            @include('partials.kanban.status')
+        @foreach($statuses as $status)
+            @include('partials.kanban.status', ['records' => $recordsByStatus->get($status['id'], collect())])
         @endforeach
 
     </div>
@@ -28,7 +35,7 @@
 
             (() => {
                 let record;
-                @foreach($this->getStatuses() as $status)
+                @foreach($statuses as $status)
                     record = document.querySelector('#status-records-{{ $status['id'] }}');
 
                     Sortable.create(record, {

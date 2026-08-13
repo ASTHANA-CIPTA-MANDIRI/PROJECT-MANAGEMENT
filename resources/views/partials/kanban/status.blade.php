@@ -10,7 +10,7 @@
          data-status="{{ $status['id'] }}"
          id="status-records-{{ $status['id'] }}"
          style="border-color: {{ $status['color'] }}66;">
-        @foreach($this->getRecords()->where('status', $status['id']) as $record)
+        @foreach($records as $record)
             @include('partials.kanban.record')
         @endforeach
 

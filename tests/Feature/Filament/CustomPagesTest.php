@@ -11,8 +11,10 @@ use App\Models\Project;
 use App\Models\Role;
 use App\Models\Sprint;
 use App\Models\Ticket;
+use App\Models\TicketStatus;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Notification;
 use Livewire\Livewire;
 use Spatie\Permission\PermissionRegistrar;
@@ -136,6 +138,81 @@ class CustomPagesTest extends TestCase
         $this->assertFalse($ids->contains($plain->id), 'unlabelled ticket should be filtered out');
     }
 
+    public function test_the_kanban_board_queries_the_ticket_list_once_for_the_whole_board(): void
+    {
+        $project = $this->kanbanProject();
+        foreach (TicketStatus::factory()->count(5)->create() as $status) {
+            Ticket::factory()->create([
+                'project_id' => $project->id,
+                'owner_id' => $this->user->id,
+                'status_id' => $status->id,
+            ]);
+        }
+
+        $listQueries = $this->countTicketListQueries(
+            fn () => Livewire::test(Kanban::class, ['project' => $project])->assertSuccessful()
+        );
+
+        // One query for the whole board, not one per column.
+        $this->assertSame(1, $listQueries, "the board ran {$listQueries} ticket-list queries");
+    }
+
+    public function test_the_kanban_board_puts_each_ticket_in_its_own_status_column(): void
+    {
+        $project = $this->kanbanProject();
+        [$todo, $doing] = TicketStatus::factory()->count(2)->create()->all();
+
+        $first = Ticket::factory()->create([
+            'project_id' => $project->id,
+            'owner_id' => $this->user->id,
+            'status_id' => $todo->id,
+        ]);
+        $second = Ticket::factory()->create([
+            'project_id' => $project->id,
+            'owner_id' => $this->user->id,
+            'status_id' => $doing->id,
+        ]);
+
+        $html = Livewire::test(Kanban::class, ['project' => $project])->lastRenderedDom;
+
+        $this->assertSame($todo->id, $this->columnHolding($html, $first->code));
+        $this->assertSame($doing->id, $this->columnHolding($html, $second->code));
+    }
+
+    /**
+     * Count the board's ticket-list queries (the grouped COUNT behind the
+     * column headers is not one of them).
+     */
+    private function countTicketListQueries(callable $callback): int
+    {
+        $queries = 0;
+        DB::listen(function ($query) use (&$queries) {
+            if (str_contains($query->sql, 'from "tickets"') && ! str_contains($query->sql, 'count(*)')) {
+                $queries++;
+            }
+        });
+
+        $callback();
+
+        return $queries;
+    }
+
+    /**
+     * The id of the status column the given ticket code was rendered in.
+     */
+    private function columnHolding(string $html, string $code): ?int
+    {
+        $columns = preg_split('/id="status-records-(\d+)"/', $html, -1, PREG_SPLIT_DELIM_CAPTURE);
+
+        for ($i = 1; $i < count($columns); $i += 2) {
+            if (str_contains($columns[$i + 1], $code)) {
+                return (int) $columns[$i];
+            }
+        }
+
+        return null;
+    }
+
     // ----------------------------------------------------------------- scrum
 
     public function test_the_scrum_board_renders_for_a_scrum_project(): void
@@ -156,6 +233,26 @@ class CustomPagesTest extends TestCase
         ]);
 
         Livewire::test(Scrum::class, ['project' => $project])->assertSuccessful();
+    }
+
+    public function test_the_scrum_board_queries_the_ticket_list_once_for_the_whole_board(): void
+    {
+        $project = $this->scrumProject();
+        $sprint = Sprint::factory()->started()->create(['project_id' => $project->id]);
+        foreach (TicketStatus::factory()->count(5)->create() as $status) {
+            Ticket::factory()->create([
+                'project_id' => $project->id,
+                'sprint_id' => $sprint->id,
+                'owner_id' => $this->user->id,
+                'status_id' => $status->id,
+            ]);
+        }
+
+        $listQueries = $this->countTicketListQueries(
+            fn () => Livewire::test(Scrum::class, ['project' => $project])->assertSuccessful()
+        );
+
+        $this->assertSame(1, $listQueries, "the board ran {$listQueries} ticket-list queries");
     }
 
     public function test_the_scrum_board_renders_without_any_sprint(): void
