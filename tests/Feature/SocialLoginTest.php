@@ -83,6 +83,23 @@ class SocialLoginTest extends TestCase
         $this->assertTrue($user->canAccessFilament());
     }
 
+    public function test_a_new_social_user_is_never_auto_granted_the_super_admin_role(): void
+    {
+        $superAdminRole = Role::create(['name' => 'Super Admin']);
+        GeneralSettings::fake([
+            'default_role' => $superAdminRole->id,
+            'super_admin_role' => null,
+        ]);
+        $this->mockProviderUser('12345', 'Fajar Hero', 'escalate@example.com');
+
+        $this->hitCallback('github');
+
+        $user = User::where('email', 'escalate@example.com')->first();
+        $this->assertNotNull($user);
+        $this->assertFalse($user->isSuperAdmin(), 'social sign-up must never yield a Super Admin');
+        $this->assertCount(0, $user->roles);
+    }
+
     public function test_a_new_social_user_has_a_verified_email(): void
     {
         $this->mockProviderUser('12345', 'Fajar Hero', 'verified@example.com');

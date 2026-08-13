@@ -99,6 +99,38 @@ class RegistrationWorkflowTest extends TestCase
         $this->assertCount(0, $user->fresh()->roles);
     }
 
+    public function test_the_super_admin_role_is_never_auto_assigned(): void
+    {
+        $superAdminRole = Role::create(['name' => 'Super Admin']);
+        GeneralSettings::fake([
+            'default_role' => $superAdminRole->id,
+            'super_admin_role' => null, // falls back to the role named "Super Admin"
+        ]);
+
+        $user = User::factory()->create();
+        event(new Registered($user));
+
+        $this->assertCount(
+            0,
+            $user->fresh()->roles,
+            'a self-registrant must never be auto-granted the Super Admin role'
+        );
+    }
+
+    public function test_the_configured_super_admin_role_is_never_auto_assigned(): void
+    {
+        $role = Role::create(['name' => 'Owners']);
+        GeneralSettings::fake([
+            'default_role' => $role->id,
+            'super_admin_role' => (string) $role->id,
+        ]);
+
+        $user = User::factory()->create();
+        event(new Registered($user));
+
+        $this->assertCount(0, $user->fresh()->roles);
+    }
+
     public function test_the_listener_is_wired_to_the_registered_event(): void
     {
         $this->withDefaultRole(Role::create(['name' => 'Default role']));
