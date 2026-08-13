@@ -64,17 +64,28 @@ class UserResource extends Resource
                                     ->required()
                                     ->columns(3)
                                     ->relationship('roles', 'name')
-                                    // Guard: don't let the Super Admin role be
-                                    // removed from the last Super Admin.
+                                    // Guards: the Super Admin role can't be removed
+                                    // from the last Super Admin, and only a Super
+                                    // Admin may hand that role out to anyone.
                                     ->rule(fn (?User $record) => function (string $attribute, $value, \Closure $fail) use ($record) {
-                                        if (! $record || ! $record->isLastSuperAdmin()) {
-                                            return;
-                                        }
                                         $superAdminRoleId = User::superAdminRoleId()
                                             ?? \App\Models\Role::where('name', 'Super Admin')->value('id');
                                         $selected = array_map('strval', (array) $value);
-                                        if (! in_array((string) $superAdminRoleId, $selected, true)) {
+                                        $keepsSuperAdmin = $superAdminRoleId !== null
+                                            && in_array((string) $superAdminRoleId, $selected, true);
+
+                                        if ($record && $record->isLastSuperAdmin() && ! $keepsSuperAdmin) {
                                             $fail(__('You cannot remove the Super Admin role from the last Super Admin.'));
+
+                                            return;
+                                        }
+
+                                        // Privilege escalation: without this, anyone
+                                        // holding "Update user" could grant themselves
+                                        // (or a confederate) the Super Admin role.
+                                        $alreadySuperAdmin = $record !== null && $record->isSuperAdmin();
+                                        if ($keepsSuperAdmin && ! $alreadySuperAdmin && ! auth()->user()?->isSuperAdmin()) {
+                                            $fail(__('Only a Super Admin can assign the Super Admin role.'));
                                         }
                                     }),
                             ]),

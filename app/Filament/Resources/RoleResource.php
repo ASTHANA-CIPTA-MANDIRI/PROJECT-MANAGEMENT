@@ -54,7 +54,36 @@ class RoleResource extends Resource
                                     ->label(__('Permissions'))
                                     ->required()
                                     ->columns(4)
-                                    ->relationship('permissions', 'name'),
+                                    ->relationship('permissions', 'name')
+                                    // Privilege escalation: without this, anyone holding
+                                    // "Update role" could tick every permission onto a
+                                    // role they already hold. Permissions the role
+                                    // already has may be kept, only new ones are checked.
+                                    ->rule(fn (?Role $record) => function (string $attribute, $value, \Closure $fail) use ($record) {
+                                        $actor = auth()->user();
+
+                                        if ($actor?->isSuperAdmin()) {
+                                            return;
+                                        }
+
+                                        $selected = array_map('strval', (array) $value);
+                                        $current = $record
+                                            ? $record->permissions->pluck('id')->map('strval')->all()
+                                            : [];
+                                        $added = array_diff($selected, $current);
+
+                                        if ($added === []) {
+                                            return;
+                                        }
+
+                                        $held = $actor
+                                            ? $actor->getAllPermissions()->pluck('id')->map('strval')->all()
+                                            : [];
+
+                                        if (array_diff($added, $held) !== []) {
+                                            $fail(__('You cannot grant permissions that you do not have yourself.'));
+                                        }
+                                    }),
                             ]),
                     ]),
             ]);

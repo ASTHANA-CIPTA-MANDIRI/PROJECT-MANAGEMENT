@@ -1,0 +1,210 @@
+<?php
+
+namespace Tests\Feature\Filament;
+
+use App\Filament\Resources\RoleResource\Pages\EditRole;
+use App\Filament\Resources\UserResource\Pages\EditUser;
+use App\Models\Permission;
+use App\Models\Role;
+use App\Models\User;
+use App\Settings\GeneralSettings;
+use Illuminate\Foundation\Testing\RefreshDatabase;
+use Livewire\Livewire;
+use Spatie\Permission\PermissionRegistrar;
+use Tests\TestCase;
+
+/**
+ * "Update user" and "Update role" must not be a back door to Super Admin: a
+ * user may neither hand out the Super Admin role nor grant a role permissions
+ * they don't hold themselves.
+ */
+class PrivilegeEscalationTest extends TestCase
+{
+    use RefreshDatabase;
+
+    /** Everything a user or role manager needs to reach the pages under test. */
+    private const MANAGEMENT_PERMISSIONS = [
+        'List users', 'View user', 'Update user',
+        'List roles', 'View role', 'Update role',
+    ];
+
+    private Role $superAdminRole;
+
+    protected function setUp(): void
+    {
+        parent::setUp();
+
+        GeneralSettings::fake(['super_admin_role' => null]);
+
+        foreach (self::MANAGEMENT_PERMISSIONS as $name) {
+            Permission::firstOrCreate(['name' => $name]);
+        }
+
+        // This app has no blanket "super admin can do anything" gate: the role
+        // carries real permissions, exactly as the seeder builds it.
+        $this->superAdminRole = Role::create(['name' => 'Super Admin']);
+        $this->superAdminRole->syncPermissions(self::MANAGEMENT_PERMISSIONS);
+    }
+
+    /**
+     * A user holding exactly the given permissions, through a role of its own.
+     */
+    private function userWithPermissions(array $permissions, string $roleName): User
+    {
+        foreach ($permissions as $name) {
+            Permission::firstOrCreate(['name' => $name]);
+        }
+
+        $role = Role::create(['name' => $roleName]);
+        $role->syncPermissions($permissions);
+
+        $user = User::factory()->create();
+        $user->syncRoles([$role]);
+        app(PermissionRegistrar::class)->forgetCachedPermissions();
+
+        return $user->fresh();
+    }
+
+    private function superAdmin(): User
+    {
+        $user = User::factory()->create();
+        $user->syncRoles([$this->superAdminRole]);
+        app(PermissionRegistrar::class)->forgetCachedPermissions();
+
+        return $user->fresh();
+    }
+
+    // ------------------------------------------------ granting the admin role
+
+    public function test_a_user_manager_cannot_grant_themselves_the_super_admin_role(): void
+    {
+        $this->superAdmin(); // so the target is not the last Super Admin story
+        $manager = $this->userWithPermissions(['List users', 'View user', 'Update user'], 'Manager');
+        $this->actingAs($manager);
+
+        Livewire::test(EditUser::class, ['record' => $manager->id])
+            ->fillForm(['roles' => [$this->superAdminRole->id]])
+            ->call('save')
+            ->assertHasFormErrors(['roles']);
+
+        $this->assertFalse($manager->fresh()->isSuperAdmin(), 'the role must not have been granted');
+    }
+
+    public function test_a_user_manager_cannot_grant_the_super_admin_role_to_someone_else(): void
+    {
+        $this->superAdmin();
+        $manager = $this->userWithPermissions(['List users', 'View user', 'Update user'], 'Manager');
+        $confederate = User::factory()->create();
+        $confederate->syncRoles([Role::where('name', 'Manager')->first()]);
+        $this->actingAs($manager);
+
+        Livewire::test(EditUser::class, ['record' => $confederate->id])
+            ->fillForm(['roles' => [$this->superAdminRole->id]])
+            ->call('save')
+            ->assertHasFormErrors(['roles']);
+
+        $this->assertFalse($confederate->fresh()->isSuperAdmin());
+    }
+
+    public function test_a_super_admin_can_grant_the_super_admin_role(): void
+    {
+        $admin = $this->superAdmin();
+        $promoted = $this->userWithPermissions(['List users'], 'Viewer');
+        $this->actingAs($admin);
+
+        Livewire::test(EditUser::class, ['record' => $promoted->id])
+            ->fillForm(['roles' => [$this->superAdminRole->id]])
+            ->call('save')
+            ->assertHasNoFormErrors();
+
+        $this->assertTrue($promoted->fresh()->isSuperAdmin());
+    }
+
+    public function test_a_user_manager_can_still_save_a_super_admin_whose_role_is_left_alone(): void
+    {
+        $admin = $this->superAdmin();
+        $this->superAdmin(); // a second one, so the guard against the last admin doesn't fire
+        $manager = $this->userWithPermissions(['List users', 'View user', 'Update user'], 'Manager');
+        $this->actingAs($manager);
+
+        Livewire::test(EditUser::class, ['record' => $admin->id])
+            ->fillForm(['name' => 'Renamed', 'roles' => [$this->superAdminRole->id]])
+            ->call('save')
+            ->assertHasNoFormErrors();
+
+        $this->assertSame('Renamed', $admin->fresh()->name);
+    }
+
+    // ------------------------------------------------- granting permissions
+
+    public function test_a_role_manager_cannot_grant_a_permission_they_do_not_hold(): void
+    {
+        $manager = $this->userWithPermissions(['List roles', 'View role', 'Update role'], 'Manager');
+        $deleteUser = Permission::firstOrCreate(['name' => 'Delete user']);
+        $target = Role::where('name', 'Manager')->first();
+        app(PermissionRegistrar::class)->forgetCachedPermissions();
+        $this->actingAs($manager);
+
+        Livewire::test(EditRole::class, ['record' => $target->getRouteKey()])
+            ->fillForm(['permissions' => [$deleteUser->id]])
+            ->call('save')
+            ->assertHasFormErrors(['permissions']);
+
+        $this->assertFalse($manager->fresh()->can('Delete user'));
+    }
+
+    public function test_a_role_manager_can_keep_permissions_the_role_already_has(): void
+    {
+        $manager = $this->userWithPermissions(['List roles', 'View role', 'Update role'], 'Manager');
+        $deleteUser = Permission::firstOrCreate(['name' => 'Delete user']);
+        $other = Role::create(['name' => 'Destroyer']);
+        $other->syncPermissions([$deleteUser]);
+        app(PermissionRegistrar::class)->forgetCachedPermissions();
+        $this->actingAs($manager);
+
+        Livewire::test(EditRole::class, ['record' => $other->getRouteKey()])
+            ->fillForm(['name' => 'Destroyer renamed', 'permissions' => [$deleteUser->id]])
+            ->call('save')
+            ->assertHasNoFormErrors();
+
+        $this->assertSame('Destroyer renamed', $other->fresh()->name);
+    }
+
+    public function test_a_super_admin_can_grant_a_permission_they_do_not_hold_themselves(): void
+    {
+        $admin = $this->superAdmin();
+        $jira = Permission::firstOrCreate(['name' => 'Import from Jira']); // not on the Super Admin role here
+        $target = Role::create(['name' => 'Editor']);
+        $target->syncPermissions(['List roles']);
+        app(PermissionRegistrar::class)->forgetCachedPermissions();
+        $this->actingAs($admin);
+
+        $this->assertFalse($admin->can('Import from Jira'));
+
+        Livewire::test(EditRole::class, ['record' => $target->getRouteKey()])
+            ->fillForm(['permissions' => [$jira->id]])
+            ->call('save')
+            ->assertHasNoFormErrors();
+
+        $this->assertTrue($target->fresh()->hasPermissionTo('Import from Jira'));
+    }
+
+    // ------------------------------------------- editing the admin role itself
+
+    public function test_a_role_manager_cannot_open_the_super_admin_role_for_editing(): void
+    {
+        $manager = $this->userWithPermissions(['List roles', 'View role', 'Update role'], 'Manager');
+        $this->actingAs($manager);
+
+        Livewire::test(EditRole::class, ['record' => $this->superAdminRole->getRouteKey()])
+            ->assertForbidden();
+    }
+
+    public function test_a_super_admin_can_edit_the_super_admin_role(): void
+    {
+        $this->actingAs($this->superAdmin());
+
+        Livewire::test(EditRole::class, ['record' => $this->superAdminRole->getRouteKey()])
+            ->assertSuccessful();
+    }
+}

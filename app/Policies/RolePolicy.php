@@ -47,6 +47,12 @@ class RolePolicy
      */
     public function update(User $user, Role $role)
     {
+        // The Super Admin role is the platform's master key: only a Super Admin
+        // may touch it, or "Update role" alone would be enough to reshape it.
+        if ($role->isSuperAdminRole() && ! $user->isSuperAdmin()) {
+            return false;
+        }
+
         return $user->can('Update role');
     }
 
