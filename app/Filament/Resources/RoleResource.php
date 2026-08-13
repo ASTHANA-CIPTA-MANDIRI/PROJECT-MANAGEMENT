@@ -60,12 +60,6 @@ class RoleResource extends Resource
                                     // role they already hold. Permissions the role
                                     // already has may be kept, only new ones are checked.
                                     ->rule(fn (?Role $record) => function (string $attribute, $value, \Closure $fail) use ($record) {
-                                        $actor = auth()->user();
-
-                                        if ($actor?->isSuperAdmin()) {
-                                            return;
-                                        }
-
                                         $selected = array_map('strval', (array) $value);
                                         $current = $record
                                             ? $record->permissions->pluck('id')->map('strval')->all()
@@ -76,11 +70,7 @@ class RoleResource extends Resource
                                             return;
                                         }
 
-                                        $held = $actor
-                                            ? $actor->getAllPermissions()->pluck('id')->map('strval')->all()
-                                            : [];
-
-                                        if (array_diff($added, $held) !== []) {
+                                        if (! auth()->user()?->holdsAllPermissions($added)) {
                                             $fail(__('You cannot grant permissions that you do not have yourself.'));
                                         }
                                     }),

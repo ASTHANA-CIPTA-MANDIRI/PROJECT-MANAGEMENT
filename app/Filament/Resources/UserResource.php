@@ -3,6 +3,7 @@
 namespace App\Filament\Resources;
 
 use App\Filament\Resources\UserResource\Pages;
+use App\Models\Role;
 use App\Models\User;
 use Filament\Forms;
 use Filament\Resources\Form;
@@ -65,11 +66,11 @@ class UserResource extends Resource
                                     ->columns(3)
                                     ->relationship('roles', 'name')
                                     // Guards: the Super Admin role can't be removed
-                                    // from the last Super Admin, and only a Super
-                                    // Admin may hand that role out to anyone.
+                                    // from the last Super Admin, and nobody may hand
+                                    // out a role stronger than the one they hold.
                                     ->rule(fn (?User $record) => function (string $attribute, $value, \Closure $fail) use ($record) {
                                         $superAdminRoleId = User::superAdminRoleId()
-                                            ?? \App\Models\Role::where('name', 'Super Admin')->value('id');
+                                            ?? Role::where('name', 'Super Admin')->value('id');
                                         $selected = array_map('strval', (array) $value);
                                         $keepsSuperAdmin = $superAdminRoleId !== null
                                             && in_array((string) $superAdminRoleId, $selected, true);
@@ -80,12 +81,33 @@ class UserResource extends Resource
                                             return;
                                         }
 
-                                        // Privilege escalation: without this, anyone
-                                        // holding "Update user" could grant themselves
-                                        // (or a confederate) the Super Admin role.
-                                        $alreadySuperAdmin = $record !== null && $record->isSuperAdmin();
-                                        if ($keepsSuperAdmin && ! $alreadySuperAdmin && ! auth()->user()?->isSuperAdmin()) {
-                                            $fail(__('Only a Super Admin can assign the Super Admin role.'));
+                                        // Privilege escalation: without this, anyone holding
+                                        // "Update user" could grant themselves (or a
+                                        // confederate) a role more powerful than their own.
+                                        // Only roles being *added* are checked, so editing
+                                        // the name of a user who already holds a strong role
+                                        // keeps working.
+                                        $current = $record
+                                            ? $record->roles->pluck('id')->map('strval')->all()
+                                            : [];
+                                        $added = array_diff($selected, $current);
+
+                                        if ($added === []) {
+                                            return;
+                                        }
+
+                                        $actor = auth()->user();
+
+                                        foreach (Role::whereKey($added)->with('permissions')->get() as $role) {
+                                            if ($actor?->canGrantRole($role)) {
+                                                continue;
+                                            }
+
+                                            $fail($role->isSuperAdminRole()
+                                                ? __('Only a Super Admin can assign the Super Admin role.')
+                                                : __('You cannot assign a role holding permissions you do not have yourself.'));
+
+                                            return;
                                         }
                                     }),
                             ]),

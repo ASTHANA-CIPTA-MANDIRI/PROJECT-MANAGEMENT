@@ -197,6 +197,52 @@ class User extends Authenticatable implements FilamentUser, MustVerifyEmail
             && static::superAdmins()->whereKeyNot($this->getKey())->doesntExist();
     }
 
+    /**
+     * Ids of every permission this user effectively holds, through any role.
+     */
+    public function heldPermissionIds(): array
+    {
+        return $this->getAllPermissions()->pluck('id')->map('strval')->all();
+    }
+
+    /**
+     * Whether this user holds every one of the given permissions. The rule
+     * behind every "you cannot grant what you do not have yourself" check:
+     * without it, any permission to manage roles or users would be a shortcut
+     * to every privilege in the system.
+     */
+    public function holdsAllPermissions(array $permissionIds): bool
+    {
+        if ($this->isSuperAdmin()) {
+            return true;
+        }
+
+        $required = array_map('strval', $permissionIds);
+
+        return array_diff($required, $this->heldPermissionIds()) === [];
+    }
+
+    /**
+     * Whether this user may hand out the given role. A non-Super-Admin may only
+     * grant roles whose permissions they already hold, and may never grant the
+     * Super Admin role itself — whatever permissions that role happens to carry
+     * on this particular instance.
+     */
+    public function canGrantRole(Role $role): bool
+    {
+        if ($this->isSuperAdmin()) {
+            return true;
+        }
+
+        if ($role->isSuperAdminRole()) {
+            return false;
+        }
+
+        return $this->holdsAllPermissions(
+            $role->permissions->pluck('id')->all()
+        );
+    }
+
     public function sendEmailVerificationNotification()
     {
         $this->notify(new \App\Notifications\CustomVerifyEmail);

@@ -135,6 +135,59 @@ class PrivilegeEscalationTest extends TestCase
         $this->assertSame('Renamed', $admin->fresh()->name);
     }
 
+    // ------------------------------------- granting a role stronger than yours
+
+    public function test_a_user_manager_cannot_grant_a_role_holding_permissions_they_lack(): void
+    {
+        $manager = $this->userWithPermissions(['List users', 'View user', 'Update user'], 'Manager');
+        $strong = Role::create(['name' => 'Destroyer']);
+        $strong->syncPermissions([Permission::firstOrCreate(['name' => 'Delete user'])]);
+        app(PermissionRegistrar::class)->forgetCachedPermissions();
+        $this->actingAs($manager);
+
+        Livewire::test(EditUser::class, ['record' => $manager->id])
+            ->fillForm(['roles' => [$manager->roles->first()->id, $strong->id]])
+            ->call('save')
+            ->assertHasFormErrors(['roles']);
+
+        $this->assertFalse($manager->fresh()->can('Delete user'));
+    }
+
+    public function test_a_user_manager_can_grant_a_role_within_their_own_permissions(): void
+    {
+        $manager = $this->userWithPermissions(['List users', 'View user', 'Update user'], 'Manager');
+        $weaker = Role::create(['name' => 'Viewer']);
+        $weaker->syncPermissions(['List users']);
+        app(PermissionRegistrar::class)->forgetCachedPermissions();
+        $target = User::factory()->create();
+        $this->actingAs($manager);
+
+        Livewire::test(EditUser::class, ['record' => $target->id])
+            ->fillForm(['roles' => [$weaker->id]])
+            ->call('save')
+            ->assertHasNoFormErrors();
+
+        $this->assertTrue($target->fresh()->hasRole('Viewer'));
+    }
+
+    public function test_editing_a_user_who_already_holds_a_strong_role_still_works(): void
+    {
+        $manager = $this->userWithPermissions(['List users', 'View user', 'Update user'], 'Manager');
+        $strong = Role::create(['name' => 'Destroyer']);
+        $strong->syncPermissions([Permission::firstOrCreate(['name' => 'Delete user'])]);
+        $target = User::factory()->create();
+        $target->syncRoles([$strong]);
+        app(PermissionRegistrar::class)->forgetCachedPermissions();
+        $this->actingAs($manager);
+
+        Livewire::test(EditUser::class, ['record' => $target->id])
+            ->fillForm(['name' => 'Renamed', 'roles' => [$strong->id]])
+            ->call('save')
+            ->assertHasNoFormErrors();
+
+        $this->assertSame('Renamed', $target->fresh()->name);
+    }
+
     // ------------------------------------------------- granting permissions
 
     public function test_a_role_manager_cannot_grant_a_permission_they_do_not_hold(): void
