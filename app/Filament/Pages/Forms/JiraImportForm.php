@@ -20,6 +20,10 @@ use Illuminate\Support\Str;
  * projects/tickets and trigger its `updateJiraProjects`/`updateJiraTickets`
  * listeners between steps, so each step needs a live reference to $page
  * rather than a snapshot of its state.
+ *
+ * Project and issue labels are built as raw HtmlString, and every value in
+ * them comes from the remote Jira server — whose address the user picks — so
+ * each one must be passed through e() before it is concatenated.
  */
 class JiraImportForm
 {
@@ -111,12 +115,14 @@ class JiraImportForm
                     ->options(function () use ($page) {
                         $list = [];
                         foreach ($page->getProjects() ?? [] as $project) {
+                            $avatar = self::avatarUrl($project);
+
                             $list[$project->key] = new HtmlString(
                                 "<div class='w-full flex flex-col gap-1'>"
                                 ."<div class='w-full flex items-center gap-1'>"
-                                ."<img src='".$project->avatarUrls->{'16x16'}."' class='rounded-full w-8 h-8 shadow' />"
-                                ."<span class='font-medium text-gray-700 text-base'>".$project->name.'</span>'
-                                ."<div class='text-gray-700 text-xs font-light'><span class='font-medium uppercase'>/</span> ".$project->key.'</div>'
+                                .($avatar ? "<img src='".e($avatar)."' class='rounded-full w-8 h-8 shadow' />" : '')
+                                ."<span class='font-medium text-gray-700 text-base'>".e($project->name).'</span>'
+                                ."<div class='text-gray-700 text-xs font-light'><span class='font-medium uppercase'>/</span> ".e($project->key).'</div>'
                                 .'</div>'
                                 .'</div>'
                             );
@@ -127,6 +133,22 @@ class JiraImportForm
 
             ])
             ->afterValidation(fn () => $page->beginLoadingTickets());
+    }
+
+    /**
+     * The avatar url comes from the remote Jira server and lands in an `src`
+     * attribute, so only render it when it is a plain https url — that keeps
+     * javascript:/data: payloads out even though the value is escaped.
+     */
+    private static function avatarUrl($project): ?string
+    {
+        $url = $project->avatarUrls->{'16x16'} ?? null;
+
+        if (! is_string($url) || ! filter_var($url, FILTER_VALIDATE_URL)) {
+            return null;
+        }
+
+        return strtolower((string) parse_url($url, PHP_URL_SCHEME)) === 'https' ? $url : null;
     }
 
     private static function ticketsStep(JiraImport $page): Wizard\Step
@@ -167,7 +189,7 @@ class JiraImportForm
                                         ->label(fn () => new HtmlString(
                                             "<div class='w-full flex flex-col gap-1'>"
                                             ."<div class='w-full flex items-center gap-1'>"
-                                            ."<div class='text-gray-700 text-xs font-light'><span class='font-medium uppercase'>".$issue['code'].'</span> '.$issue['name'].'</div>'
+                                            ."<div class='text-gray-700 text-xs font-light'><span class='font-medium uppercase'>".e($issue['code']).'</span> '.e($issue['name']).'</div>'
                                             .'</div>'
                                             .'</div>'
                                         ));

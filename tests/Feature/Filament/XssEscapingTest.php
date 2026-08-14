@@ -139,6 +139,100 @@ class XssEscapingTest extends TestCase
             ->assertSee(self::PAYLOAD);
     }
 
+    /**
+     * The Jira wizard is the one place where the rendered values come from a
+     * remote server the user chose, so a hostile "Jira" is enough to reach the
+     * panel — no compromise of a real Jira required.
+     */
+    private function allowJiraImport(): void
+    {
+        Permission::firstOrCreate(['name' => 'Import from Jira']);
+        $this->user->roles()->first()->givePermissionTo('Import from Jira');
+        app(PermissionRegistrar::class)->forgetCachedPermissions();
+        $this->user = $this->user->fresh();
+        $this->actingAs($this->user);
+    }
+
+    public function test_jira_project_name_key_and_avatar_are_escaped_in_the_import_wizard(): void
+    {
+        $this->allowJiraImport();
+
+        $projects = [(object) [
+            'key' => self::PAYLOAD,
+            'name' => self::PAYLOAD,
+            // Breaking out of src='...' needs only an apostrophe.
+            'avatarUrls' => (object) ['16x16' => "https://evil.example.com/a.png' onerror='alert(1)"],
+        ]];
+
+        $service = \Mockery::mock(\App\Services\JiraImportService::class);
+        $service->shouldReceive('connect')->andReturn(\Mockery::mock(\GuzzleHttp\Client::class));
+        $service->shouldReceive('fetchProjects')->andReturn($projects);
+        $this->app->instance(\App\Services\JiraImportService::class, $service);
+
+        Livewire::test(\App\Filament\Pages\JiraImport::class)
+            ->set('host', 'https://example.atlassian.net')
+            ->set('username', 'user@example.com')
+            ->set('token', 'secret')
+            ->call('updateJiraProjects')
+            ->assertSuccessful()
+            ->assertDontSeeHtml(self::PAYLOAD)
+            ->assertDontSeeHtml("onerror='alert(1)")
+            ->assertSee(self::PAYLOAD);
+    }
+
+    public function test_a_non_https_jira_avatar_is_not_rendered_at_all(): void
+    {
+        $this->allowJiraImport();
+
+        $projects = [(object) [
+            'key' => 'ALP',
+            'name' => 'Alpha',
+            'avatarUrls' => (object) ['16x16' => 'javascript:alert(1)'],
+        ]];
+
+        $service = \Mockery::mock(\App\Services\JiraImportService::class);
+        $service->shouldReceive('connect')->andReturn(\Mockery::mock(\GuzzleHttp\Client::class));
+        $service->shouldReceive('fetchProjects')->andReturn($projects);
+        $this->app->instance(\App\Services\JiraImportService::class, $service);
+
+        Livewire::test(\App\Filament\Pages\JiraImport::class)
+            ->set('host', 'https://example.atlassian.net')
+            ->set('username', 'user@example.com')
+            ->set('token', 'secret')
+            ->call('updateJiraProjects')
+            ->assertSuccessful()
+            ->assertDontSee('javascript:alert(1)');
+    }
+
+    public function test_jira_issue_code_and_name_are_escaped_in_the_import_wizard(): void
+    {
+        $this->allowJiraImport();
+
+        $tickets = ['ALP' => [
+            'total' => 1,
+            'issues' => [[
+                'code' => 'ALP-1',
+                'name' => self::PAYLOAD,
+                'data' => (object) ['self' => 'https://example.atlassian.net/rest/api/2/issue/10001'],
+            ]],
+        ]];
+
+        $service = \Mockery::mock(\App\Services\JiraImportService::class);
+        $service->shouldReceive('connect')->andReturn(\Mockery::mock(\GuzzleHttp\Client::class));
+        $service->shouldReceive('fetchTicketsByProject')->andReturn($tickets);
+        $this->app->instance(\App\Services\JiraImportService::class, $service);
+
+        Livewire::test(\App\Filament\Pages\JiraImport::class)
+            ->set('host', 'https://example.atlassian.net')
+            ->set('username', 'user@example.com')
+            ->set('token', 'secret')
+            ->set('selected_projects', ['ALP'])
+            ->call('updateJiraTickets')
+            ->assertSuccessful()
+            ->assertDontSeeHtml(self::PAYLOAD)
+            ->assertSee(self::PAYLOAD);
+    }
+
     public function test_project_and_sprint_names_are_escaped_in_the_scrum_board_heading(): void
     {
         $project = Project::factory()->scrum()->create([
