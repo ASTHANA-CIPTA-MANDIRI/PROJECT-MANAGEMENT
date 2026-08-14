@@ -8,6 +8,7 @@ use Filament\Forms\Components\TextInput;
 use Filament\Forms\Concerns\InteractsWithForms;
 use Filament\Forms\Contracts\HasForms;
 use Illuminate\Contracts\View\View;
+use Illuminate\Validation\Rules\Password;
 use Livewire\Component;
 
 class ValidateAccount extends Component implements HasForms
@@ -33,6 +34,7 @@ class ValidateAccount extends Component implements HasForms
                 ->password()
                 ->required()
                 ->confirmed()
+                ->rule(Password::defaults())
                 ->label(__('Account password'))
                 ->placeholder(__('Choose your account password')),
 

@@ -4,6 +4,7 @@ namespace App\Observers;
 
 use App\Models\User;
 use App\Notifications\UserCreatedNotification;
+use Illuminate\Support\Str;
 use Ramsey\Uuid\Uuid;
 
 /**
@@ -16,7 +17,7 @@ class UserObserver
     public function creating(User $user): void
     {
         if ($user->type == 'db') {
-            $user->password = bcrypt(uniqid());
+            $user->password = bcrypt(Str::random(32));
             $user->creation_token = Uuid::uuid4()->toString();
         }
     }
