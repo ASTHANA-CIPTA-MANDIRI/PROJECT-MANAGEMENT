@@ -2,7 +2,10 @@
 
 namespace App\Http\Livewire\RoadMap;
 
+use App\Http\Requests\TicketRequest;
+use App\Models\Epic;
 use App\Models\Project;
+use App\Models\Sprint;
 use App\Models\Ticket;
 use App\Models\TicketPriority;
 use App\Models\TicketStatus;
@@ -13,11 +16,14 @@ use Filament\Facades\Filament;
 use Filament\Forms;
 use Filament\Forms\Concerns\InteractsWithForms;
 use Filament\Forms\Contracts\HasForms;
+use Illuminate\Database\Eloquent\Builder;
+use Illuminate\Foundation\Auth\Access\AuthorizesRequests;
+use Illuminate\Support\Facades\Validator;
 use Livewire\Component;
 
 class IssueForm extends Component implements HasForms
 {
-    use InteractsWithForms;
+    use AuthorizesRequests, InteractsWithForms;
 
     public ?Project $project = null;
 
@@ -28,17 +34,10 @@ class IssueForm extends Component implements HasForms
     public function mount()
     {
         $this->initProject($this->project?->id);
-        if ($this->project?->status_type === 'custom') {
-            $defaultStatus = TicketStatus::where('project_id', $this->project->id)
-                ->where('is_default', true)
-                ->first()
-                ?->id;
-        } else {
-            $defaultStatus = TicketStatus::whereNull('project_id')
-                ->where('is_default', true)
-                ->first()
-                ?->id;
-        }
+        $defaultStatus = $this->statusesQuery($this->project)
+            ->where('is_default', true)
+            ->first()
+            ?->id;
         $this->form->fill([
             'project_id' => $this->project?->id ?? null,
             'owner_id' => auth()->user()->id,
@@ -62,6 +61,17 @@ class IssueForm extends Component implements HasForms
         }
         $this->epics = $this->project ? $this->project->epics->pluck('name', 'id')->toArray() : [];
         $this->sprints = $this->project ? $this->project->sprints->pluck('name', 'id')->toArray() : [];
+    }
+
+    /**
+     * Ticket statuses are either global (shared by every "default" project)
+     * or scoped to one "custom" project, never both.
+     */
+    private function statusesQuery(?Project $project): Builder
+    {
+        return $project?->status_type === 'custom'
+            ? TicketStatus::where('project_id', $project->id)
+            : TicketStatus::whereNull('project_id');
     }
 
     protected function getFormSchema(): array
@@ -123,19 +133,10 @@ class IssueForm extends Component implements HasForms
                             Forms\Components\Select::make('status_id')
                                 ->label(__('Ticket status'))
                                 ->searchable()
-                                ->options(function ($get) {
-                                    if ($this->project?->status_type === 'custom') {
-                                        return TicketStatus::where('project_id', $this->project->id)
-                                            ->get()
-                                            ->pluck('name', 'id')
-                                            ->toArray();
-                                    } else {
-                                        return TicketStatus::whereNull('project_id')
-                                            ->get()
-                                            ->pluck('name', 'id')
-                                            ->toArray();
-                                    }
-                                })
+                                ->options(fn () => $this->statusesQuery($this->project)
+                                    ->get()
+                                    ->pluck('name', 'id')
+                                    ->toArray())
                                 ->required(),
 
                             Forms\Components\Select::make('type_id')
@@ -171,7 +172,34 @@ class IssueForm extends Component implements HasForms
 
     public function submit(): void
     {
+        $this->authorize('create', Ticket::class);
+
         $data = $this->form->getState();
+
+        // The select's options are scoped to the user's accessible projects,
+        // but the posted state is client-controlled: resolve it through the
+        // same access scope instead of trusting it as-is.
+        $project = Project::accessibleBy(auth()->user())
+            ->whereKey($data['project_id'] ?? null)
+            ->firstOrFail();
+        $data['project_id'] = $project->id;
+
+        // Same for status/epic/sprint: their options are scoped to $this->project
+        // client-side, but nothing stops the posted id from belonging to a
+        // different project.
+        $data['status_id'] = $this->statusesQuery($project)->whereKey($data['status_id'] ?? null)->value('id');
+        $data['epic_id'] = ($data['epic_id'] ?? null)
+            ? Epic::where('project_id', $project->id)->whereKey($data['epic_id'])->value('id')
+            : null;
+        $data['sprint_id'] = ($data['sprint_id'] ?? null)
+            ? Sprint::where('project_id', $project->id)->whereKey($data['sprint_id'])->value('id')
+            : null;
+
+        // TicketRequest::rules() is the single source of truth for what a
+        // valid ticket looks like, shared with the API's TicketController.
+        $data = Validator::make($data, (new TicketRequest)->rules(), (new TicketRequest)->messages())
+            ->validate();
+
         Ticket::create($data);
         Filament::notify('success', __('Ticket successfully saved'));
         $this->cancel(true);
