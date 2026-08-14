@@ -164,6 +164,9 @@ class JiraImport extends AuthorizedPage implements HasForms
         $this->tickets = $jira->fetchTicketsByProject($client, $this->selected_projects);
         foreach ($this->tickets ?? [] as $projectKey => $ticket) {
             foreach ($ticket['issues'] as $issue) {
+                if (! isset($issue['data']->self)) {
+                    continue;
+                }
                 $this->ticketsDataApi[Str::slug($projectKey).'_'.Str::slug($issue['code'])] = $issue['data']->self;
             }
         }
