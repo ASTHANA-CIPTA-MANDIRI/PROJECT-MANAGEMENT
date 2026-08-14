@@ -9,6 +9,7 @@ use Filament\Forms\Concerns\InteractsWithForms;
 use Filament\Forms\Contracts\HasForms;
 use Illuminate\Contracts\Support\Htmlable;
 use Illuminate\Support\Str;
+use InvalidArgumentException;
 
 class JiraImport extends AuthorizedPage implements HasForms
 {
@@ -112,9 +113,15 @@ class JiraImport extends AuthorizedPage implements HasForms
     {
         if ($this->data && count($this->data)) {
             $tickets = [];
-            foreach (array_keys($this->data) as $item) {
-                $url = $this->ticketsDataApi[$item];
-                $tickets[] = $jira->fetchTicketDetails($this->host, $this->username, $this->token, $url);
+            try {
+                foreach (array_keys($this->data) as $item) {
+                    $url = $this->ticketsDataApi[$item];
+                    $tickets[] = $jira->fetchTicketDetails($this->host, $this->username, $this->token, $url);
+                }
+            } catch (InvalidArgumentException $e) {
+                $this->notify('danger', $e->getMessage());
+
+                return;
             }
             dispatch(new ImportJiraTicketsJob($tickets, auth()->user()));
             $this->notify('success', __('The importation job is started, when finished you will be notified'), true);
@@ -126,17 +133,36 @@ class JiraImport extends AuthorizedPage implements HasForms
 
     public function updateJiraProjects(JiraImportService $jira): void
     {
-        $client = $jira->connect($this->host, $this->username, $this->token);
-        $this->projects = $jira->fetchProjects($client);
         $this->loadingProjects = false;
+
+        try {
+            $client = $jira->connect($this->host, $this->username, $this->token);
+        } catch (InvalidArgumentException $e) {
+            $this->projects = null;
+            $this->notify('danger', $e->getMessage());
+
+            return;
+        }
+
+        $this->projects = $jira->fetchProjects($client);
     }
 
     public function updateJiraTickets(JiraImportService $jira): void
     {
         $this->ticketsDataApi = [];
-        $client = $jira->connect($this->host, $this->username, $this->token);
+        $this->loadingTickets = false;
+
+        try {
+            $client = $jira->connect($this->host, $this->username, $this->token);
+        } catch (InvalidArgumentException $e) {
+            $this->tickets = null;
+            $this->notify('danger', $e->getMessage());
+
+            return;
+        }
+
         $this->tickets = $jira->fetchTicketsByProject($client, $this->selected_projects);
-        foreach ($this->tickets as $projectKey => $ticket) {
+        foreach ($this->tickets ?? [] as $projectKey => $ticket) {
             foreach ($ticket['issues'] as $issue) {
                 $this->ticketsDataApi[Str::slug($projectKey).'_'.Str::slug($issue['code'])] = $issue['data']->self;
             }

@@ -3,6 +3,7 @@
 namespace App\Filament\Pages\Forms;
 
 use App\Filament\Pages\JiraImport;
+use App\Rules\SafeJiraHost;
 use Filament\Forms\Components\Card;
 use Filament\Forms\Components\Checkbox;
 use Filament\Forms\Components\CheckboxList;
@@ -55,8 +56,10 @@ class JiraImportForm
                     ->schema([
                         TextInput::make('host')
                             ->label(__('Host'))
-                            ->helperText(__('The url used to access your jira account'))
-                            ->required(),
+                            ->helperText(__('The https url used to access your jira account, e.g. https://your-team.atlassian.net'))
+                            ->url()
+                            ->required()
+                            ->rule(new SafeJiraHost),
 
                         TextInput::make('username')
                             ->label(__('Username'))

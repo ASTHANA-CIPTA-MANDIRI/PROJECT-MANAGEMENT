@@ -2,6 +2,7 @@
 
 namespace App\Services;
 
+use App\Support\JiraHost;
 use GuzzleHttp\Client;
 use GuzzleHttp\Exception\GuzzleException;
 use Illuminate\Support\Facades\Log;
@@ -9,14 +10,21 @@ use Illuminate\Support\Facades\Log;
 /**
  * Talks to the Jira REST API for the JiraImport page/job. Credentials are
  * never stored — each call builds a fresh client from the host/username/token
- * the user just entered.
+ * the user just entered. The host is user input, so it goes through
+ * App\Support\JiraHost before it can become a base uri.
  */
 class JiraImportService
 {
+    /**
+     * @throws \InvalidArgumentException when the host is not allowed to be called.
+     */
     public function connect(string $host, string $username, string $token): Client
     {
         return new Client([
-            'base_uri' => $host,
+            'base_uri' => JiraHost::sanitize($host),
+            'allow_redirects' => false,
+            'timeout' => (float) config('jira.timeout', 10),
+            'connect_timeout' => (float) config('jira.connect_timeout', 5),
             'headers' => [
                 'Content-Type' => 'application/json',
                 'Accept' => 'application/json',
