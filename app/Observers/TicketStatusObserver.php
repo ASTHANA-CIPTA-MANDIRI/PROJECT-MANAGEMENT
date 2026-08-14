@@ -28,12 +28,17 @@ class TicketStatusObserver
         $toUpdate = $query->orderBy('order', 'asc')
             ->get();
         $order = $status->order;
-        foreach ($toUpdate as $i) {
-            if ($i->order == $order || $i->order == ($order + 1)) {
-                $i->order = $i->order + 1;
-                $i->save();
-                $order = $i->order;
+        // withoutEvents: each save() below would otherwise re-trigger this
+        // same observer, opening a new cascade on top of the one already
+        // running and growing recursion depth/query count with every status.
+        TicketStatus::withoutEvents(function () use ($toUpdate, &$order) {
+            foreach ($toUpdate as $i) {
+                if ($i->order == $order || $i->order == ($order + 1)) {
+                    $i->order = $i->order + 1;
+                    $i->save();
+                    $order = $i->order;
+                }
             }
-        }
+        });
     }
 }
