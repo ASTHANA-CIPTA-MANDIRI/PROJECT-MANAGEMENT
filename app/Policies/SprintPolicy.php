@@ -69,7 +69,14 @@ class SprintPolicy
      */
     public function delete(User $user, Sprint $sprint)
     {
-        return $user->can('Delete sprint');
+        return $user->can('Delete sprint')
+            && (
+                $sprint->project->owner_id === $user->id
+                ||
+                $sprint->project->users()->where('users.id', $user->id)
+                    ->where('role', config('system.projects.affectations.roles.can_manage'))
+                    ->count()
+            );
     }
 
     /**

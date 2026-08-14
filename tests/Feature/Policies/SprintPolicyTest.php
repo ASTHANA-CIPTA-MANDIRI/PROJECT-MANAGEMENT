@@ -93,18 +93,50 @@ class SprintPolicyTest extends TestCase
         $this->assertFalse($user->can('update', $sprint));
     }
 
-    public function test_deleting_requires_the_delete_permission(): void
+    public function test_the_project_owner_can_delete_the_sprint(): void
     {
-        $this->assertTrue(
-            $this->userWithPermissions(['Delete sprint'])->can('delete', Sprint::factory()->create())
-        );
+        $user = $this->userWithPermissions(['Delete sprint']);
+        $project = Project::factory()->create(['owner_id' => $user->id]);
+        $sprint = Sprint::factory()->create(['project_id' => $project->id]);
+
+        $this->assertTrue($user->can('delete', $sprint));
+    }
+
+    public function test_a_member_with_the_manage_role_can_delete_the_sprint(): void
+    {
+        $user = $this->userWithPermissions(['Delete sprint']);
+        $project = Project::factory()->create();
+        $project->users()->attach($user->id, ['role' => $this->manageRole()]);
+        $sprint = Sprint::factory()->create(['project_id' => $project->id]);
+
+        $this->assertTrue($user->can('delete', $sprint));
+    }
+
+    public function test_a_plain_member_cannot_delete_the_sprint(): void
+    {
+        $user = $this->userWithPermissions(['Delete sprint']);
+        $project = Project::factory()->create();
+        $project->users()->attach($user->id, ['role' => 'employee']);
+        $sprint = Sprint::factory()->create(['project_id' => $project->id]);
+
+        $this->assertFalse($user->can('delete', $sprint));
+    }
+
+    public function test_an_unrelated_user_cannot_delete_the_sprint(): void
+    {
+        $user = $this->userWithPermissions(['Delete sprint']);
+        $sprint = Sprint::factory()->create();
+
+        $this->assertFalse($user->can('delete', $sprint));
     }
 
     public function test_deleting_is_denied_without_the_permission(): void
     {
-        $this->assertFalse(
-            $this->userWithoutPermissions()->can('delete', Sprint::factory()->create())
-        );
+        $user = $this->userWithoutPermissions();
+        $project = Project::factory()->create(['owner_id' => $user->id]);
+        $sprint = Sprint::factory()->create(['project_id' => $project->id]);
+
+        $this->assertFalse($user->can('delete', $sprint));
     }
 
     // ----------------------------------------------------------- deleteAny
