@@ -70,22 +70,28 @@ class TransactionTest extends TestCase
         $this->seedDefaults();
         $user = User::factory()->create();
 
-        // The second ticket references a different project with the SAME key,
-        // which violates the unique ticket_prefix constraint mid-batch.
+        // The second ticket lands in an existing project of the importer's that
+        // is configured for custom statuses but has none yet, so there is no
+        // status to give the ticket. (Duplicate ticket prefixes no longer fail
+        // the batch - the import now allocates a free one.)
+        $broken = Project::factory()->customStatuses()->create([
+            'name' => 'Beta', 'owner_id' => $user->id,
+        ]);
+
         $batch = [
-            $this->jiraTicket('Alpha', 'DUP', 'First'),
-            $this->jiraTicket('Beta', 'DUP', 'Second'),
+            $this->jiraTicket('Alpha', 'ALP', 'First'),
+            $this->jiraTicket('Beta', 'BET', 'Second'),
         ];
 
         try {
             (new ImportJiraTicketsJob($batch, $user))->handle();
-            $this->fail('Expected the duplicate prefix to throw.');
+            $this->fail('Expected the missing status to throw.');
         } catch (\Throwable $e) {
             // expected
         }
 
         // Nothing from the batch survives: the first project/ticket rolled back.
-        $this->assertSame(0, Project::count(), 'no project should remain');
+        $this->assertSame([$broken->id], Project::pluck('id')->all(), 'only the pre-existing project remains');
         $this->assertSame(0, Ticket::count(), 'no ticket should remain');
     }
 
