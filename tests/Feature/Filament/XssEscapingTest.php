@@ -233,6 +233,45 @@ class XssEscapingTest extends TestCase
             ->assertSee(self::PAYLOAD);
     }
 
+    /**
+     * The sprint "Tickets" modal lists every ticket of the project as a raw
+     * HtmlString label, so a ticket or sprint name typed by any member with
+     * create rights reaches whoever opens that modal.
+     */
+    public function test_ticket_and_sprint_names_are_escaped_in_the_sprint_tickets_modal(): void
+    {
+        foreach (['List sprints', 'View sprint', 'Update sprint'] as $name) {
+            Permission::firstOrCreate(['name' => $name]);
+        }
+        $this->user->roles()->first()->givePermissionTo(['List sprints', 'View sprint', 'Update sprint']);
+        app(PermissionRegistrar::class)->forgetCachedPermissions();
+        $this->user = $this->user->fresh();
+        $this->actingAs($this->user);
+
+        $project = Project::factory()->scrum()->create(['owner_id' => $this->user->id]);
+        $target = \App\Models\Sprint::factory()->create(['project_id' => $project->id]);
+        // A second sprint makes the ticket render its "other sprint" badge too.
+        $other = \App\Models\Sprint::factory()->create([
+            'project_id' => $project->id,
+            'name' => self::PAYLOAD,
+        ]);
+        Ticket::factory()->create([
+            'owner_id' => $this->user->id,
+            'project_id' => $project->id,
+            'sprint_id' => $other->id,
+            'name' => self::PAYLOAD,
+        ]);
+
+        Livewire::test(\App\Filament\Resources\ProjectResource\RelationManagers\SprintsRelationManager::class, [
+            'ownerRecord' => $project,
+            'pageClass' => \App\Filament\Resources\ProjectResource\Pages\EditProject::class,
+        ])
+            ->mountTableAction('tickets', $target)
+            ->assertSuccessful()
+            ->assertDontSeeHtml(self::PAYLOAD)
+            ->assertSee(self::PAYLOAD);
+    }
+
     public function test_project_and_sprint_names_are_escaped_in_the_scrum_board_heading(): void
     {
         $project = Project::factory()->scrum()->create([

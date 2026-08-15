@@ -169,16 +169,19 @@ class SprintsRelationManager extends RelationManager
                             ->extraAttributes([
                                 'class' => 'sprint-checkboxes',
                             ])
+                            // The labels are raw HtmlString, so the ticket and
+                            // sprint names typed by other project members must
+                            // go through e() before being concatenated.
                             ->options(
                                 function ($record) {
                                     $results = [];
                                     foreach ($record->project->tickets as $ticket) {
                                         $results[$ticket->id] = new HtmlString(
                                             '<div class="w-full flex justify-between items-center">'
-                                            .'<span>'.$ticket->name.'</span>'
+                                            .'<span>'.e($ticket->name).'</span>'
                                             .($ticket->sprint ? '<span class="text-xs font-medium '
                                                 .($ticket->sprint_id == $record->id ? 'bg-gray-100 text-gray-600' : 'bg-danger-500 text-white')
-                                                .' px-2 py-1 rounded">'.$ticket->sprint->name.'</span>' : '')
+                                                .' px-2 py-1 rounded">'.e($ticket->sprint->name).'</span>' : '')
                                             .'</div>'
                                         );
                                     }
