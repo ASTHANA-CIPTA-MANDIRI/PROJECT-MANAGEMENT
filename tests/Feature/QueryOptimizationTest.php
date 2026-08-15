@@ -144,6 +144,34 @@ class QueryOptimizationTest extends TestCase
         $this->assertLessThanOrEqual(10, $queryCount, "Expected eager loading, ran {$queryCount} queries");
     }
 
+    /**
+     * TicketObserver::creating() read $project->tickets as a property, i.e.
+     * SELECT * FROM tickets WHERE project_id = ? — every row of the project
+     * hydrated into a model — only to read one column. On a busy project that
+     * ran on every single insert, inside the import/API transaction.
+     */
+    public function test_creating_a_ticket_does_not_load_every_ticket_of_the_project(): void
+    {
+        $project = Project::factory()->create();
+        Ticket::factory()->count(10)->create(['project_id' => $project->id]);
+
+        DB::connection()->enableQueryLog();
+
+        Ticket::factory()->create(['project_id' => $project->id]);
+
+        $queries = collect(DB::connection()->getQueryLog())->pluck('query');
+        DB::connection()->disableQueryLog();
+
+        $this->assertTrue(
+            $queries->contains(fn (string $sql) => str_contains($sql, 'max(') && str_contains($sql, 'tickets')),
+            'the next order should come from an aggregate'
+        );
+        $this->assertFalse(
+            $queries->contains(fn (string $sql) => str_starts_with($sql, 'select * from "tickets"')),
+            'no query should fetch every ticket row: '.$queries->implode(' | ')
+        );
+    }
+
     public function test_latest_projects_widget_eager_loads_cover_media(): void
     {
         Storage::fake('media');

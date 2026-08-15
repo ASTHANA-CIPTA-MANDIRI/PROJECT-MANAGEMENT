@@ -19,11 +19,19 @@ class TicketObserver
     public function creating(Ticket $ticket): void
     {
         $project = Project::where('id', $ticket->project_id)->first();
-        $order = $project->tickets?->last()?->order ?? -1;
+        if (! $project) {
+            return;
+        }
+
+        // A MAX() in SQL: reading the relation as a property loaded every
+        // ticket of the project into memory just to look at one column, and it
+        // read the last row by insertion order rather than the highest order.
+        $highestOrder = $project->tickets()->max('order');
+
         // Numbers come from the project's counter, never from a live count:
         // deleting a ticket must not free its code for the next one.
         $ticket->code = $project->ticket_prefix.'-'.$project->allocateTicketNumber();
-        $ticket->order = $order + 1;
+        $ticket->order = $highestOrder === null ? 0 : ((int) $highestOrder) + 1;
     }
 
     public function created(Ticket $ticket): void

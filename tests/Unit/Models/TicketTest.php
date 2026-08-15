@@ -97,6 +97,36 @@ class TicketTest extends TestCase
         $this->assertSame(1, $second->order);
     }
 
+    /**
+     * The board writes arbitrary order values when cards are dragged around,
+     * so the last inserted ticket is not necessarily the last one on the
+     * board. The next order has to continue from the highest value.
+     */
+    public function test_order_continues_from_the_highest_value_not_the_last_inserted(): void
+    {
+        $project = Project::factory()->create();
+        $first = Ticket::factory()->create(['project_id' => $project->id]);
+        Ticket::factory()->create(['project_id' => $project->id]);
+
+        // Mirrors a drag-and-drop reorder: the oldest ticket moves to the end.
+        $first->update(['order' => 42]);
+
+        $next = Ticket::factory()->create(['project_id' => $project->id]);
+
+        $this->assertSame(43, $next->order);
+    }
+
+    public function test_a_ticket_without_a_project_does_not_fatal(): void
+    {
+        $ticket = new Ticket;
+
+        // creating() bails out instead of dereferencing a null project; the
+        // insert itself still fails on the database constraints.
+        app(\App\Observers\TicketObserver::class)->creating($ticket);
+
+        $this->assertNull($ticket->code);
+    }
+
     // ------------------------------------------------------- epic from sprint
 
     public function test_it_inherits_the_epic_of_its_sprint_on_creation(): void
