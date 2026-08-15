@@ -154,7 +154,9 @@ class KanbanBoardAuthorizationTest extends TestCase
 
         $ticket->refresh();
         $this->assertSame($target->id, $ticket->status_id);
-        $this->assertSame(3, $ticket->order);
+        // The target column is renumbered 0..n, and this is its only card, so
+        // the index the browser reported (3) settles at 0.
+        $this->assertSame(0, $ticket->order);
     }
 
     public function test_a_ticket_the_user_is_only_responsible_for_can_be_moved(): void

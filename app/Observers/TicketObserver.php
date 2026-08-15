@@ -18,10 +18,11 @@ class TicketObserver
 {
     public function creating(Ticket $ticket): void
     {
-        $project = Project::where('id', $ticket->project_id)->first();
-        if (! $project) {
-            return;
-        }
+        // A ticket cannot exist without its project: both the code and the
+        // order come from it. Fail here, with the project id in the message,
+        // instead of dereferencing null or letting a code-less row hit the
+        // NOT NULL constraint further down.
+        $project = Project::where('id', $ticket->project_id)->firstOrFail();
 
         // A MAX() in SQL: reading the relation as a property loaded every
         // ticket of the project into memory just to look at one column, and it

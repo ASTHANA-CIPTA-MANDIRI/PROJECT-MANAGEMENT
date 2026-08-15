@@ -110,14 +110,29 @@ trait KanbanScrumHelper
         ]);
     }
 
-    public function getRecords(): Collection
+    /**
+     * The cards this board is made of, before the filter bar narrows them
+     * down: the project's tickets, and on a scrum board only those of the
+     * current sprint. Renumbering after a drag works on this set, so cards
+     * hidden by a filter keep their place instead of being shuffled away.
+     */
+    protected function boardTicketsQuery(): Builder
     {
-        $query = Ticket::query();
-        if ($this->project->type === 'scrum') {
-            $query->where('sprint_id', $this->project->currentSprint->id);
-        }
-        $query->with(['project', 'owner', 'responsible', 'status', 'type', 'priority', 'epic', 'labels', 'relations']);
-        $query->where('project_id', $this->project->id);
+        return Ticket::query()
+            ->where('project_id', $this->project->id)
+            ->when(
+                $this->project->type === 'scrum',
+                fn (Builder $query) => $query->where('sprint_id', $this->project->currentSprint?->id)
+            );
+    }
+
+    /**
+     * The cards actually shown: the board's tickets, narrowed by the filter
+     * bar and by what the viewer is allowed to see.
+     */
+    protected function recordsQuery(): Builder
+    {
+        $query = $this->boardTicketsQuery();
         if (count($this->users)) {
             $query->where(function ($query) {
                 return $query->whereIn('owner_id', $this->users)
@@ -141,6 +156,18 @@ trait KanbanScrumHelper
                 ->orWhere('responsible_id', auth()->user()->id)
                 ->orWhereHas('project', fn ($query) => $query->accessibleBy(auth()->user()));
         });
+
+        return $query;
+    }
+
+    public function getRecords(): Collection
+    {
+        $query = $this->recordsQuery()
+            ->with(['project', 'owner', 'responsible', 'status', 'type', 'priority', 'epic', 'labels', 'relations']);
+
+        // The board is a sorted board: without this the dragged order was
+        // written to the database and then never read back.
+        $this->applyBoardOrder($query);
 
         return $query->get()
             ->map(fn (Ticket $item) => [
@@ -177,15 +204,59 @@ trait KanbanScrumHelper
             return null;
         }
 
-        $ticket = $this->project->tickets()
-            ->when(
-                $this->project->type === 'scrum',
-                fn ($query) => $query->where('sprint_id', $this->project->currentSprint?->id)
-            )
-            ->whereKey($record)
-            ->first();
+        $ticket = $this->boardTicketsQuery()->whereKey($record)->first();
 
         return $ticket && auth()->user()->can('update', $ticket) ? $ticket : null;
+    }
+
+    /**
+     * Cards are laid out by their order column, oldest first on a tie — the
+     * same sort the renumbering below produces.
+     */
+    protected function applyBoardOrder(Builder $query): Builder
+    {
+        return $query->orderBy('order')->orderBy('id');
+    }
+
+    /**
+     * Renumber one status column 0..n so a drag survives a page reload.
+     *
+     * The browser reports the position among the cards it shows, so the card
+     * being displaced is used as the anchor: the moved ticket is slotted in
+     * front of it in the full column, leaving tickets hidden by the filter bar
+     * where they were. Renumbering goes through the query builder on purpose —
+     * it is bookkeeping, not a ticket change worth an activity or a
+     * notification.
+     */
+    protected function reindexStatusColumn(int $statusId, ?int $movedId = null, int $movedIndex = 0): void
+    {
+        $current = $this->applyBoardOrder(
+            $this->boardTicketsQuery()
+                ->where('status_id', $statusId)
+                ->when($movedId, fn (Builder $query) => $query->whereKeyNot($movedId))
+        )->pluck('order', 'id')->all();
+
+        $ids = array_keys($current);
+
+        if ($movedId) {
+            $anchorId = $this->applyBoardOrder(
+                $this->recordsQuery()
+                    ->where('status_id', $statusId)
+                    ->whereKeyNot($movedId)
+            )->pluck('id')->get($movedIndex);
+
+            $anchorPosition = $anchorId === null ? false : array_search($anchorId, $ids, true);
+            array_splice($ids, $anchorPosition === false ? count($ids) : $anchorPosition, 0, [$movedId]);
+        }
+
+        foreach ($ids as $position => $id) {
+            // Only the cards whose position actually moved are written; a drag
+            // near the bottom of a long column then costs a couple of updates
+            // rather than one per card.
+            if (($current[$id] ?? null) !== $position) {
+                Ticket::whereKey($id)->update(['order' => $position]);
+            }
+        }
     }
 
     public function recordUpdated(int $record, int $newIndex, int $newStatus): void
@@ -201,12 +272,19 @@ trait KanbanScrumHelper
             return;
         }
 
-        // Atomic: the ticket update and the status-change activity it
-        // triggers (Ticket::updating) commit together.
+        // Atomic: the ticket update, the status-change activity it triggers
+        // (Ticket::updating) and the renumbering of the columns it leaves and
+        // joins all commit together.
         DB::transaction(function () use ($ticket, $newIndex, $newStatus) {
-            $ticket->order = $newIndex;
+            $oldStatus = (int) $ticket->status_id;
+
             $ticket->status_id = $newStatus;
             $ticket->save();
+
+            $this->reindexStatusColumn($newStatus, $ticket->id, $newIndex);
+            if ($oldStatus !== $newStatus) {
+                $this->reindexStatusColumn($oldStatus);
+            }
         });
         Filament::notify('success', __('Ticket updated'));
     }

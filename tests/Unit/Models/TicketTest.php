@@ -116,15 +116,13 @@ class TicketTest extends TestCase
         $this->assertSame(43, $next->order);
     }
 
-    public function test_a_ticket_without_a_project_does_not_fatal(): void
+    public function test_a_ticket_without_a_project_fails_with_a_clear_error(): void
     {
-        $ticket = new Ticket;
+        // Not "Attempt to read property on null", and not a code-less row
+        // hitting the NOT NULL constraint either.
+        $this->expectException(\Illuminate\Database\Eloquent\ModelNotFoundException::class);
 
-        // creating() bails out instead of dereferencing a null project; the
-        // insert itself still fails on the database constraints.
-        app(\App\Observers\TicketObserver::class)->creating($ticket);
-
-        $this->assertNull($ticket->code);
+        app(\App\Observers\TicketObserver::class)->creating(new Ticket);
     }
 
     // ------------------------------------------------------- epic from sprint
