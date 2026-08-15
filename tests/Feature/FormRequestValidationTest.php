@@ -158,6 +158,59 @@ class FormRequestValidationTest extends TestCase
         }
     }
 
+    /**
+     * rulesFor() is what callers outside the HTTP lifecycle use: it builds the
+     * rules against the payload, which is what makes the relation checks
+     * project-aware.
+     */
+    public function test_ticket_rules_for_a_payload_reject_another_projects_sprint(): void
+    {
+        $now = now();
+        $otherProjectId = DB::table('projects')->insertGetId([
+            'name' => 'Other', 'owner_id' => $this->userId, 'status_id' => $this->projectStatusId,
+            'ticket_prefix' => 'OTH', 'status_type' => 'default', 'type' => 'scrum',
+            'created_at' => $now, 'updated_at' => $now,
+        ]);
+        $foreignSprintId = DB::table('sprints')->insertGetId([
+            'name' => 'Sprint 1', 'project_id' => $otherProjectId,
+            'starts_at' => $now, 'ends_at' => $now->copy()->addWeek(),
+            'created_at' => $now, 'updated_at' => $now,
+        ]);
+
+        $payload = [
+            'name' => 'Fix bug', 'content' => 'Steps',
+            'project_id' => $this->projectId, 'owner_id' => $this->userId,
+            'status_id' => $this->ticketStatusId, 'type_id' => $this->ticketTypeId,
+            'priority_id' => $this->ticketPriorityId, 'sprint_id' => $foreignSprintId,
+        ];
+
+        $v = $this->validate(TicketRequest::rulesFor($payload), $payload);
+
+        $this->assertFalse($v->passes());
+        $this->assertArrayHasKey('sprint_id', $v->errors()->toArray());
+    }
+
+    public function test_ticket_rules_for_a_payload_accept_the_projects_own_sprint(): void
+    {
+        $now = now();
+        $sprintId = DB::table('sprints')->insertGetId([
+            'name' => 'Sprint 1', 'project_id' => $this->projectId,
+            'starts_at' => $now, 'ends_at' => $now->copy()->addWeek(),
+            'created_at' => $now, 'updated_at' => $now,
+        ]);
+
+        $payload = [
+            'name' => 'Fix bug', 'content' => 'Steps',
+            'project_id' => $this->projectId, 'owner_id' => $this->userId,
+            'status_id' => $this->ticketStatusId, 'type_id' => $this->ticketTypeId,
+            'priority_id' => $this->ticketPriorityId, 'sprint_id' => $sprintId,
+        ];
+
+        $v = $this->validate(TicketRequest::rulesFor($payload), $payload);
+
+        $this->assertTrue($v->passes(), 'Own-project sprint should pass. Errors: '.$v->errors());
+    }
+
     // ----------------------------------------------------------------- Sprint
 
     public function test_sprint_valid_payload_passes(): void

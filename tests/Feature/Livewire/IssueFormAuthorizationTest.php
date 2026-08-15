@@ -9,6 +9,7 @@ use App\Models\Ticket;
 use App\Models\TicketPriority;
 use App\Models\TicketStatus;
 use App\Models\TicketType;
+use App\Models\User;
 use Illuminate\Database\Eloquent\ModelNotFoundException;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Livewire\Livewire;
@@ -108,6 +109,33 @@ class IssueFormAuthorizationTest extends TestCase
 
         $ticket = Ticket::sole();
         $this->assertNull($ticket->epic_id);
+    }
+
+    /**
+     * The project-scoped rules live in TicketRequest, so they only apply here
+     * when the payload is handed to it (TicketRequest::rulesFor()).
+     */
+    public function test_a_responsible_from_outside_the_project_is_rejected(): void
+    {
+        $user = $this->userWithPermissions(['Create ticket']);
+        $project = Project::factory()->create(['owner_id' => $user->id]);
+        $epic = Epic::factory()->create(['project_id' => $project->id]);
+        $outsider = User::factory()->create();
+        TicketStatus::factory()->default()->create(['project_id' => null]);
+        TicketType::factory()->default()->create();
+        TicketPriority::factory()->default()->create();
+        $this->actingAs($user);
+
+        Livewire::test(IssueForm::class, ['project' => $project])
+            ->set('name', 'Ticket')
+            ->set('content', 'Body')
+            ->set('owner_id', $user->id)
+            ->set('epic_id', $epic->id)
+            ->set('responsible_id', $outsider->id)
+            ->call('submit')
+            ->assertHasErrors(['responsible_id']);
+
+        $this->assertSame(0, Ticket::count());
     }
 
     public function test_a_valid_submission_creates_the_ticket(): void

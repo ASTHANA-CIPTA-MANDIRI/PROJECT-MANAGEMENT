@@ -199,9 +199,10 @@ class IssueForm extends Component implements HasForms
             ? Sprint::where('project_id', $project->id)->whereKey($data['sprint_id'])->value('id')
             : null;
 
-        // TicketRequest::rules() is the single source of truth for what a
-        // valid ticket looks like, shared with the API's TicketController.
-        $data = Validator::make($data, (new TicketRequest)->rules(), (new TicketRequest)->messages())
+        // TicketRequest is the single source of truth for what a valid ticket
+        // looks like, shared with the API's TicketController. Its rules are
+        // scoped to the project, so they need the payload to build against.
+        $data = Validator::make($data, TicketRequest::rulesFor($data), (new TicketRequest)->messages())
             ->validate();
 
         Ticket::create($data);

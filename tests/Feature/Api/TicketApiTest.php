@@ -2,9 +2,11 @@
 
 namespace Tests\Feature\Api;
 
+use App\Models\Epic;
 use App\Models\Permission;
 use App\Models\Project;
 use App\Models\Role;
+use App\Models\Sprint;
 use App\Models\Ticket;
 use App\Models\TicketPriority;
 use App\Models\TicketStatus;
@@ -177,6 +179,138 @@ class TicketApiTest extends TestCase
             'name' => 'X', 'content' => 'Y', 'status_id' => $status->id,
             'type_id' => $type->id, 'priority_id' => $priority->id, 'estimation' => -3,
         ])->assertStatus(422)->assertJsonValidationErrors(['estimation']);
+    }
+
+    // --------------------------------------------- store: cross-project ids
+
+    /**
+     * The relation ids in the payload used to be validated with a plain
+     * "exists in the table" rule, so a caller with access to one project could
+     * hang their ticket off another project's sprint, epic or status — putting
+     * it in that project's burndown and velocity. They must now belong to the
+     * project the ticket is created in.
+     */
+    private function projectWithLookups(User $user): array
+    {
+        $project = Project::factory()->create(['owner_id' => $user->id]);
+
+        return [$project, [
+            'name' => 'X',
+            'content' => 'Y',
+            'status_id' => TicketStatus::factory()->create()->id,
+            'type_id' => TicketType::factory()->create()->id,
+            'priority_id' => TicketPriority::factory()->create()->id,
+        ]];
+    }
+
+    public function test_it_rejects_a_sprint_from_another_project(): void
+    {
+        $user = $this->actingWith(['Create ticket']);
+        [$project, $payload] = $this->projectWithLookups($user);
+        $foreignSprint = Sprint::factory()->create();
+
+        $this->postJson("/api/v1/projects/{$project->id}/tickets",
+            $payload + ['sprint_id' => $foreignSprint->id])
+            ->assertStatus(422)
+            ->assertJsonValidationErrors(['sprint_id']);
+
+        $this->assertSame(0, Ticket::count());
+    }
+
+    public function test_it_accepts_a_sprint_of_the_same_project(): void
+    {
+        $user = $this->actingWith(['Create ticket']);
+        [$project, $payload] = $this->projectWithLookups($user);
+        $sprint = Sprint::factory()->create(['project_id' => $project->id]);
+
+        $this->postJson("/api/v1/projects/{$project->id}/tickets",
+            $payload + ['sprint_id' => $sprint->id])
+            ->assertCreated()
+            ->assertJsonPath('data.sprint_id', $sprint->id);
+    }
+
+    public function test_it_rejects_an_epic_from_another_project(): void
+    {
+        $user = $this->actingWith(['Create ticket']);
+        [$project, $payload] = $this->projectWithLookups($user);
+        $foreignEpic = Epic::factory()->create();
+
+        $this->postJson("/api/v1/projects/{$project->id}/tickets",
+            $payload + ['epic_id' => $foreignEpic->id])
+            ->assertStatus(422)
+            ->assertJsonValidationErrors(['epic_id']);
+    }
+
+    public function test_it_rejects_a_status_belonging_to_another_project(): void
+    {
+        $user = $this->actingWith(['Create ticket']);
+        [$project, $payload] = $this->projectWithLookups($user);
+        $foreignProject = Project::factory()->customStatuses()->create();
+        $foreignStatus = TicketStatus::factory()->forProject($foreignProject)->create();
+
+        $this->postJson("/api/v1/projects/{$project->id}/tickets",
+            ['status_id' => $foreignStatus->id] + $payload)
+            ->assertStatus(422)
+            ->assertJsonValidationErrors(['status_id']);
+    }
+
+    public function test_a_custom_status_project_rejects_the_global_statuses(): void
+    {
+        $user = $this->actingWith(['Create ticket']);
+        $project = Project::factory()->customStatuses()->create(['owner_id' => $user->id]);
+        $own = TicketStatus::factory()->forProject($project)->create();
+        $global = TicketStatus::factory()->create();
+        $payload = [
+            'name' => 'X', 'content' => 'Y',
+            'type_id' => TicketType::factory()->create()->id,
+            'priority_id' => TicketPriority::factory()->create()->id,
+        ];
+
+        $this->postJson("/api/v1/projects/{$project->id}/tickets",
+            $payload + ['status_id' => $global->id])
+            ->assertStatus(422)
+            ->assertJsonValidationErrors(['status_id']);
+
+        $this->postJson("/api/v1/projects/{$project->id}/tickets",
+            $payload + ['status_id' => $own->id])
+            ->assertCreated();
+    }
+
+    public function test_it_rejects_a_responsible_who_is_not_on_the_project(): void
+    {
+        $user = $this->actingWith(['Create ticket']);
+        [$project, $payload] = $this->projectWithLookups($user);
+        $outsider = User::factory()->create();
+
+        $this->postJson("/api/v1/projects/{$project->id}/tickets",
+            $payload + ['responsible_id' => $outsider->id])
+            ->assertStatus(422)
+            ->assertJsonValidationErrors(['responsible_id']);
+    }
+
+    public function test_it_accepts_a_responsible_who_is_a_project_member(): void
+    {
+        $user = $this->actingWith(['Create ticket']);
+        [$project, $payload] = $this->projectWithLookups($user);
+        $member = User::factory()->create();
+        $project->users()->attach($member->id, ['role' => 'member']);
+
+        $this->postJson("/api/v1/projects/{$project->id}/tickets",
+            $payload + ['responsible_id' => $member->id])
+            ->assertCreated()
+            ->assertJsonPath('data.responsible_id', $member->id);
+    }
+
+    public function test_it_rejects_an_owner_who_is_not_on_the_project(): void
+    {
+        $user = $this->actingWith(['Create ticket']);
+        [$project, $payload] = $this->projectWithLookups($user);
+        $outsider = User::factory()->create();
+
+        $this->postJson("/api/v1/projects/{$project->id}/tickets",
+            $payload + ['owner_id' => $outsider->id])
+            ->assertStatus(422)
+            ->assertJsonValidationErrors(['owner_id']);
     }
 
     // -------------------------------------------------------------- show
