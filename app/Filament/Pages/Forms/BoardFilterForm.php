@@ -3,9 +3,10 @@
 namespace App\Filament\Pages\Forms;
 
 use App\Models\Label;
+use App\Models\Project;
 use App\Models\TicketPriority;
 use App\Models\TicketType;
-use App\Models\User;
+use App\Support\UserOptions;
 use Filament\Forms\Components\Grid;
 use Filament\Forms\Components\Placeholder;
 use Filament\Forms\Components\Select;
@@ -20,9 +21,11 @@ use Illuminate\Support\HtmlString;
 class BoardFilterForm
 {
     /**
+     * @param  Project|null  $project  The board's project, when the board shows
+     *                                 one; scopes the people filter to it.
      * @return array<int, \Filament\Forms\Components\Component>
      */
-    public static function schema(): array
+    public static function schema(?Project $project = null): array
     {
         return [
             Grid::make([
@@ -33,7 +36,7 @@ class BoardFilterForm
                     Select::make('users')
                         ->label(__('Owners / Responsibles'))
                         ->multiple()
-                        ->options(User::all()->pluck('name', 'id')),
+                        ->options(fn () => UserOptions::forProject($project)),
 
                     Select::make('types')
                         ->label(__('Ticket types'))

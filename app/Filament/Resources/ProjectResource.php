@@ -9,7 +9,7 @@ use App\Filament\Resources\ProjectResource\RelationManagers;
 use App\Models\Project;
 use App\Models\ProjectFavorite;
 use App\Models\ProjectStatus;
-use App\Models\User;
+use App\Support\UserOptions;
 use Filament\Facades\Filament;
 use Filament\Resources\Form;
 use Filament\Resources\Resource;
@@ -111,7 +111,7 @@ class ProjectResource extends Resource
                 Tables\Filters\SelectFilter::make('owner_id')
                     ->label(__('Owner'))
                     ->multiple()
-                    ->options(fn () => User::all()->pluck('name', 'id')->toArray()),
+                    ->options(fn () => UserOptions::visible()),
 
                 Tables\Filters\SelectFilter::make('status_id')
                     ->label(__('Status'))

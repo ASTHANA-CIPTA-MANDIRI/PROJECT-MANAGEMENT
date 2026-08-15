@@ -4,7 +4,7 @@ namespace App\Filament\Resources\ProjectResource\Forms;
 
 use App\Models\Project;
 use App\Models\ProjectStatus;
-use App\Models\User;
+use App\Support\UserOptions;
 use Filament\Forms;
 
 /**
@@ -76,7 +76,7 @@ class ProjectForm
                 Forms\Components\Select::make('owner_id')
                     ->label(__('Project owner'))
                     ->searchable()
-                    ->options(fn () => User::all()->pluck('name', 'id')->toArray())
+                    ->options(fn () => UserOptions::visible())
                     ->default(fn () => auth()->user()->id)
                     ->required(),
 

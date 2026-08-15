@@ -9,7 +9,7 @@ use App\Models\TicketPriority;
 use App\Models\TicketRelation;
 use App\Models\TicketStatus;
 use App\Models\TicketType;
-use App\Models\User;
+use App\Support\UserOptions;
 use Filament\Forms;
 use Filament\Resources\Pages\CreateRecord;
 use Filament\Resources\Pages\EditRecord;
@@ -99,7 +99,7 @@ class TicketForm
         return Forms\Components\Select::make('owner_id')
             ->label(__('Ticket owner'))
             ->searchable()
-            ->options(fn () => User::all()->pluck('name', 'id')->toArray())
+            ->options(fn ($get, $record) => UserOptions::forProjectId($get('project_id'), $record?->owner_id))
             ->default(fn () => auth()->user()->id)
             ->required();
     }
@@ -109,7 +109,7 @@ class TicketForm
         return Forms\Components\Select::make('responsible_id')
             ->label(__('Ticket responsible'))
             ->searchable()
-            ->options(fn () => User::all()->pluck('name', 'id')->toArray());
+            ->options(fn ($get, $record) => UserOptions::forProjectId($get('project_id'), $record?->responsible_id));
     }
 
     private static function statusTypePriority(): Forms\Components\Grid

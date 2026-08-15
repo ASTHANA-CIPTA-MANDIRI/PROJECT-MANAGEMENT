@@ -9,7 +9,7 @@ use App\Models\Ticket;
 use App\Models\TicketPriority;
 use App\Models\TicketStatus;
 use App\Models\TicketType;
-use App\Models\User;
+use App\Support\UserOptions;
 use Filament\Resources\Form;
 use Filament\Resources\Resource;
 use Filament\Resources\Table;
@@ -147,12 +147,12 @@ class TicketResource extends Resource
                 Tables\Filters\SelectFilter::make('owner_id')
                     ->label(__('Owner'))
                     ->multiple()
-                    ->options(fn () => User::all()->pluck('name', 'id')->toArray()),
+                    ->options(fn () => UserOptions::visible()),
 
                 Tables\Filters\SelectFilter::make('responsible_id')
                     ->label(__('Responsible'))
                     ->multiple()
-                    ->options(fn () => User::all()->pluck('name', 'id')->toArray()),
+                    ->options(fn () => UserOptions::visible()),
 
                 Tables\Filters\SelectFilter::make('status_id')
                     ->label(__('Status'))

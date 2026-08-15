@@ -10,7 +10,7 @@ use App\Models\Ticket;
 use App\Models\TicketPriority;
 use App\Models\TicketStatus;
 use App\Models\TicketType;
-use App\Models\User;
+use App\Support\UserOptions;
 use Closure;
 use Filament\Facades\Filament;
 use Filament\Forms;
@@ -55,7 +55,11 @@ class IssueForm extends Component implements HasForms
     private function initProject($projectId): void
     {
         if ($projectId) {
-            $this->project = Project::where('id', $projectId)->first();
+            // The id comes from Livewire state, so resolve it through the
+            // access scope: everything derived below (epics, sprints and the
+            // owner/responsible options) would otherwise expose another
+            // project's data.
+            $this->project = Project::accessibleBy(auth()->user())->whereKey($projectId)->first();
         } else {
             $this->project = null;
         }
@@ -118,13 +122,13 @@ class IssueForm extends Component implements HasForms
                     Forms\Components\Select::make('owner_id')
                         ->label(__('Ticket owner'))
                         ->searchable()
-                        ->options(fn () => User::all()->pluck('name', 'id')->toArray())
+                        ->options(fn () => UserOptions::forProject($this->project))
                         ->required(),
 
                     Forms\Components\Select::make('responsible_id')
                         ->label(__('Ticket responsible'))
                         ->searchable()
-                        ->options(fn () => User::all()->pluck('name', 'id')->toArray()),
+                        ->options(fn () => UserOptions::forProject($this->project)),
 
                     Forms\Components\Grid::make()
                         ->columns(3)

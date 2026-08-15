@@ -69,7 +69,7 @@ trait KanbanScrumHelper
 
     protected function formSchema(): array
     {
-        return BoardFilterForm::schema();
+        return BoardFilterForm::schema($this->project);
     }
 
     /**
