@@ -13,6 +13,7 @@ use App\Models\Ticket;
 use App\Models\TicketStatus;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Notification;
 use Livewire\Livewire;
 use Spatie\Permission\PermissionRegistrar;
@@ -106,6 +107,85 @@ class RelationManagersTest extends TestCase
         Sprint::factory()->ended()->create(['project_id' => $project->id]);
 
         $this->renderManager(SprintsRelationManager::class, $project)->assertSuccessful();
+    }
+
+    /**
+     * The "Tickets" action lists the whole project's tickets, so it must stay
+     * scoped to that project and must not lazy-load a sprint per ticket.
+     */
+    public function test_the_sprint_tickets_modal_lists_only_the_projects_own_tickets(): void
+    {
+        $project = Project::factory()->scrum()->create(['owner_id' => $this->user->id]);
+        $sprint = Sprint::factory()->create(['project_id' => $project->id]);
+        $mine = Ticket::factory()->create([
+            'project_id' => $project->id,
+            'owner_id' => $this->user->id,
+            'name' => 'Ticket of this project',
+        ]);
+
+        $otherProject = Project::factory()->scrum()->create(['owner_id' => $this->user->id]);
+        $theirs = Ticket::factory()->create([
+            'project_id' => $otherProject->id,
+            'owner_id' => $this->user->id,
+            'name' => 'Ticket of another project',
+        ]);
+
+        $this->renderManager(SprintsRelationManager::class, $project)
+            ->mountTableAction('tickets', $sprint)
+            ->assertSuccessful()
+            ->assertSee($mine->name)
+            ->assertDontSee($theirs->name);
+    }
+
+    /**
+     * Opens the modal on a project holding $ticketCount tickets and counts the
+     * queries hitting the sprints table. The project always has exactly two
+     * sprints, so the sprints table itself costs the same either way and only
+     * the checkbox labels can make the count grow.
+     */
+    private function sprintQueriesWhenOpeningTicketsModal(int $ticketCount): int
+    {
+        $project = Project::factory()->scrum()->create(['owner_id' => $this->user->id]);
+        $target = Sprint::factory()->create(['project_id' => $project->id]);
+        $other = Sprint::factory()->create(['project_id' => $project->id]);
+
+        // Every ticket sits in the other sprint, so each one renders the sprint
+        // badge — a lazy load would cost one query per ticket even though they
+        // all point at the same sprint.
+        foreach (range(1, $ticketCount) as $i) {
+            Ticket::factory()->create([
+                'project_id' => $project->id,
+                'owner_id' => $this->user->id,
+                'sprint_id' => $other->id,
+            ]);
+        }
+
+        $manager = $this->renderManager(SprintsRelationManager::class, $project);
+
+        // The log is shared for the whole test, so clear it before measuring.
+        DB::flushQueryLog();
+        DB::enableQueryLog();
+        $manager->mountTableAction('tickets', $target)->assertSuccessful();
+        $queries = DB::getQueryLog();
+        DB::disableQueryLog();
+
+        return collect($queries)
+            ->filter(fn ($query) => str_contains($query['query'], 'from "sprints"'))
+            ->count();
+    }
+
+    public function test_the_sprint_tickets_modal_eager_loads_the_sprint_of_each_ticket(): void
+    {
+        // Both projects keep their sprints on a single table page, so the only
+        // thing that could make the query count grow is a lazy load per ticket.
+        $few = $this->sprintQueriesWhenOpeningTicketsModal(2);
+        $many = $this->sprintQueriesWhenOpeningTicketsModal(8);
+
+        $this->assertSame(
+            $few,
+            $many,
+            'The sprint tickets modal lazy-loads a sprint per ticket.'
+        );
     }
 
     // --------------------------------------------------------------- members

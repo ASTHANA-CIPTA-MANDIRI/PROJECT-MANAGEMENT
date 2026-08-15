@@ -174,8 +174,18 @@ class SprintsRelationManager extends RelationManager
                             // go through e() before being concatenated.
                             ->options(
                                 function ($record) {
+                                    // Only the three columns the label needs, with
+                                    // the sprint eager loaded, so opening the modal
+                                    // stays one pair of queries instead of hydrating
+                                    // every ticket and lazy-loading its sprint.
+                                    $tickets = Ticket::query()
+                                        ->where('project_id', $record->project_id)
+                                        ->select(['id', 'name', 'sprint_id'])
+                                        ->with('sprint:id,name')
+                                        ->get();
+
                                     $results = [];
-                                    foreach ($record->project->tickets as $ticket) {
+                                    foreach ($tickets as $ticket) {
                                         $results[$ticket->id] = new HtmlString(
                                             '<div class="w-full flex justify-between items-center">'
                                             .'<span>'.e($ticket->name).'</span>'
