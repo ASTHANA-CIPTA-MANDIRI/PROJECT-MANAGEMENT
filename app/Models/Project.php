@@ -123,7 +123,11 @@ class Project extends Model implements HasMedia
     {
         return new Attribute(
             get: function () {
-                $users = $this->users;
+                // ->users is Eloquent's cached relation collection, not a
+                // copy: push()ing onto it would leave the owner looking like
+                // a member to every other reader of $project->users for the
+                // rest of the request.
+                $users = $this->users->collect();
                 $users->push($this->owner);
 
                 return $users->unique('id');

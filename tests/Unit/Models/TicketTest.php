@@ -279,6 +279,33 @@ class TicketTest extends TestCase
         $this->assertSame(1, $ticket->watchers->where('id', $user->id)->count());
     }
 
+    /**
+     * ->project->users is Eloquent's cached relation collection, not a copy:
+     * watchers() used to push the owner/responsible straight onto it, so
+     * every later read of $project->users in the same request saw them as
+     * project members. TicketCommentObserver::created() reads watchers twice
+     * in a row, so this was not a rare edge case.
+     */
+    public function test_reading_watchers_does_not_leak_into_the_projects_member_list(): void
+    {
+        $owner = User::factory()->create();
+        $responsible = User::factory()->create();
+        $project = Project::factory()->create(['owner_id' => $owner->id]);
+        $ticket = Ticket::factory()->create([
+            'project_id' => $project->id,
+            'owner_id' => $owner->id,
+            'responsible_id' => $responsible->id,
+        ]);
+
+        $ticket->watchers;
+        $ticket->watchers;
+
+        $this->assertFalse(
+            $ticket->project->users->contains('id', $responsible->id),
+            'the ticket responsible must not appear as a project member'
+        );
+    }
+
     // ---------------------------------------------------------- logged hours
 
     public function test_total_logged_in_hours_sums_the_hour_entries(): void

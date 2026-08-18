@@ -105,6 +105,26 @@ class ProjectTest extends TestCase
         $this->assertSame(1, $project->contributors->where('id', $owner->id)->count());
     }
 
+    /**
+     * ->users is Eloquent's cached relation collection, not a copy:
+     * contributors() used to push the owner straight onto it, so every later
+     * read of $project->users in the same request saw the owner as a member -
+     * e.g. Kanban::mount() and Scrum::mount() reading it to decide access.
+     */
+    public function test_reading_contributors_does_not_leak_the_owner_into_the_member_list(): void
+    {
+        $owner = User::factory()->create();
+        $project = Project::factory()->create(['owner_id' => $owner->id]);
+
+        $project->contributors;
+        $project->contributors;
+
+        $this->assertFalse(
+            $project->users->contains('id', $owner->id),
+            'the owner must not appear in the members relation unless actually attached'
+        );
+    }
+
     // ------------------------------------------------------------------ cover
 
     public function test_cover_falls_back_to_a_generated_avatar(): void
