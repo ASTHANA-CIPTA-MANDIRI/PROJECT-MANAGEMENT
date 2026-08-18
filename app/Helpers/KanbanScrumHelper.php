@@ -115,6 +115,8 @@ trait KanbanScrumHelper
      * down: the project's tickets, and on a scrum board only those of the
      * current sprint. Renumbering after a drag works on this set, so cards
      * hidden by a filter keep their place instead of being shuffled away.
+     *
+     * @return Builder<Ticket>
      */
     protected function boardTicketsQuery(): Builder
     {
@@ -129,6 +131,8 @@ trait KanbanScrumHelper
     /**
      * The cards actually shown: the board's tickets, narrowed by the filter
      * bar and by what the viewer is allowed to see.
+     *
+     * @return Builder<Ticket>
      */
     protected function recordsQuery(): Builder
     {

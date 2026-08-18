@@ -69,7 +69,7 @@ class TicketRequest extends FormRequest
      */
     public static function rulesFor(array $data): array
     {
-        return (new static)->merge($data)->rules();
+        return (new self)->merge($data)->rules();
     }
 
     /**

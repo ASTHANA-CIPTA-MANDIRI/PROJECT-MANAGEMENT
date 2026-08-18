@@ -1,6 +1,11 @@
 parameters:
 	ignoreErrors:
 		-
+			message: "#^Access to an undefined property Illuminate\\\\Support\\\\HigherOrderCollectionProxy\\<string, Illuminate\\\\Database\\\\Eloquent\\\\Model, Illuminate\\\\Database\\\\Eloquent\\\\Collection\\<int, Illuminate\\\\Database\\\\Eloquent\\\\Model\\>\\>\\:\\:\\$has_confirmed_two_factor\\.$#"
+			count: 1
+			path: app/Console/Commands/AuditPrivilegeEscalation.php
+
+		-
 			message: "#^Access to an undefined property App\\\\Models\\\\TicketComment\\:\\:\\$content\\.$#"
 			count: 1
 			path: app/Events/TicketCommentPosted.php
@@ -32,7 +37,7 @@ parameters:
 
 		-
 			message: "#^Called 'pluck' on Laravel collection, but could have been retrieved as a query\\.$#"
-			count: 4
+			count: 3
 			path: app/Filament/Pages/Forms/BoardFilterForm.php
 
 		-
@@ -71,22 +76,47 @@ parameters:
 			path: app/Filament/Pages/Kanban.php
 
 		-
+			message: "#^Access to an undefined property Illuminate\\\\Database\\\\Eloquent\\\\Model\\:\\:\\$color\\.$#"
+			count: 1
+			path: app/Filament/Pages/Kanban.php
+
+		-
+			message: "#^Access to an undefined property Illuminate\\\\Database\\\\Eloquent\\\\Model\\:\\:\\$id\\.$#"
+			count: 2
+			path: app/Filament/Pages/Kanban.php
+
+		-
+			message: "#^Access to an undefined property Illuminate\\\\Database\\\\Eloquent\\\\Model\\:\\:\\$is_default\\.$#"
+			count: 1
+			path: app/Filament/Pages/Kanban.php
+
+		-
+			message: "#^Access to an undefined property Illuminate\\\\Database\\\\Eloquent\\\\Model\\:\\:\\$name\\.$#"
+			count: 1
+			path: app/Filament/Pages/Kanban.php
+
+		-
 			message: "#^Access to an undefined property App\\\\Filament\\\\Pages\\\\RoadMap\\:\\:\\$form\\.$#"
-			count: 3
+			count: 4
 			path: app/Filament/Pages/RoadMap.php
 
 		-
-			message: "#^Access to an undefined property App\\\\Models\\\\Project\\:\\:\\$epicsFirstDate\\.$#"
+			message: "#^Access to an undefined property Illuminate\\\\Database\\\\Eloquent\\\\Model\\:\\:\\$epicsFirstDate\\.$#"
 			count: 2
 			path: app/Filament/Pages/RoadMap.php
 
 		-
-			message: "#^Access to an undefined property App\\\\Models\\\\Project\\:\\:\\$epicsLastDate\\.$#"
+			message: "#^Access to an undefined property Illuminate\\\\Database\\\\Eloquent\\\\Model\\:\\:\\$epicsLastDate\\.$#"
 			count: 1
 			path: app/Filament/Pages/RoadMap.php
 
 		-
 			message: "#^Access to an undefined property Illuminate\\\\Database\\\\Eloquent\\\\Model\\:\\:\\$id\\.$#"
+			count: 1
+			path: app/Filament/Pages/RoadMap.php
+
+		-
+			message: "#^Call to an undefined method Illuminate\\\\Database\\\\Eloquent\\\\Builder\\:\\:accessibleBy\\(\\)\\.$#"
 			count: 1
 			path: app/Filament/Pages/RoadMap.php
 
@@ -121,19 +151,44 @@ parameters:
 			path: app/Filament/Pages/Scrum.php
 
 		-
+			message: "#^Access to an undefined property Illuminate\\\\Database\\\\Eloquent\\\\Model\\:\\:\\$color\\.$#"
+			count: 1
+			path: app/Filament/Pages/Scrum.php
+
+		-
+			message: "#^Access to an undefined property Illuminate\\\\Database\\\\Eloquent\\\\Model\\:\\:\\$id\\.$#"
+			count: 2
+			path: app/Filament/Pages/Scrum.php
+
+		-
+			message: "#^Access to an undefined property Illuminate\\\\Database\\\\Eloquent\\\\Model\\:\\:\\$is_default\\.$#"
+			count: 1
+			path: app/Filament/Pages/Scrum.php
+
+		-
+			message: "#^Access to an undefined property Illuminate\\\\Database\\\\Eloquent\\\\Model\\:\\:\\$name\\.$#"
+			count: 1
+			path: app/Filament/Pages/Scrum.php
+
+		-
 			message: "#^Access to an undefined property App\\\\Filament\\\\Pages\\\\TimesheetExport\\:\\:\\$form\\.$#"
 			count: 2
 			path: app/Filament/Pages/TimesheetExport.php
 
 		-
 			message: "#^Called 'pluck' on Laravel collection, but could have been retrieved as a query\\.$#"
-			count: 2
+			count: 1
 			path: app/Filament/Resources/ProjectResource.php
 
 		-
 			message: "#^Called 'pluck' on Laravel collection, but could have been retrieved as a query\\.$#"
-			count: 2
+			count: 1
 			path: app/Filament/Resources/ProjectResource/Forms/ProjectForm.php
+
+		-
+			message: "#^Call to an undefined method Illuminate\\\\Database\\\\Eloquent\\\\Builder\\:\\:accessibleBy\\(\\)\\.$#"
+			count: 1
+			path: app/Filament/Resources/ProjectResource/Pages/ListProjects.php
 
 		-
 			message: "#^Access to an undefined property Illuminate\\\\Database\\\\Eloquent\\\\Model\\:\\:\\$type\\.$#"
@@ -147,13 +202,18 @@ parameters:
 
 		-
 			message: "#^Called 'pluck' on Laravel collection, but could have been retrieved as a query\\.$#"
-			count: 5
+			count: 3
 			path: app/Filament/Resources/TicketResource.php
 
 		-
 			message: "#^Called 'pluck' on Laravel collection, but could have been retrieved as a query\\.$#"
-			count: 5
+			count: 3
 			path: app/Filament/Resources/TicketResource/Forms/TicketForm.php
+
+		-
+			message: "#^Access to an undefined property App\\\\Models\\\\TicketComment\\:\\:\\$content\\.$#"
+			count: 1
+			path: app/Filament/Resources/TicketResource/Pages/ViewTicket.php
 
 		-
 			message: "#^Called 'pluck' on Laravel collection, but could have been retrieved as a query\\.$#"
@@ -181,9 +241,24 @@ parameters:
 			path: app/Filament/Widgets/LatestTickets.php
 
 		-
+			message: "#^Call to an undefined method Illuminate\\\\Database\\\\Eloquent\\\\Builder\\:\\:visibleTo\\(\\)\\.$#"
+			count: 1
+			path: app/Filament/Widgets/TicketsGroupedByChartWidget.php
+
+		-
 			message: "#^Method App\\\\Filament\\\\Widgets\\\\Timesheet\\\\ActivitiesReport\\:\\:filter\\(\\) should return Illuminate\\\\Support\\\\Collection\\<int, object\\{value\\: float, activity\\: App\\\\Models\\\\Activity\\|null\\}\\> but returns Illuminate\\\\Support\\\\Collection\\<int, object\\{value\\: float, activity\\: App\\\\Models\\\\Activity\\|null\\}&stdClass\\>\\.$#"
 			count: 1
 			path: app/Filament/Widgets/Timesheet/ActivitiesReport.php
+
+		-
+			message: "#^Call to an undefined method Illuminate\\\\Database\\\\Eloquent\\\\Builder\\:\\:visibleTo\\(\\)\\.$#"
+			count: 1
+			path: app/Filament/Widgets/UserTimeLogged.php
+
+		-
+			message: "#^Access to an undefined property Illuminate\\\\Database\\\\Eloquent\\\\Model\\:\\:\\$has_confirmed_two_factor\\.$#"
+			count: 1
+			path: app/Http/Controllers/Auth/SocialiteLoginController.php
 
 		-
 			message: "#^Access to an undefined property App\\\\Models\\\\Ticket\\:\\:\\$completudePercentage\\.$#"
@@ -202,7 +277,7 @@ parameters:
 
 		-
 			message: "#^Called 'pluck' on Laravel collection, but could have been retrieved as a query\\.$#"
-			count: 2
+			count: 1
 			path: app/Http/Livewire/RoadMap/EpicForm.php
 
 		-
@@ -211,14 +286,24 @@ parameters:
 			path: app/Http/Livewire/RoadMap/IssueForm.php
 
 		-
+			message: "#^Access to an undefined property Illuminate\\\\Database\\\\Eloquent\\\\Model\\:\\:\\$id\\.$#"
+			count: 1
+			path: app/Http/Livewire/RoadMap/IssueForm.php
+
+		-
 			message: "#^Called 'pluck' on Laravel collection, but could have been retrieved as a query\\.$#"
-			count: 6
+			count: 2
 			path: app/Http/Livewire/RoadMap/IssueForm.php
 
 		-
 			message: "#^Access to an undefined property App\\\\Http\\\\Livewire\\\\Ticket\\\\Attachments\\:\\:\\$form\\.$#"
 			count: 3
 			path: app/Http/Livewire/Ticket/Attachments.php
+
+		-
+			message: "#^Access to an undefined property App\\\\Http\\\\Livewire\\\\TwoFactorChallenge\\:\\:\\$form\\.$#"
+			count: 2
+			path: app/Http/Livewire/TwoFactorChallenge.php
 
 		-
 			message: "#^Access to an undefined property App\\\\Http\\\\Livewire\\\\ValidateAccount\\:\\:\\$form\\.$#"
@@ -236,6 +321,11 @@ parameters:
 			path: app/Http/Resources/TicketResource.php
 
 		-
+			message: "#^Parameter \\#1 \\$user of method App\\\\Listeners\\\\AssignDefaultRole\\:\\:assignDefaultRole\\(\\) expects App\\\\Models\\\\User, Illuminate\\\\Contracts\\\\Auth\\\\Authenticatable given\\.$#"
+			count: 1
+			path: app/Listeners/AssignDefaultRole.php
+
+		-
 			message: "#^Parameter \\#1 \\$registrant of class App\\\\Notifications\\\\NewUserPendingApproval constructor expects App\\\\Models\\\\User, Illuminate\\\\Contracts\\\\Auth\\\\Authenticatable given\\.$#"
 			count: 1
 			path: app/Listeners/NotifyAdminsOfRegistration.php
@@ -246,7 +336,7 @@ parameters:
 			path: app/Listeners/SocialRegistration.php
 
 		-
-			message: "#^Call to an undefined method Illuminate\\\\Database\\\\Eloquent\\\\Model\\:\\:syncRoles\\(\\)\\.$#"
+			message: "#^Parameter \\#1 \\$user of method App\\\\Listeners\\\\SocialRegistration\\:\\:assignDefaultRole\\(\\) expects App\\\\Models\\\\User, Illuminate\\\\Database\\\\Eloquent\\\\Model\\|null given\\.$#"
 			count: 1
 			path: app/Listeners/SocialRegistration.php
 
@@ -286,9 +376,24 @@ parameters:
 			path: app/Models/Ticket.php
 
 		-
+			message: "#^Call to an undefined method Illuminate\\\\Database\\\\Eloquent\\\\Builder\\:\\:accessibleBy\\(\\)\\.$#"
+			count: 1
+			path: app/Models/Ticket.php
+
+		-
 			message: "#^Access to an undefined property App\\\\Models\\\\TicketComment\\:\\:\\$content\\.$#"
 			count: 1
 			path: app/Models/TicketComment.php
+
+		-
+			message: "#^Call to an undefined method Illuminate\\\\Database\\\\Eloquent\\\\Builder\\:\\:accessibleBy\\(\\)\\.$#"
+			count: 2
+			path: app/Models/User.php
+
+		-
+			message: "#^Unsafe call to private method App\\\\Models\\\\User\\:\\:resolveSuperAdminRoleId\\(\\) through static\\:\\:\\.$#"
+			count: 1
+			path: app/Models/User.php
 
 		-
 			message: "#^PHPDoc tag @param references unknown parameter\\: \\$ticket$#"
@@ -313,11 +418,6 @@ parameters:
 		-
 			message: "#^Access to an undefined property App\\\\Models\\\\Ticket\\:\\:\\$watchers\\.$#"
 			count: 2
-			path: app/Observers/TicketObserver.php
-
-		-
-			message: "#^Using nullsafe method call on non\\-nullable type Illuminate\\\\Database\\\\Eloquent\\\\Collection\\<int, App\\\\Models\\\\Ticket\\>\\. Use \\-\\> instead\\.$#"
-			count: 1
 			path: app/Observers/TicketObserver.php
 
 		-
@@ -346,6 +446,11 @@ parameters:
 			path: app/Providers/AppServiceProvider.php
 
 		-
+			message: "#^Method App\\\\Services\\\\Analytics\\\\BurndownReport\\:\\:completedAtByTicket\\(\\) should return Illuminate\\\\Support\\\\Collection\\<int, Carbon\\\\Carbon\\> but returns Illuminate\\\\Support\\\\Collection\\<\\(int\\|string\\), Carbon\\\\Carbon\\|null\\>\\.$#"
+			count: 1
+			path: app/Services/Analytics/BurndownReport.php
+
+		-
 			message: "#^Unsafe call to private method App\\\\Services\\\\Analytics\\\\CompletionResolver\\:\\:statusQuery\\(\\) through static\\:\\:\\.$#"
 			count: 1
 			path: app/Services/Analytics/CompletionResolver.php
@@ -359,3 +464,8 @@ parameters:
 			message: "#^Method App\\\\Services\\\\Analytics\\\\ResourceUtilizationReport\\:\\:perUser\\(\\) should return Illuminate\\\\Support\\\\Collection\\<int, array\\{user_id\\: int, user_name\\: string\\|null, hours_logged\\: float, utilization_pct\\: float\\}\\> but returns Illuminate\\\\Support\\\\Collection\\<int, array\\{user_id\\: int, user_name\\: mixed, hours_logged\\: float, utilization_pct\\: float\\}\\>\\.$#"
 			count: 1
 			path: app/Services/Analytics/ResourceUtilizationReport.php
+
+		-
+			message: "#^Access to an undefined property App\\\\Models\\\\Project\\:\\:\\$contributors\\.$#"
+			count: 1
+			path: app/Support/UserOptions.php

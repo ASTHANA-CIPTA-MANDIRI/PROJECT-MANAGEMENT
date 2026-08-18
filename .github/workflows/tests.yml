@@ -1,8 +1,11 @@
 name: CI
 
 on:
+  # Every branch, not just main/master/dev: remediation work happens on
+  # feature branches (e.g. jarne) and needs the same Pint/PHPStan/tests/
+  # coverage gate before it ever reaches a pull request, not just after.
   push:
-    branches: [ main, master, dev ]
+    branches: [ '**' ]
   pull_request:
     branches: [ main, master, dev ]
 
