@@ -10,6 +10,7 @@ use App\Models\TicketPriority;
 use App\Models\TicketStatus;
 use App\Models\TicketType;
 use App\Models\User;
+use Filament\Notifications\DatabaseNotification;
 use Illuminate\Database\Eloquent\ModelNotFoundException;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Notification;
@@ -148,6 +149,54 @@ class JiraImportJobTest extends TestCase
         ], $importer))->handle();
 
         $this->assertSame(__('No content found in jira ticket'), Ticket::sole()->content);
+    }
+
+    /**
+     * A fetch that timed out arrives here as null, and a malformed issue as an
+     * object without a project. Neither may take the rest of the batch down -
+     * and the importer has to be told what was left out.
+     */
+    public function test_an_unreadable_entry_is_skipped_and_reported(): void
+    {
+        $this->seedDefaults();
+        $importer = User::factory()->create();
+
+        (new ImportJiraTicketsJob([
+            $this->jiraTicket('Alpha', 'ALP', 'Good one'),
+            null,
+            (object) ['fields' => (object) ['summary' => 'No project at all']],
+        ], $importer))->handle();
+
+        $this->assertSame(1, Ticket::count(), 'the readable ticket is still imported');
+
+        Notification::assertSentTo(
+            $importer,
+            DatabaseNotification::class,
+            fn (DatabaseNotification $notification) => $this->notificationBody($notification, $importer) === __(
+                ':imported jira tickets imported, :skipped could not be read and were skipped',
+                ['imported' => 1, 'skipped' => 2],
+            )
+        );
+    }
+
+    /**
+     * The body Filament stores for a database notification.
+     */
+    private function notificationBody(DatabaseNotification $notification, User $user): ?string
+    {
+        return $notification->toDatabase($user)['body'] ?? null;
+    }
+
+    public function test_a_fully_unreadable_batch_imports_nothing(): void
+    {
+        $this->seedDefaults();
+        $importer = User::factory()->create();
+
+        (new ImportJiraTicketsJob([null, null], $importer))->handle();
+
+        $this->assertSame(0, Ticket::count());
+        $this->assertSame(0, Project::count());
+        Notification::assertSentTo($importer, DatabaseNotification::class);
     }
 
     public function test_a_missing_default_project_status_fails_cleanly(): void

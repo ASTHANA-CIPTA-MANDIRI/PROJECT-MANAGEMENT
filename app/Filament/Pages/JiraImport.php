@@ -113,18 +113,47 @@ class JiraImport extends AuthorizedPage implements HasForms
     {
         if ($this->data && count($this->data)) {
             $tickets = [];
+            $unreadable = 0;
             try {
                 foreach (array_keys($this->data) as $item) {
-                    $url = $this->ticketsDataApi[$item];
-                    $tickets[] = $jira->fetchTicketDetails($this->host, $this->username, $this->token, $url);
+                    // The checked key comes from the browser; the url only ever
+                    // comes from the map this page built. An issue Jira listed
+                    // without a `self` link has no entry here, and a fetch can
+                    // come back empty on a timeout - neither is worth breaking
+                    // the whole import over.
+                    $url = $this->ticketsDataApi[$item] ?? null;
+                    $details = $url
+                        ? $jira->fetchTicketDetails($this->host, $this->username, $this->token, $url)
+                        : null;
+
+                    if (! $details) {
+                        $unreadable++;
+
+                        continue;
+                    }
+
+                    $tickets[] = $details;
                 }
             } catch (InvalidArgumentException $e) {
                 $this->notify('danger', $e->getMessage());
 
                 return;
             }
+
+            if (! $tickets) {
+                $this->notify('danger', __('None of the selected jira tickets could be read, nothing was imported'));
+
+                return;
+            }
+
             dispatch(new ImportJiraTicketsJob($tickets, auth()->user()));
-            $this->notify('success', __('The importation job is started, when finished you will be notified'), true);
+            $this->notify(
+                $unreadable ? 'warning' : 'success',
+                $unreadable
+                    ? __(':count of the selected jira tickets could not be read and were skipped, the importation job is started for the others', ['count' => $unreadable])
+                    : __('The importation job is started, when finished you will be notified'),
+                true
+            );
             $this->redirect(route('filament.pages.jira-import'));
         } else {
             $this->notify('warning', __('Please choose at least a jira ticket to import'));

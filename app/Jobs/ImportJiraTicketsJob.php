@@ -48,23 +48,39 @@ class ImportJiraTicketsJob implements ShouldQueue
     public function handle()
     {
         if ($this->tickets && count($this->tickets)) {
+            $imported = 0;
+            $skipped = 0;
+
             // Atomic batch import: if any ticket/project fails to import, the
             // whole batch rolls back so no partial import is left behind.
-            DB::transaction(function () {
+            DB::transaction(function () use (&$imported, &$skipped) {
                 foreach ($this->tickets as $ticket) {
-                    $projectDetails = $ticket->fields->project;
-                    $ticketData = $ticket->fields;
+                    $ticketData = $ticket->fields ?? null;
+                    $projectDetails = $ticketData->project ?? null;
 
-                    $project = $this->projectFor($projectDetails);
+                    // An issue that could not be read from Jira (a timed-out
+                    // fetch comes back empty) is counted and left out rather
+                    // than taking the whole batch down with it.
+                    if (! is_object($ticketData) || ! is_object($projectDetails)) {
+                        $skipped++;
 
-                    Ticket::create($this->validatedTicket($project, $ticketData));
+                        continue;
+                    }
+
+                    Ticket::create($this->validatedTicket($this->projectFor($projectDetails), $ticketData));
+                    $imported++;
                 }
             });
 
             FilamentNotification::make()
                 ->title(__('Jira importation'))
                 ->icon('heroicon-o-cloud-download')
-                ->body(__('Jira tickets successfully imported'))
+                ->body($skipped === 0
+                    ? __('Jira tickets successfully imported')
+                    : __(':imported jira tickets imported, :skipped could not be read and were skipped', [
+                        'imported' => $imported,
+                        'skipped' => $skipped,
+                    ]))
                 ->sendToDatabase($this->user);
         }
     }

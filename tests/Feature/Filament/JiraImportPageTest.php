@@ -93,4 +93,64 @@ class JiraImportPageTest extends TestCase
 
         Queue::assertPushed(ImportJiraTicketsJob::class, 1);
     }
+
+    /**
+     * The checkbox keys come from the browser, and issues Jira listed without
+     * a `self` link never make it into the url map - so a checked key with no
+     * entry is normal, not a reason to hand null to a `string $url` parameter.
+     */
+    public function test_a_selected_ticket_without_a_known_url_is_skipped(): void
+    {
+        Queue::fake();
+
+        $service = Mockery::mock(JiraImportService::class);
+        $service->shouldReceive('fetchTicketDetails')->once()->andReturn((object) ['key' => 'ALP-1']);
+        $this->app->instance(JiraImportService::class, $service);
+
+        Livewire::test(JiraImport::class)
+            ->set('host', 'https://example.atlassian.net')
+            ->set('username', 'user@example.com')
+            ->set('token', 'secret')
+            ->set('data', ['alp_alp_1' => true, 'alp_unknown' => true])
+            ->set('ticketsDataApi', ['alp_alp_1' => 'https://example.atlassian.net/rest/api/2/issue/10001'])
+            ->call('import')
+            ->assertSuccessful();
+
+        Queue::assertPushed(
+            ImportJiraTicketsJob::class,
+            fn (ImportJiraTicketsJob $job) => count($this->jobTickets($job)) === 1
+        );
+    }
+
+    public function test_nothing_is_dispatched_when_no_selected_ticket_can_be_read(): void
+    {
+        Queue::fake();
+
+        // A timed-out or refused fetch comes back as null.
+        $service = Mockery::mock(JiraImportService::class);
+        $service->shouldReceive('fetchTicketDetails')->once()->andReturnNull();
+        $this->app->instance(JiraImportService::class, $service);
+
+        Livewire::test(JiraImport::class)
+            ->set('host', 'https://example.atlassian.net')
+            ->set('username', 'user@example.com')
+            ->set('token', 'secret')
+            ->set('data', ['alp_alp_1' => true])
+            ->set('ticketsDataApi', ['alp_alp_1' => 'https://example.atlassian.net/rest/api/2/issue/10001'])
+            ->call('import')
+            ->assertSuccessful();
+
+        Queue::assertNothingPushed();
+    }
+
+    /**
+     * @return array<int, mixed>
+     */
+    private function jobTickets(ImportJiraTicketsJob $job): array
+    {
+        $tickets = (new \ReflectionProperty($job, 'tickets'));
+        $tickets->setAccessible(true);
+
+        return $tickets->getValue($job);
+    }
 }
