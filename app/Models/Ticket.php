@@ -172,11 +172,29 @@ class Ticket extends Model implements HasMedia
         );
     }
 
+    /**
+     * Total hours logged against this ticket.
+     *
+     * Prefers the SQL aggregate when the query asked for it
+     * (->withSum('hours', 'value')): summing in the database is one query for
+     * the whole result set, where reading the relation pulls every hour row of
+     * every ticket into memory to add up a single column. Falls back to the
+     * relation so a plain Ticket instance still answers correctly.
+     */
+    private function loggedHoursValue(): float
+    {
+        if (array_key_exists('hours_sum_value', $this->attributes)) {
+            return (float) $this->attributes['hours_sum_value'];
+        }
+
+        return (float) $this->hours->sum('value');
+    }
+
     public function totalLoggedHours(): Attribute
     {
         return new Attribute(
             get: function () {
-                $seconds = $this->hours->sum('value') * 3600;
+                $seconds = $this->loggedHoursValue() * 3600;
 
                 return CarbonInterval::seconds($seconds)->cascade()->forHumans();
             }
@@ -186,18 +204,14 @@ class Ticket extends Model implements HasMedia
     public function totalLoggedSeconds(): Attribute
     {
         return new Attribute(
-            get: function () {
-                return $this->hours->sum('value') * 3600;
-            }
+            get: fn () => $this->loggedHoursValue() * 3600
         );
     }
 
     public function totalLoggedInHours(): Attribute
     {
         return new Attribute(
-            get: function () {
-                return $this->hours->sum('value');
-            }
+            get: fn () => $this->loggedHoursValue()
         );
     }
 

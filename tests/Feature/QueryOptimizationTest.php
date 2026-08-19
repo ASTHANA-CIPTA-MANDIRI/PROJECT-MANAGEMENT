@@ -2,22 +2,27 @@
 
 namespace Tests\Feature;
 
+use App\Filament\Pages\Kanban;
 use App\Filament\Resources\ProjectResource;
 use App\Filament\Resources\TicketResource;
 use App\Models\Project;
 use App\Models\Ticket;
 use App\Models\TicketHour;
+use App\Models\TicketRelation;
+use App\Models\TicketStatus;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Notification;
 use Illuminate\Support\Facades\Storage;
+use Livewire\Livewire;
+use Tests\InteractsWithPermissions;
 use Tests\TestCase;
 
 class QueryOptimizationTest extends TestCase
 {
-    use RefreshDatabase;
+    use InteractsWithPermissions, RefreshDatabase;
 
     protected function setUp(): void
     {
@@ -240,5 +245,87 @@ class QueryOptimizationTest extends TestCase
 
         // 1 hours query + 3 eager-loaded relations = 4, not 1 + 5*3 = 16.
         $this->assertLessThanOrEqual(4, $queryCount, "Expected eager loading, ran {$queryCount} queries");
+    }
+
+    // ------------------------------------------------ kanban / scrum board
+
+    /**
+     * Build a board's worth of cards, each with logged hours and a relation
+     * to another ticket - the two things the card template reads.
+     */
+    private function boardWithCards(User $owner, int $cards): Project
+    {
+        $project = Project::factory()->create(['owner_id' => $owner->id]);
+        $status = TicketStatus::factory()->default()->create(['project_id' => null]);
+
+        for ($i = 0; $i < $cards; $i++) {
+            $ticket = Ticket::factory()->create([
+                'project_id' => $project->id,
+                'owner_id' => $owner->id,
+                'status_id' => $status->id,
+            ]);
+            TicketHour::factory()->count(2)->create(['ticket_id' => $ticket->id]);
+            TicketRelation::create([
+                'ticket_id' => $ticket->id,
+                'relation_id' => Ticket::factory()->create(['project_id' => $project->id])->id,
+                'type' => config('system.tickets.relations.default'),
+            ]);
+        }
+
+        return $project;
+    }
+
+    /**
+     * Queries run by one board render. The page is mounted first and outside
+     * the measurement: booting a Filament page runs its own fixed set of
+     * permission/settings queries, which would drown out the per-card cost
+     * this is here to catch.
+     */
+    private function boardQueryCount(Project $project): int
+    {
+        $board = Livewire::test(Kanban::class, ['project' => $project])->instance();
+
+        DB::connection()->flushQueryLog();
+        DB::connection()->enableQueryLog();
+
+        // Touch what the card template reads, so a missing eager load shows up
+        // as the extra query it would be at render time.
+        foreach ($board->getRecords() as $record) {
+            $record['totalLoggedHours'];
+            foreach ($record['relations'] as $relation) {
+                $relation->relation->code;
+            }
+        }
+
+        $count = count(DB::connection()->getQueryLog());
+        DB::connection()->disableQueryLog();
+
+        return $count;
+    }
+
+    /**
+     * getRecords() eager-loaded `relations` but not `relations.relation`, and
+     * never loaded the hours the card footer reads - so every card cost one
+     * query for its logged time plus one per relation. The board re-renders on
+     * every Livewire interaction and every broadcast, so that multiplied fast.
+     */
+    public function test_the_board_does_not_run_extra_queries_per_card(): void
+    {
+        $user = $this->userWithPermissions(['List tickets', 'View ticket']);
+        $this->actingAs($user);
+
+        $small = $this->boardWithCards($user, 2);
+        $large = $this->boardWithCards($user, 8);
+
+        $smallCount = $this->boardQueryCount($small);
+        $largeCount = $this->boardQueryCount($large);
+
+        // Four times the cards must cost the same number of queries: without
+        // the eager loads this was 2 extra per card (hours + relation).
+        $this->assertSame(
+            $smallCount,
+            $largeCount,
+            "Board queries scale with card count: {$smallCount} for 2 cards, {$largeCount} for 8"
+        );
     }
 }

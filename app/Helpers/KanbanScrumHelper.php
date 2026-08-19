@@ -167,7 +167,16 @@ trait KanbanScrumHelper
     public function getRecords(): Collection
     {
         $query = $this->recordsQuery()
-            ->with(['project', 'owner', 'responsible', 'status', 'type', 'priority', 'epic', 'labels', 'relations']);
+            // relations.relation because the card links to the related
+            // ticket's code, and the logged hours are summed in SQL rather
+            // than by pulling every hour row of every card into memory. This
+            // runs again on every Livewire interaction and every broadcast,
+            // so a query per card is a query per card per keystroke.
+            ->with([
+                'project', 'owner', 'responsible', 'status', 'type', 'priority', 'epic', 'labels',
+                'relations', 'relations.relation:id,code',
+            ])
+            ->withSum('hours', 'value');
 
         // The board is a sorted board: without this the dragged order was
         // written to the database and then never read back.
