@@ -4,6 +4,7 @@ namespace App\Filament\Resources;
 
 use App\Filament\Resources\ProjectStatusResource\Pages;
 use App\Models\ProjectStatus;
+use App\Support\Colors;
 use Filament\Forms;
 use Filament\Resources\Form;
 use Filament\Resources\Resource;
@@ -48,7 +49,8 @@ class ProjectStatusResource extends Resource
 
                                 Forms\Components\ColorPicker::make('color')
                                     ->label(__('Status color'))
-                                    ->required(),
+                                    ->required()
+                                    ->regex(Colors::HEX_PATTERN),
 
                                 Forms\Components\Checkbox::make('is_default')
                                     ->label(__('Default status'))

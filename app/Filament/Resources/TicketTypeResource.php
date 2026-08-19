@@ -4,6 +4,7 @@ namespace App\Filament\Resources;
 
 use App\Filament\Resources\TicketTypeResource\Pages;
 use App\Models\TicketType;
+use App\Support\Colors;
 use Filament\Forms;
 use Filament\Resources\Form;
 use Filament\Resources\Resource;
@@ -50,7 +51,8 @@ class TicketTypeResource extends Resource
 
                                 Forms\Components\ColorPicker::make('color')
                                     ->label(__('Type color'))
-                                    ->required(),
+                                    ->required()
+                                    ->regex(Colors::HEX_PATTERN),
 
                                 IconPicker::make('icon')
                                     ->label(__('Type icon'))

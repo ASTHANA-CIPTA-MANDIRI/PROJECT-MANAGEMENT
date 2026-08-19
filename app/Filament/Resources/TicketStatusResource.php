@@ -4,6 +4,7 @@ namespace App\Filament\Resources;
 
 use App\Filament\Resources\TicketStatusResource\Pages;
 use App\Models\TicketStatus;
+use App\Support\Colors;
 use Filament\Forms;
 use Filament\Resources\Form;
 use Filament\Resources\Resource;
@@ -48,7 +49,8 @@ class TicketStatusResource extends Resource
 
                                 Forms\Components\ColorPicker::make('color')
                                     ->label(__('Status color'))
-                                    ->required(),
+                                    ->required()
+                                    ->regex(Colors::HEX_PATTERN),
 
                                 Forms\Components\Checkbox::make('is_default')
                                     ->label(__('Default status'))

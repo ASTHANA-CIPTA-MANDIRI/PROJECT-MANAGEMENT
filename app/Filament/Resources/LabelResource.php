@@ -4,6 +4,7 @@ namespace App\Filament\Resources;
 
 use App\Filament\Resources\LabelResource\Pages;
 use App\Models\Label;
+use App\Support\Colors;
 use Filament\Forms;
 use Filament\Resources\Form;
 use Filament\Resources\Resource;
@@ -50,7 +51,8 @@ class LabelResource extends Resource
 
                     Forms\Components\ColorPicker::make('color')
                         ->label(__('Color'))
-                        ->required(),
+                        ->required()
+                        ->regex(Colors::HEX_PATTERN),
                 ]),
             ]),
         ]);

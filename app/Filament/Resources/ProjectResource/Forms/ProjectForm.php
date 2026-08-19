@@ -4,6 +4,7 @@ namespace App\Filament\Resources\ProjectResource\Forms;
 
 use App\Models\Project;
 use App\Models\ProjectStatus;
+use App\Support\Colors;
 use App\Support\UserOptions;
 use Filament\Forms;
 
@@ -94,7 +95,9 @@ class ProjectForm
                             ->maxLength(255),
                         Forms\Components\ColorPicker::make('color')
                             ->label(__('Color'))
-                            ->default('#cecece'),
+                            ->default(Colors::DEFAULT)
+                            ->required()
+                            ->regex(Colors::HEX_PATTERN),
                     ])
                     ->createOptionUsing(fn (array $data) => ProjectStatus::create($data)->getKey()),
             ]);

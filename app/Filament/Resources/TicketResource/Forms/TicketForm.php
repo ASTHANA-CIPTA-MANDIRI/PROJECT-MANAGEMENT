@@ -9,6 +9,7 @@ use App\Models\TicketPriority;
 use App\Models\TicketRelation;
 use App\Models\TicketStatus;
 use App\Models\TicketType;
+use App\Support\Colors;
 use App\Support\UserOptions;
 use Filament\Forms;
 use Filament\Resources\Pages\CreateRecord;
@@ -174,7 +175,9 @@ class TicketForm
                     ->maxLength(255),
                 Forms\Components\ColorPicker::make('color')
                     ->label(__('Color'))
-                    ->default('#3b82f6'),
+                    ->default('#3b82f6')
+                    ->required()
+                    ->regex(Colors::HEX_PATTERN),
             ]);
     }
 

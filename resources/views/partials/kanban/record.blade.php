@@ -28,7 +28,7 @@
         <div class="record-labels" style="display:flex;flex-wrap:wrap;gap:.25rem;margin:.35rem 0;">
             @foreach($record['labels'] as $label)
                 <span class="text-white text-xs px-2 py-0.5 rounded-full"
-                      style="background-color: {{ $label->color }};">
+                      style="background-color: {{ \App\Support\Colors::safe($label->color) }};">
                     {{ $label->name }}
                 </span>
             @endforeach

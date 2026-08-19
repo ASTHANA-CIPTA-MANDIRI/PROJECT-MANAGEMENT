@@ -1,6 +1,6 @@
 <div class="kanban-statuses">
     <div class="status-header"
-         style="border-color: {{ $status['color'] }}66;">
+         style="border-color: {{ \App\Support\Colors::safe($status['color']) }}66;">
         <span>{{ $status['title'] }}</span>
         @if($status['size'])
             {{ $status['size'] }} {{ __($status['size'] > 1 ? 'tickets' : 'ticket') }}
@@ -9,7 +9,7 @@
     <div class="status-container"
          data-status="{{ $status['id'] }}"
          id="status-records-{{ $status['id'] }}"
-         style="border-color: {{ $status['color'] }}66;">
+         style="border-color: {{ \App\Support\Colors::safe($status['color']) }}66;">
         @foreach($records as $record)
             @include('partials.kanban.record')
         @endforeach

@@ -26,15 +26,15 @@
             </div>
             <div class="w-full flex items-center gap-2">
                 <div class="px-2 py-1 rounded flex items-center justify-center text-center text-xs text-white"
-                     style="background-color: {{ $record->status->color }};">
+                     style="background-color: {{ \App\Support\Colors::safe($record->status->color) }};">
                     {{ $record->status->name }}
                 </div>
                 <div class="px-2 py-1 rounded flex items-center justify-center text-center text-xs text-white"
-                     style="background-color: {{ $record->priority->color }};">
+                     style="background-color: {{ \App\Support\Colors::safe($record->priority->color) }};">
                     {{ $record->priority->name }}
                 </div>
                 <div class="px-2 py-1 rounded flex items-center justify-center text-center text-xs text-white"
-                     style="background-color: {{ $record->type->color }};">
+                     style="background-color: {{ \App\Support\Colors::safe($record->type->color) }};">
                     <x-icon class="h-3 text-white" name="{{ $record->type->icon }}"/>
                     <span class="ml-2">
                         {{ $record->type->name }}
@@ -58,7 +58,7 @@
                 <div class="w-full flex items-center flex-wrap gap-2">
                     @foreach($record->labels as $label)
                         <span class="px-2 py-1 rounded-full text-xs text-white"
-                              style="background-color: {{ $label->color }};">
+                              style="background-color: {{ \App\Support\Colors::safe($label->color) }};">
                             {{ $label->name }}
                         </span>
                     @endforeach
@@ -336,7 +336,7 @@
                                 <div class="w-full flex items-center gap-10">
                                     <span class="text-gray-400">{{ $activity->oldStatus->name }}</span>
                                     <x-heroicon-o-arrow-right class="w-6 h-6"/>
-                                    <span style="color: {{ $activity->newStatus->color }}">
+                                    <span style="color: {{ \App\Support\Colors::safe($activity->newStatus->color) }}">
                                         {{ $activity->newStatus->name }}
                                     </span>
                                 </div>
