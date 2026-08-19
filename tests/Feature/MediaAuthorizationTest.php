@@ -5,6 +5,7 @@ namespace Tests\Feature;
 use App\Models\Project;
 use App\Models\Ticket;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\Storage;
 use Tests\InteractsWithPermissions;
 use Tests\TestCase;
@@ -101,6 +102,74 @@ class MediaAuthorizationTest extends TestCase
         $this->actingAs($owner)
             ->get(route('media.show', $media))
             ->assertSuccessful();
+    }
+
+    // --------------------------------------------------- response headers
+
+    /**
+     * Uploads are now restricted to a raster-image whitelist at the form
+     * level (see config('system.images')), but this is the second line of
+     * defense for whatever predates that rule or reaches the disk some other
+     * way: anything outside the safe-to-render-inline list downloads instead
+     * of being rendered by the browser on the app's own origin.
+     */
+    public function test_a_whitelisted_image_is_served_inline(): void
+    {
+        $owner = $this->userWithPermissions(['View project']);
+        $project = Project::factory()->create(['owner_id' => $owner->id]);
+        $media = $project->addMedia(UploadedFile::fake()->image('cover.png'))
+            ->toMediaCollection();
+
+        $response = $this->actingAs($owner)->get(route('media.show', $media));
+
+        $response->assertSuccessful();
+        $this->assertStringStartsWith('inline', $response->headers->get('Content-Disposition'));
+    }
+
+    public function test_a_non_whitelisted_file_is_served_as_an_attachment(): void
+    {
+        $owner = $this->userWithPermissions(['View ticket']);
+        $ticket = Ticket::factory()->create(['owner_id' => $owner->id]);
+        $media = $ticket->addMediaFromString('%PDF-1.4 fake pdf bytes')
+            ->usingFileName('report.pdf')
+            ->toMediaCollection();
+
+        $response = $this->actingAs($owner)->get(route('media.show', $media));
+
+        $response->assertSuccessful();
+        $this->assertStringStartsWith('attachment', $response->headers->get('Content-Disposition'));
+    }
+
+    public function test_an_svg_is_served_as_an_attachment_not_rendered_inline(): void
+    {
+        // image/svg+xml is deliberately not in the raster whitelist even
+        // though it is an image/* type: it can embed <script>.
+        $owner = $this->userWithPermissions(['View project']);
+        $project = Project::factory()->create(['owner_id' => $owner->id]);
+        $media = $project->addMedia(
+            UploadedFile::fake()->createWithContent(
+                'logo.svg',
+                '<svg xmlns="http://www.w3.org/2000/svg"><script>alert(1)</script></svg>'
+            )
+        )->toMediaCollection();
+
+        $response = $this->actingAs($owner)->get(route('media.show', $media));
+
+        $response->assertSuccessful();
+        $this->assertStringStartsWith('attachment', $response->headers->get('Content-Disposition'));
+    }
+
+    public function test_the_nosniff_header_is_always_present(): void
+    {
+        $owner = $this->userWithPermissions(['View project']);
+        $project = Project::factory()->create(['owner_id' => $owner->id]);
+        $media = $project->addMediaFromString('cover bytes')
+            ->usingFileName('cover.png')
+            ->toMediaCollection();
+
+        $response = $this->actingAs($owner)->get(route('media.show', $media));
+
+        $response->assertHeader('X-Content-Type-Options', 'nosniff');
     }
 
     public function test_authorization_is_still_checked_without_the_view_permission(): void

@@ -40,7 +40,11 @@ class ProjectForm
     {
         return Forms\Components\SpatieMediaLibraryFileUpload::make('cover')
             ->label(__('Cover image'))
-            ->image()
+            // Not ->image(): that accepts image/*, which includes
+            // image/svg+xml. An SVG can embed <script>, and the cover is
+            // served inline through MediaController - opening its URL
+            // directly would execute it on the app's origin.
+            ->acceptedFileTypes(config('system.images.accepted_mime_types'))
             ->maxSize(config('system.max_file_size'))
             ->helperText(
                 __('If not selected, an image will be generated based on the project name')

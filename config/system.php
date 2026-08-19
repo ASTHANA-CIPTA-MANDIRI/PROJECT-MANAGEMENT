@@ -178,6 +178,21 @@ return [
 
     ],
 
+    // Images (project covers, site logo)
+    'images' => [
+
+        // Raster formats only - deliberately excludes image/svg+xml, which can
+        // embed <script> and executes when its media.show URL (or, for the
+        // site logo, its public disk URL) is opened directly.
+        'accepted_mime_types' => [
+            'image/jpeg',
+            'image/png',
+            'image/gif',
+            'image/webp',
+        ],
+
+    ],
+
     // System constants
     'max_file_size' => 10240,
 

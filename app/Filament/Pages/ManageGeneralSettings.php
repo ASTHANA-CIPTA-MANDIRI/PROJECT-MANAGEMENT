@@ -64,7 +64,13 @@ class ManageGeneralSettings extends SettingsPage
                             FileUpload::make('site_logo')
                                 ->label(__('Site logo'))
                                 ->helperText(__('This is the platform logo (e.g. Used in site favicon)'))
-                                ->image()
+                                // Not ->image(): that accepts image/*, which
+                                // includes image/svg+xml. The logo is written
+                                // straight to the public disk with no
+                                // authorization check on its URL, so an SVG
+                                // could embed <script> and execute for anyone
+                                // who opens it.
+                                ->acceptedFileTypes(config('system.images.accepted_mime_types'))
                                 ->columnSpan(1)
                                 ->maxSize(config('system.max_file_size')),
 
