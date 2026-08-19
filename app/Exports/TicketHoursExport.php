@@ -4,6 +4,7 @@ namespace App\Exports;
 
 use App\Models\Ticket;
 use App\Models\TicketHour;
+use App\Support\CsvSanitizer;
 use Maatwebsite\Excel\Concerns\FromCollection;
 use Maatwebsite\Excel\Concerns\WithHeadings;
 
@@ -36,7 +37,7 @@ class TicketHoursExport implements FromCollection, WithHeadings
     public function collection()
     {
         return $this->ticket->hours
-            ->map(fn (TicketHour $item) => [
+            ->map(fn (TicketHour $item) => CsvSanitizer::row([
                 '#' => $item->ticket->code,
                 'ticket' => $item->ticket->name,
                 'user' => $item->user->name,
@@ -45,6 +46,6 @@ class TicketHoursExport implements FromCollection, WithHeadings
                 'activity' => $item->activity ? $item->activity->name : '-',
                 'date' => $item->created_at->format(__('Y-m-d g:i A')),
                 'comment' => $item->comment,
-            ]);
+            ]));
     }
 }
