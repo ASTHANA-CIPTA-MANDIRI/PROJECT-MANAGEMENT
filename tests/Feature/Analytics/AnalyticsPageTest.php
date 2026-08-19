@@ -12,6 +12,7 @@ use App\Models\TicketHour;
 use App\Models\TicketStatus;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Notification;
 use Livewire\Livewire;
 use Spatie\Permission\PermissionRegistrar;
@@ -98,6 +99,56 @@ class AnalyticsPageTest extends TestCase
         Livewire::test(Analytics::class)
             ->set('projectId', $b->id)
             ->assertSet('sprintId', $sprintB->id);
+    }
+
+    /**
+     * currentProject() is memoized per request because every report on the
+     * page calls it. The memo has to be dropped when the selection changes,
+     * or the page would keep reporting on the project that was selected
+     * before - including after a switch to one the user may not see.
+     */
+    public function test_switching_project_re_resolves_the_current_project(): void
+    {
+        $user = $this->userWithAnalytics();
+        $this->actingAs($user);
+
+        $a = Project::factory()->create(['owner_id' => $user->id]);
+        $b = Project::factory()->create(['owner_id' => $user->id]);
+
+        $page = Livewire::test(Analytics::class)->set('projectId', $a->id);
+        $this->assertSame($a->id, $page->instance()->currentProject()->id);
+
+        $page->set('projectId', $b->id);
+        $this->assertSame($b->id, $page->instance()->currentProject()->id);
+    }
+
+    public function test_the_selected_project_is_looked_up_once_per_render(): void
+    {
+        $user = $this->userWithAnalytics();
+        $this->actingAs($user);
+        $project = Project::factory()->create(['owner_id' => $user->id]);
+
+        // Driven directly rather than through Livewire::test(), whose mount
+        // would resolve the project before the measurement even starts.
+        $page = new Analytics;
+        $page->projectId = $project->id;
+
+        DB::connection()->flushQueryLog();
+        DB::connection()->enableQueryLog();
+
+        // What one render does: every report resolves the project first.
+        $page->velocity();
+        $page->burndown();
+        $page->utilization();
+        $page->forecast();
+        $page->sprintOptions();
+
+        $lookups = collect(DB::connection()->getQueryLog())
+            ->filter(fn (array $query) => str_contains($query['query'], 'from "projects"'))
+            ->count();
+        DB::connection()->disableQueryLog();
+
+        $this->assertSame(1, $lookups, "Expected one project lookup per render, ran {$lookups}");
     }
 
     /**

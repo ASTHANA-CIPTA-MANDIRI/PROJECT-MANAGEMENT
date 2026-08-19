@@ -6,6 +6,7 @@ use App\Filament\Pages\Kanban;
 use App\Filament\Resources\ProjectResource;
 use App\Filament\Resources\TicketResource;
 use App\Models\Project;
+use App\Models\Sprint;
 use App\Models\Ticket;
 use App\Models\TicketHour;
 use App\Models\TicketRelation;
@@ -245,6 +246,70 @@ class QueryOptimizationTest extends TestCase
 
         // 1 hours query + 3 eager-loaded relations = 4, not 1 + 5*3 = 16.
         $this->assertLessThanOrEqual(4, $queryCount, "Expected eager loading, ran {$queryCount} queries");
+    }
+
+    // ------------------------------------------------------ cached accessors
+
+    /**
+     * Eloquent caches object attribute values by default, so this was already
+     * a single query while a sprint was running. null is not an object
+     * though, so a project between sprints re-ran the lookup on every read -
+     * and the scrum page reads it about six times per render.
+     */
+    public function test_reading_the_current_sprint_of_a_project_between_sprints_runs_one_query(): void
+    {
+        $project = Project::factory()->scrum()->create();
+        Sprint::factory()->ended()->create(['project_id' => $project->id]);
+
+        DB::connection()->flushQueryLog();
+        DB::connection()->enableQueryLog();
+
+        for ($i = 0; $i < 6; $i++) {
+            $project->currentSprint;
+            $project->nextSprint;
+        }
+
+        $queryCount = count(DB::connection()->getQueryLog());
+        DB::connection()->disableQueryLog();
+
+        $this->assertNull($project->currentSprint);
+        $this->assertSame(1, $queryCount, "Expected the accessors to cache, ran {$queryCount} queries");
+    }
+
+    public function test_the_running_sprint_is_still_found_and_cached(): void
+    {
+        $project = Project::factory()->scrum()->create();
+        $running = Sprint::factory()->started()->create(['project_id' => $project->id]);
+
+        DB::connection()->flushQueryLog();
+        DB::connection()->enableQueryLog();
+
+        for ($i = 0; $i < 6; $i++) {
+            $project->currentSprint;
+        }
+
+        $queryCount = count(DB::connection()->getQueryLog());
+        DB::connection()->disableQueryLog();
+
+        $this->assertSame($running->id, $project->currentSprint->id);
+        $this->assertSame(1, $queryCount, "Expected the accessor to cache, ran {$queryCount} queries");
+    }
+
+    /**
+     * The cache lives on the model instance, so re-reading the project picks
+     * up a sprint that started or ended in the meantime.
+     */
+    public function test_a_freshly_fetched_project_sees_the_new_current_sprint(): void
+    {
+        $project = Project::factory()->scrum()->create();
+        $running = Sprint::factory()->started()->create(['project_id' => $project->id]);
+
+        $this->assertSame($running->id, $project->currentSprint->id);
+
+        $running->update(['ended_at' => now()]);
+        $next = Sprint::factory()->started()->create(['project_id' => $project->id]);
+
+        $this->assertSame($next->id, $project->fresh()->currentSprint->id);
     }
 
     // ------------------------------------------------ kanban / scrum board

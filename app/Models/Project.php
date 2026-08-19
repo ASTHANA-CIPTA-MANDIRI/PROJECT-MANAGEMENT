@@ -91,9 +91,18 @@ class Project extends Model implements HasMedia
         return $this->hasMany(Sprint::class, 'project_id', 'id');
     }
 
+    /**
+     * The date range the road map spans.
+     *
+     * Both always return a date object, and Eloquent caches object attribute
+     * values by default (Attribute::$withObjectCaching), so these were never
+     * re-querying. shouldCache() states that requirement outright instead of
+     * leaning on a default that silently stops applying the day one of them
+     * returns null - which is exactly what bit currentSprint below.
+     */
     public function epicsFirstDate(): Attribute
     {
-        return new Attribute(
+        return (new Attribute(
             get: function () {
                 $firstEpic = $this->epics()->orderBy('starts_at')->first();
                 if ($firstEpic) {
@@ -102,12 +111,12 @@ class Project extends Model implements HasMedia
 
                 return now();
             }
-        );
+        ))->shouldCache();
     }
 
     public function epicsLastDate(): Attribute
     {
-        return new Attribute(
+        return (new Attribute(
             get: function () {
                 $firstEpic = $this->epics()->orderBy('ends_at', 'desc')->first();
                 if ($firstEpic) {
@@ -116,7 +125,7 @@ class Project extends Model implements HasMedia
 
                 return now();
             }
-        );
+        ))->shouldCache();
     }
 
     public function contributors(): Attribute
@@ -146,19 +155,33 @@ class Project extends Model implements HasMedia
         );
     }
 
+    /**
+     * The running sprint, if any.
+     *
+     * The scrum board reads this from the page heading, the board query, two
+     * action visibility checks and the sub-heading. Eloquent caches object
+     * attribute values by default, so that was already one query - but only
+     * while a sprint is actually running: null is not an object, so a project
+     * between sprints re-ran the query on every single read. shouldCache()
+     * covers the empty case too.
+     *
+     * Starting or ending a sprint writes through the query builder and then
+     * re-reads the project fresh, so the per-instance cache never goes stale
+     * on that path.
+     */
     public function currentSprint(): Attribute
     {
-        return new Attribute(
+        return (new Attribute(
             get: fn () => $this->sprints()
                 ->whereNotNull('started_at')
                 ->whereNull('ended_at')
                 ->first()
-        );
+        ))->shouldCache();
     }
 
     public function nextSprint(): Attribute
     {
-        return new Attribute(
+        return (new Attribute(
             get: function () {
                 if ($this->currentSprint) {
                     return $this->sprints()
@@ -171,7 +194,7 @@ class Project extends Model implements HasMedia
 
                 return null;
             }
-        );
+        ))->shouldCache();
     }
 
     /**

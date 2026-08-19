@@ -31,6 +31,15 @@ class Analytics extends AuthorizedPage
     /** Currently selected sprint for the burn-down (defaults to the latest). */
     public ?int $sprintId = null;
 
+    /**
+     * Memoized currentProject() result. Not a Livewire property on purpose:
+     * it is rebuilt from scratch on every request, which is exactly the
+     * lifetime we want.
+     */
+    private ?Project $resolvedProject = null;
+
+    private bool $projectResolved = false;
+
     protected static function getNavigationLabel(): string
     {
         return __('Analytics');
@@ -49,6 +58,10 @@ class Analytics extends AuthorizedPage
 
     public function updatedProjectId(): void
     {
+        // A different project than whatever was memoized before.
+        $this->projectResolved = false;
+        $this->resolvedProject = null;
+
         // $projectId is a public Livewire property, so the client can post any
         // id it likes. Drop anything the user cannot reach instead of leaving
         // it selected.
@@ -88,16 +101,24 @@ class Analytics extends AuthorizedPage
      * The selected project, but only if the current user may see it. Every
      * report below goes through here, so this is the single place that decides
      * whose data the page is allowed to render.
+     *
+     * Memoized per request: velocity(), burndown(), utilization(), forecast()
+     * and sprintOptions() all call this, so one render otherwise repeats the
+     * same access-scoped lookup half a dozen times. updatedProjectId() clears
+     * the memo, so a changed selection is always resolved again - and with it
+     * re-checked against the access scope.
      */
     public function currentProject(): ?Project
     {
-        if (! $this->projectId) {
-            return null;
+        if ($this->projectResolved) {
+            return $this->resolvedProject;
         }
 
-        return Project::accessibleBy(auth()->user())
-            ->whereKey($this->projectId)
-            ->first();
+        $this->projectResolved = true;
+
+        return $this->resolvedProject = $this->projectId
+            ? Project::accessibleBy(auth()->user())->whereKey($this->projectId)->first()
+            : null;
     }
 
     // --------------------------------------------------------- report data
