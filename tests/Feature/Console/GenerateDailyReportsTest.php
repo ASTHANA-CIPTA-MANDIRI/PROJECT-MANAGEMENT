@@ -5,9 +5,11 @@ namespace Tests\Feature\Console;
 use App\Models\Project;
 use App\Models\Ticket;
 use App\Models\TicketComment;
+use App\Models\TicketHour;
 use App\Models\User;
 use App\Notifications\DailySummary;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Notification;
 use Tests\TestCase;
 
@@ -90,6 +92,77 @@ class GenerateDailyReportsTest extends TestCase
         Notification::assertSentTo($owner, DailySummary::class, function (DailySummary $n) {
             return $n->summary['comments'] === 1 && $n->summary['new_tickets'] === 0;
         });
+    }
+
+    public function test_it_sums_activity_across_all_of_a_users_projects(): void
+    {
+        $owner = User::factory()->create();
+        $first = Project::factory()->create(['owner_id' => $owner->id]);
+        $second = Project::factory()->create(['owner_id' => $owner->id]);
+
+        Ticket::factory()->count(2)->create(['project_id' => $first->id]);
+        $ticket = Ticket::factory()->create(['project_id' => $second->id]);
+        TicketHour::factory()->hours(1.5)->create(['ticket_id' => $ticket->id]);
+
+        $this->artisan('reports:daily', ['--date' => now()->toDateString()])
+            ->assertSuccessful();
+
+        Notification::assertSentTo($owner, DailySummary::class, function (DailySummary $n) {
+            return $n->summary['new_tickets'] === 3
+                && (float) $n->summary['hours_logged'] === 1.5;
+        });
+    }
+
+    public function test_it_ignores_activity_on_a_deleted_project(): void
+    {
+        $owner = User::factory()->create();
+        $project = Project::factory()->create(['owner_id' => $owner->id]);
+        Ticket::factory()->create(['project_id' => $project->id]);
+        $project->delete();
+
+        $this->artisan('reports:daily', ['--date' => now()->toDateString()])
+            ->assertSuccessful();
+
+        Notification::assertNotSentTo($owner, DailySummary::class);
+    }
+
+    /**
+     * The command used to run four aggregate queries per user, so a 10k-user
+     * instance meant 40k queries every morning. The aggregates now run once per
+     * project and are fanned out, so the query count must not grow with users.
+     */
+    public function test_its_query_count_does_not_grow_with_the_number_of_users(): void
+    {
+        $this->assertSame(
+            $this->queriesForReportWith(2),
+            $this->queriesForReportWith(20),
+            'The daily report must run a constant number of queries.',
+        );
+    }
+
+    /**
+     * Runs the report for a fresh project shared by $userCount members and
+     * returns how many queries that took.
+     */
+    private function queriesForReportWith(int $userCount): int
+    {
+        $project = Project::factory()->create();
+        $project->users()->attach(
+            User::factory()->count($userCount)->create()->pluck('id'),
+            ['role' => 'employee'],
+        );
+        Ticket::factory()->create(['project_id' => $project->id]);
+
+        DB::connection()->enableQueryLog();
+
+        $this->artisan('reports:daily', ['--date' => now()->toDateString()])
+            ->assertSuccessful();
+
+        $count = count(DB::connection()->getQueryLog());
+        DB::connection()->flushQueryLog();
+        DB::connection()->disableQueryLog();
+
+        return $count;
     }
 
     public function test_the_daily_summary_mail_builds(): void
