@@ -113,13 +113,27 @@ class RoadMap extends AuthorizedPage implements HasForms
         ]);
     }
 
+    /**
+     * Public Livewire listeners, reachable whatever the template renders. A
+     * user with no project at all has $this->project === null (see mount()),
+     * and there is nothing to attach an epic or a ticket to — dereferencing it
+     * used to answer the click with a 500.
+     */
     public function createTicket(): void
     {
+        if (! $this->project) {
+            return;
+        }
+
         $this->ticket = true;
     }
 
     public function createEpic(): void
     {
+        if (! $this->project) {
+            return;
+        }
+
         $this->epic = new Epic;
         $this->epic->project_id = $this->project->id;
     }

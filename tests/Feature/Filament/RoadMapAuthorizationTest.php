@@ -95,6 +95,44 @@ class RoadMapAuthorizationTest extends TestCase
             ->assertSet('epic.id', $epic->id);
     }
 
+    // --------------------------------------------- creating without a project
+
+    /**
+     * A user who belongs to no project at all mounts the page with
+     * $project === null. createEpic() dereferenced it straight away, so the
+     * click answered with a 500.
+     */
+    public function test_creating_an_epic_without_any_project_is_a_no_op(): void
+    {
+        // Someone else's project: visible to nobody but its owner.
+        Project::factory()->create();
+
+        Livewire::test(RoadMap::class)
+            ->assertSet('project', null)
+            ->call('createEpic')
+            ->assertSuccessful()
+            ->assertSet('epic', null);
+    }
+
+    public function test_creating_a_ticket_without_any_project_is_a_no_op(): void
+    {
+        Project::factory()->create();
+
+        Livewire::test(RoadMap::class)
+            ->call('createTicket')
+            ->assertSuccessful()
+            ->assertSet('ticket', false);
+    }
+
+    public function test_creating_an_epic_still_works_with_a_project(): void
+    {
+        $project = Project::factory()->create(['owner_id' => $this->user->id]);
+
+        Livewire::test(RoadMap::class)
+            ->call('createEpic')
+            ->assertSet('epic.project_id', $project->id);
+    }
+
     // ------------------------------------------------------- filter select
 
     public function test_the_filter_ignores_a_project_the_user_cannot_access(): void

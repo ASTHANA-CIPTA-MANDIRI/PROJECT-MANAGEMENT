@@ -15,7 +15,9 @@
                     </button>
                 </form>
                 <div class="flex items-center gap-2">
-                    @if(auth()->user()->can('Create ticket'))
+                    {{-- Nothing to attach an epic or a ticket to until a
+                         project is selected. --}}
+                    @if($project && auth()->user()->can('Create ticket'))
                         <button wire:click="createEpic" wire:loading.attr="disabled"
                                 class="flex items-center gap-2 bg-primary-500 hover:bg-primary-600 px-3 py-1
                                 text-white rounded">
