@@ -82,6 +82,37 @@ class SprintApiTest extends TestCase
             ->assertJsonCount(2, 'data');
     }
 
+    /**
+     * An array filter value cannot be bound by where(); it used to blow up as
+     * a 500. Malformed input belongs to the caller, so it must read as 422.
+     */
+    public function test_an_array_filter_value_is_rejected_as_a_validation_error(): void
+    {
+        $user = $this->actingWith(['List sprints']);
+        $project = Project::factory()->create(['owner_id' => $user->id]);
+        Sprint::factory()->create(['project_id' => $project->id]);
+
+        $this->getJson("/api/v1/sprints?filter[project_id][]={$project->id}")
+            ->assertStatus(422)
+            ->assertJsonPath(
+                'errors',
+                ['filter.project_id' => ['The project_id filter must be a single value.']]
+            );
+    }
+
+    public function test_a_filter_outside_the_whitelist_is_still_ignored(): void
+    {
+        $user = $this->actingWith(['List sprints']);
+        $project = Project::factory()->create(['owner_id' => $user->id]);
+        Sprint::factory()->count(2)->create(['project_id' => $project->id]);
+
+        // Unknown fields stay silently ignored, arrays and all: only a
+        // whitelisted field with a malformed value is worth a 422.
+        $this->getJson('/api/v1/sprints?filter[nope][]=1')
+            ->assertOk()
+            ->assertJsonCount(2, 'data');
+    }
+
     public function test_it_paginates_sprints(): void
     {
         $user = $this->actingWith(['List sprints']);
