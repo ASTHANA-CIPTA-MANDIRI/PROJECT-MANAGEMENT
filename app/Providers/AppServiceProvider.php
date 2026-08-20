@@ -74,10 +74,9 @@ class AppServiceProvider extends ServiceProvider
             );
         });
 
-        // Register tippy styles
-        Filament::registerStyles([
-            'https://unpkg.com/tippy.js@6/dist/tippy.css',
-        ]);
+        // Tippy's tooltip styles are compiled into the theme above (from the
+        // local `tippy.js` npm package), so no third-party stylesheet is loaded
+        // at runtime.
 
         // Register scripts
         try {

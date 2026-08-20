@@ -9,9 +9,11 @@ return [
     |
     | Sent as the `Content-Security-Policy` header. The default is compatible
     | with Filament/Livewire/Alpine (which need 'unsafe-inline' + 'unsafe-eval')
-    | and the app's external hosts (tippy CSS on unpkg, avatars/images over
-    | https, Pusher over wss). Tighten it as you can; set CSP_ENABLED=false to
-    | drop the header entirely (e.g. while debugging a blocked resource).
+    | and the app's external hosts (avatars/images over https, Pusher over wss).
+    | Scripts and styles are served from this origin only — everything the panel
+    | needs is compiled into the Vite bundle. Tighten it as you can; set
+    | CSP_ENABLED=false to drop the header entirely (e.g. while debugging a
+    | blocked resource).
     |
     */
 
@@ -25,7 +27,7 @@ return [
         "img-src 'self' data: https:",
         "font-src 'self' data:",
         "script-src 'self' 'unsafe-inline' 'unsafe-eval'",
-        "style-src 'self' 'unsafe-inline' https://unpkg.com",
+        "style-src 'self' 'unsafe-inline'",
         "connect-src 'self' https: wss:",
     ])),
 
