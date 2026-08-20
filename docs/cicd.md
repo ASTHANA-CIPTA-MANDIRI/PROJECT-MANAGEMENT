@@ -6,7 +6,7 @@ configuring GitHub **Environments** and **secrets**.
 
 ## Continuous Integration — `tests.yml`
 
-Runs on push/PR to `main`, `master`, `dev`. Two jobs:
+Runs on every branch push and on PRs to `main`, `master`, `dev`. Two jobs:
 
 | Job | What it does |
 |-----|--------------|
@@ -37,6 +37,29 @@ Each run, on the server, does: `artisan down` → pull the ref →
 cache config/routes/views → `queue:restart` → `artisan up`. The production
 deploy also records the current release (`storage/app/PREVIOUS_RELEASE`) and
 takes a **pre-deploy DB snapshot** for rollback.
+
+### Production: CI gate and automatic recovery
+
+A `v*` tag triggers the production workflow directly, and CI does not run on
+tags — so `deploy-production.yml` opens with a **`ci-gate` job** that looks up
+the `tests.yml` run for the exact commit being deployed and fails unless it
+concluded `success`. The deploy job `needs: ci-gate`, so a tag on a commit with
+a red or never-run suite never reaches the server. For an emergency, run the
+workflow manually with **skip_ci_check** ticked; a pushed tag can never bypass
+the gate.
+
+The release steps run inside a subshell, with `trap 'php artisan up' EXIT`
+around them. If any step fails (a broken build, a migration that blows up) the
+workflow:
+
+1. checks the code back out at `PREVIOUS_RELEASE`, reinstalls dependencies,
+   rebuilds assets and re-caches,
+2. lifts maintenance mode either way — even if that restore itself fails,
+3. and still exits non-zero, so the run shows up red.
+
+The **database is deliberately left alone**: restoring it is destructive, so if
+migrations ran partially, follow up with the rollback workflow below and
+`restore_db` ticked.
 
 ### Required secrets (per environment)
 
@@ -115,6 +138,11 @@ PR ──► CI (lint + tests + coverage) ──► merge to main
                                           │
                              tag vX.Y.Z ──┤
                                           ▼
-                          Deploy (production)  ──(if broken)──►  Rollback
-                                   (pre-deploy DB snapshot)
+                                    ci-gate (CI green for this commit?)
+                                          │
+                                          ▼
+                          Deploy (production)  ──(step fails)──►  auto-restore
+                                   (pre-deploy DB snapshot)        previous code
+                                          │                        + artisan up
+                                          └────(if broken)──►  Rollback (+ DB)
 ```
