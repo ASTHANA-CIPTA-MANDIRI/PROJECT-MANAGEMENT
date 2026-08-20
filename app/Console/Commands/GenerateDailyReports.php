@@ -2,7 +2,6 @@
 
 namespace App\Console\Commands;
 
-use App\Models\Project;
 use App\Models\Ticket;
 use App\Models\TicketActivity;
 use App\Models\TicketComment;
@@ -12,6 +11,7 @@ use App\Notifications\DailySummary;
 use Illuminate\Console\Command;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Support\Carbon;
+use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
 
 /**
@@ -22,9 +22,16 @@ use Illuminate\Support\Facades\DB;
  * whole instance, and the results are then fanned out to owners and members.
  * Counting per user instead would cost four queries each, so a 10k-user
  * instance would spend 40k queries every morning.
+ *
+ * Recipients are then streamed in chunks. Each user's totals are summed from
+ * the per-project maps during their own chunk, so nothing is accumulated across
+ * iterations and peak memory stays flat no matter how many people are mailed.
  */
 class GenerateDailyReports extends Command
 {
+    /** Recipients held in memory at once. */
+    private const CHUNK_SIZE = 200;
+
     protected $signature = 'reports:daily
         {--date= : The day to report on (YYYY-MM-DD); defaults to yesterday}';
 
@@ -48,25 +55,9 @@ class GenerateDailyReports extends Command
             ->values()
             ->all();
 
-        $totals = $this->summariesByUser($activeProjectIds, $metrics);
-
-        $sent = 0;
-
-        User::query()
-            ->whereIn('id', array_keys($totals))
-            ->chunkById(200, function ($users) use ($totals, $date, &$sent) {
-                foreach ($users as $user) {
-                    $summary = $totals[$user->id];
-
-                    // Skip users with nothing to report - no empty emails.
-                    if ($this->isEmpty($summary)) {
-                        continue;
-                    }
-
-                    $user->notify(new DailySummary($date, $summary));
-                    $sent++;
-                }
-            });
+        $sent = $activeProjectIds === []
+            ? 0
+            : $this->notifyRecipients($activeProjectIds, $metrics, $date);
 
         $this->info("Daily summary sent to {$sent} user(s) for {$date->toDateString()}.");
 
@@ -127,51 +118,72 @@ class GenerateDailyReports extends Command
     }
 
     /**
-     * Fan the per-project totals out to every owner and member, summing the
-     * projects each user can see. Trashed projects drop out here, because the
-     * lookup goes through the Project model's soft-delete scope.
+     * Walk the users attached to an active project, chunk by chunk, and mail
+     * each one their summary. Only the projects that actually saw activity are
+     * loaded per user, and trashed projects drop out on their own because both
+     * relations go through the Project model's soft-delete scope.
      *
      * @param  array<int, int>  $activeProjectIds
      * @param  array<string, array<int, float>>  $metrics
-     * @return array<int, array{new_tickets:int, status_changes:int, comments:int, hours_logged:float}>
      */
-    private function summariesByUser(array $activeProjectIds, array $metrics): array
+    private function notifyRecipients(array $activeProjectIds, array $metrics, Carbon $date): int
     {
-        if ($activeProjectIds === []) {
-            return [];
-        }
+        $onlyActive = fn ($query) => $query->whereIn('projects.id', $activeProjectIds);
 
-        $totals = [];
+        $sent = 0;
 
-        Project::query()
-            ->whereIn('id', $activeProjectIds)
-            ->with('users:id')
-            ->select(['id', 'owner_id'])
-            ->chunkById(200, function ($projects) use (&$totals, $metrics) {
-                foreach ($projects as $project) {
-                    $recipients = $project->users->pluck('id')->all();
+        User::query()
+            ->where(fn (Builder $query) => $query
+                ->whereHas('projectsOwning', $onlyActive)
+                ->orWhereHas('projectsAffected', $onlyActive))
+            ->with([
+                // owner_id is what hasMany matches the eager load on.
+                'projectsOwning' => fn ($query) => $onlyActive($query)->select(['projects.id', 'projects.owner_id']),
+                'projectsAffected' => fn ($query) => $onlyActive($query)->select('projects.id'),
+            ])
+            ->chunkById(self::CHUNK_SIZE, function ($users) use ($metrics, $date, &$sent) {
+                foreach ($users as $user) {
+                    $projectIds = $user->projectsOwning->pluck('id')
+                        ->merge($user->projectsAffected->pluck('id'))
+                        ->unique();
 
-                    if ($project->owner_id) {
-                        $recipients[] = $project->owner_id;
+                    $summary = $this->summaryFor($projectIds, $metrics);
+
+                    // Skip users with nothing to report - no empty emails.
+                    if ($this->isEmpty($summary)) {
+                        continue;
                     }
 
-                    foreach (array_unique($recipients) as $userId) {
-                        $totals[$userId] ??= [
-                            'new_tickets' => 0,
-                            'status_changes' => 0,
-                            'comments' => 0,
-                            'hours_logged' => 0.0,
-                        ];
-
-                        $totals[$userId]['new_tickets'] += (int) ($metrics['new_tickets'][$project->id] ?? 0);
-                        $totals[$userId]['status_changes'] += (int) ($metrics['status_changes'][$project->id] ?? 0);
-                        $totals[$userId]['comments'] += (int) ($metrics['comments'][$project->id] ?? 0);
-                        $totals[$userId]['hours_logged'] += (float) ($metrics['hours_logged'][$project->id] ?? 0);
-                    }
+                    $user->notify(new DailySummary($date, $summary));
+                    $sent++;
                 }
             });
 
-        return $totals;
+        return $sent;
+    }
+
+    /**
+     * @param  \Illuminate\Support\Collection<int, int>  $projectIds
+     * @param  array<string, array<int, float>>  $metrics
+     * @return array{new_tickets:int, status_changes:int, comments:int, hours_logged:float}
+     */
+    private function summaryFor(Collection $projectIds, array $metrics): array
+    {
+        $summary = [
+            'new_tickets' => 0,
+            'status_changes' => 0,
+            'comments' => 0,
+            'hours_logged' => 0.0,
+        ];
+
+        foreach ($projectIds as $projectId) {
+            $summary['new_tickets'] += (int) ($metrics['new_tickets'][$projectId] ?? 0);
+            $summary['status_changes'] += (int) ($metrics['status_changes'][$projectId] ?? 0);
+            $summary['comments'] += (int) ($metrics['comments'][$projectId] ?? 0);
+            $summary['hours_logged'] += (float) ($metrics['hours_logged'][$projectId] ?? 0);
+        }
+
+        return $summary;
     }
 
     private function isEmpty(array $summary): bool

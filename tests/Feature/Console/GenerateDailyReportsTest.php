@@ -126,6 +126,44 @@ class GenerateDailyReportsTest extends TestCase
         Notification::assertNotSentTo($owner, DailySummary::class);
     }
 
+    public function test_it_counts_a_project_once_for_an_owner_who_is_also_a_member(): void
+    {
+        $owner = User::factory()->create();
+        $project = Project::factory()->create(['owner_id' => $owner->id]);
+        $project->users()->attach($owner->id, ['role' => 'employee']);
+        Ticket::factory()->count(2)->create(['project_id' => $project->id]);
+
+        $this->artisan('reports:daily', ['--date' => now()->toDateString()])
+            ->assertSuccessful();
+
+        Notification::assertSentTo($owner, DailySummary::class, function (DailySummary $n) {
+            return $n->summary['new_tickets'] === 2; // not 4
+        });
+    }
+
+    /**
+     * Recipients are streamed in chunks of 200 so peak memory stays flat. That
+     * only holds if a user's totals are complete within their own chunk, so
+     * cross a chunk boundary and check every recipient still gets the summary.
+     */
+    public function test_it_reports_correctly_across_a_chunk_boundary(): void
+    {
+        $members = User::factory()->count(250)->create();
+        $project = Project::factory()->create();
+        $project->users()->attach($members->pluck('id'), ['role' => 'employee']);
+        Ticket::factory()->create(['project_id' => $project->id]);
+
+        $this->artisan('reports:daily', ['--date' => now()->toDateString()])
+            ->assertSuccessful();
+
+        // The project owner is a recipient too, on top of the 250 members.
+        Notification::assertSentTimes(DailySummary::class, 251);
+
+        Notification::assertSentTo($members->last(), DailySummary::class, function (DailySummary $n) {
+            return $n->summary['new_tickets'] === 1;
+        });
+    }
+
     /**
      * The command used to run four aggregate queries per user, so a 10k-user
      * instance meant 40k queries every morning. The aggregates now run once per
