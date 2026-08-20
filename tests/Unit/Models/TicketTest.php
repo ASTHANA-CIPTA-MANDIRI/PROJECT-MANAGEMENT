@@ -208,6 +208,32 @@ class TicketTest extends TestCase
         $this->assertTrue($ticket->priority->is($priority));
     }
 
+    public function test_it_belongs_to_a_sprint(): void
+    {
+        $project = Project::factory()->create();
+        $sprint = Sprint::factory()->create(['project_id' => $project->id]);
+        $ticket = Ticket::factory()->create([
+            'project_id' => $project->id,
+            'sprint_id' => $sprint->id,
+        ]);
+
+        $this->assertTrue($ticket->sprint->is($sprint));
+    }
+
+    /**
+     * `sprints()` used to be a byte-for-byte copy of `sprint()`. Two names for
+     * one belongsTo means two separate relation caches for the same row, so a
+     * reader could get a stale sprint depending on which name it happened to
+     * use. Only the singular form exists now.
+     */
+    public function test_the_sprint_relation_is_not_duplicated_under_a_plural_name(): void
+    {
+        $this->assertFalse(
+            method_exists(Ticket::class, 'sprints'),
+            'Ticket must expose exactly one sprint relation'
+        );
+    }
+
     public function test_it_has_many_comments(): void
     {
         $ticket = Ticket::factory()->create();
