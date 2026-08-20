@@ -261,11 +261,6 @@ parameters:
 			path: app/Http/Controllers/Auth/SocialiteLoginController.php
 
 		-
-			message: "#^Access to an undefined property App\\\\Models\\\\Ticket\\:\\:\\$completudePercentage\\.$#"
-			count: 1
-			path: app/Http/Controllers/RoadMap/DataController.php
-
-		-
 			message: "#^Access to an undefined property App\\\\Http\\\\Livewire\\\\Profile\\:\\:\\$updateProfileForm\\.$#"
 			count: 2
 			path: app/Http/Livewire/Profile.php
@@ -367,7 +362,7 @@ parameters:
 
 		-
 			message: "#^Access to an undefined property App\\\\Models\\\\Ticket\\:\\:\\$estimationInSeconds\\.$#"
-			count: 1
+			count: 2
 			path: app/Models/Ticket.php
 
 		-
