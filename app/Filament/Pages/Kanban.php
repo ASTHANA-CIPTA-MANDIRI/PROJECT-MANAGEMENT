@@ -32,13 +32,7 @@ class Kanban extends AuthorizedPage implements HasForms
 
         // Checked before the board-type redirect: sending a stranger over to
         // the Scrum board would only move the same 403 one request further on.
-        if (
-            $this->project->owner_id != auth()->user()->id
-            &&
-            ! $this->project->users()->whereKey(auth()->user()->id)->exists()
-        ) {
-            abort(403);
-        }
+        abort_unless($this->project->isAccessibleBy(auth()->user()), 403);
 
         if ($this->project->type === 'scrum') {
             // Returned, not just called: without it mount() carried on and

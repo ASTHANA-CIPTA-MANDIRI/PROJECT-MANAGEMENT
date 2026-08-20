@@ -27,16 +27,7 @@ class TicketPolicy
      */
     public function view(User $user, Ticket $ticket)
     {
-        return $user->can('View ticket')
-            && (
-                $ticket->owner_id === $user->id
-                ||
-                $ticket->responsible_id === $user->id
-                ||
-                $ticket->project->users()->where('users.id', $user->id)->count()
-                ||
-                $ticket->project->owner_id === $user->id
-            );
+        return $user->can('View ticket') && $this->isInvolved($user, $ticket);
     }
 
     /**
@@ -56,16 +47,7 @@ class TicketPolicy
      */
     public function update(User $user, Ticket $ticket)
     {
-        return $user->can('Update ticket')
-            && (
-                $ticket->owner_id === $user->id
-                ||
-                $ticket->responsible_id === $user->id
-                ||
-                $ticket->project->users()->where('users.id', $user->id)->count()
-                ||
-                $ticket->project->owner_id === $user->id
-            );
+        return $user->can('Update ticket') && $this->isInvolved($user, $ticket);
     }
 
     /**
@@ -75,16 +57,7 @@ class TicketPolicy
      */
     public function delete(User $user, Ticket $ticket)
     {
-        return $user->can('Delete ticket')
-            && (
-                $ticket->owner_id === $user->id
-                ||
-                $ticket->responsible_id === $user->id
-                ||
-                $ticket->project->users()->where('users.id', $user->id)->count()
-                ||
-                $ticket->project->owner_id === $user->id
-            );
+        return $user->can('Delete ticket') && $this->isInvolved($user, $ticket);
     }
 
     /**
@@ -95,5 +68,18 @@ class TicketPolicy
     public function deleteAny(User $user)
     {
         return $user->can('Delete ticket');
+    }
+
+    /**
+     * The object-level half of every ticket ability: the user is the ticket's
+     * owner, the person responsible for it, or has access to the project it
+     * lives in. view/update/delete only ever differ in the permission they
+     * pair this with, so it lives in one place.
+     */
+    private function isInvolved(User $user, Ticket $ticket): bool
+    {
+        return $ticket->owner_id === $user->id
+            || $ticket->responsible_id === $user->id
+            || $ticket->project->isAccessibleBy($user);
     }
 }

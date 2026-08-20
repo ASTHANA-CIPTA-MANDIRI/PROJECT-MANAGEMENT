@@ -27,12 +27,7 @@ class ProjectPolicy
      */
     public function view(User $user, Project $project)
     {
-        return $user->can('View project')
-            && (
-                $project->owner_id === $user->id
-                ||
-                $project->users()->where('users.id', $user->id)->count()
-            );
+        return $user->can('View project') && $project->isAccessibleBy($user);
     }
 
     /**
@@ -52,14 +47,7 @@ class ProjectPolicy
      */
     public function update(User $user, Project $project)
     {
-        return $user->can('Update project')
-            && (
-                $project->owner_id === $user->id
-                ||
-                $project->users()->where('users.id', $user->id)
-                    ->where('role', config('system.projects.affectations.roles.can_manage'))
-                    ->count()
-            );
+        return $user->can('Update project') && $project->isManageableBy($user);
     }
 
     /**
@@ -69,14 +57,7 @@ class ProjectPolicy
      */
     public function delete(User $user, Project $project)
     {
-        return $user->can('Delete project')
-            && (
-                $project->owner_id === $user->id
-                ||
-                $project->users()->where('users.id', $user->id)
-                    ->where('role', config('system.projects.affectations.roles.can_manage'))
-                    ->count()
-            );
+        return $user->can('Delete project') && $project->isManageableBy($user);
     }
 
     /**

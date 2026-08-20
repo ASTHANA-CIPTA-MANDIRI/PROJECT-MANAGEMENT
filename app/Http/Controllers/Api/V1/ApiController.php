@@ -97,9 +97,10 @@ abstract class ApiController extends Controller
      */
     protected function assertProjectAccess(Project $project, User $user): void
     {
-        $hasAccess = $project->owner_id === $user->id
-            || $project->users()->where('users.id', $user->id)->exists();
-
-        abort_unless($hasAccess, 403, 'You do not have access to this project.');
+        abort_unless(
+            $project->isAccessibleBy($user),
+            403,
+            'You do not have access to this project.'
+        );
     }
 }

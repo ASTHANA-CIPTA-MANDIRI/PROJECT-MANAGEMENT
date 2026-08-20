@@ -71,6 +71,34 @@ class Project extends Model implements HasMedia
             ->orWhereHas('users', fn (Builder $query) => $query->where('users.id', $user->id)));
     }
 
+    /**
+     * Whether this user may reach the project's contents: its owner, or one of
+     * its members. The single-instance twin of the accessibleBy() scope above —
+     * the policies ask this question about a model they already hold, where a
+     * query scope would have nothing to filter.
+     *
+     * exists(), not count(): the answer is a yes/no, and count() makes the
+     * database tally rows nobody looks at.
+     */
+    public function isAccessibleBy(User $user): bool
+    {
+        return $this->owner_id === $user->id
+            || $this->users()->whereKey($user->id)->exists();
+    }
+
+    /**
+     * Whether this user may change the project itself, and everything planned
+     * under it: its owner, or a member holding the managing project role.
+     */
+    public function isManageableBy(User $user): bool
+    {
+        return $this->owner_id === $user->id
+            || $this->users()
+                ->whereKey($user->id)
+                ->wherePivot('role', config('system.projects.affectations.roles.can_manage'))
+                ->exists();
+    }
+
     public function tickets(): HasMany
     {
         return $this->hasMany(Ticket::class, 'project_id', 'id');

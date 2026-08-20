@@ -312,4 +312,60 @@ class ProjectTest extends TestCase
         $this->assertTrue($visibleProjectIds->contains($ownProject->id));
         $this->assertFalse($visibleProjectIds->contains($foreignProject->id));
     }
+
+    // ------------------------------------------ isAccessibleBy / isManageableBy
+
+    public function test_the_owner_can_access_and_manage_the_project(): void
+    {
+        $owner = User::factory()->create();
+        $project = Project::factory()->create(['owner_id' => $owner->id]);
+
+        $this->assertTrue($project->isAccessibleBy($owner));
+        $this->assertTrue($project->isManageableBy($owner));
+    }
+
+    public function test_a_stranger_can_neither_access_nor_manage_the_project(): void
+    {
+        $stranger = User::factory()->create();
+        $project = Project::factory()->create();
+
+        $this->assertFalse($project->isAccessibleBy($stranger));
+        $this->assertFalse($project->isManageableBy($stranger));
+    }
+
+    public function test_an_ordinary_member_can_access_but_not_manage_the_project(): void
+    {
+        $member = User::factory()->create();
+        $project = Project::factory()->create();
+        $project->users()->attach($member->id, ['role' => 'developer']);
+
+        $this->assertTrue($project->isAccessibleBy($member));
+        $this->assertFalse($project->isManageableBy($member));
+    }
+
+    public function test_a_member_holding_the_managing_role_can_manage_the_project(): void
+    {
+        $manager = User::factory()->create();
+        $project = Project::factory()->create();
+        $project->users()->attach($manager->id, [
+            'role' => config('system.projects.affectations.roles.can_manage'),
+        ]);
+
+        $this->assertTrue($project->isAccessibleBy($manager));
+        $this->assertTrue($project->isManageableBy($manager));
+    }
+
+    /**
+     * The membership half must be answered by the database, not by loading
+     * every member of the project into memory to count them.
+     */
+    public function test_the_access_check_does_not_load_the_member_collection(): void
+    {
+        $member = User::factory()->create();
+        $project = Project::factory()->create();
+        $project->users()->attach($member->id, ['role' => 'developer']);
+
+        $this->assertTrue($project->isAccessibleBy($member));
+        $this->assertFalse($project->relationLoaded('users'));
+    }
 }
