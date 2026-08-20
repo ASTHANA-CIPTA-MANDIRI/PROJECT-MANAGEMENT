@@ -29,17 +29,57 @@ jobs:
           key: ${{ secrets.SSH_KEY }}
           port: ${{ secrets.SSH_PORT || 22 }}
           # DEPLOY_PATH is the app root on the server. See docs/cicd.md.
+          #
+          # Mirrors the production script: the release steps run in a subshell
+          # so a failure part-way through restores the previous commit, and the
+          # EXIT trap lifts maintenance mode whatever happens. Staging takes no
+          # pre-deploy DB snapshot, so the database is never touched on the way
+          # back — see docs/cicd.md.
           script: |
             set -e
-            cd ${{ secrets.DEPLOY_PATH }}
+            cd "${{ secrets.DEPLOY_PATH }}"
+            PREVIOUS_RELEASE="$(git rev-parse HEAD)"
+
+            trap 'php artisan up || true' EXIT
+
             php artisan down --retry=15 || true
-            git fetch --all --prune
-            git reset --hard origin/main
-            composer install --no-dev --optimize-autoloader --no-interaction
-            npm ci && npm run build
-            php artisan migrate --force
-            php artisan config:cache
-            php artisan route:cache
-            php artisan view:cache
-            php artisan queue:restart
-            php artisan up
+
+            set +e
+            (
+              set -e
+              git fetch --all --prune
+              git reset --hard origin/main
+              composer install --no-dev --optimize-autoloader --no-interaction
+              npm ci
+              npm run build
+              php artisan migrate --force
+              php artisan config:cache
+              php artisan route:cache
+              php artisan view:cache
+              php artisan queue:restart
+            )
+            RELEASE_STATUS=$?
+
+            if [ "$RELEASE_STATUS" -eq 0 ]; then
+              echo "Staging berhasil diperbarui."
+              exit 0
+            fi
+
+            echo "Deploy staging gagal (exit $RELEASE_STATUS) — mengembalikan kode ke $PREVIOUS_RELEASE."
+            (
+              set -e
+              git reset --hard "$PREVIOUS_RELEASE"
+              composer install --no-dev --optimize-autoloader --no-interaction
+              npm ci
+              npm run build
+              php artisan config:cache
+              php artisan route:cache
+              php artisan view:cache
+              php artisan queue:restart
+            )
+            RESTORE_STATUS=$?
+
+            if [ "$RESTORE_STATUS" -ne 0 ]; then
+              echo "::error::Pengembalian otomatis juga gagal (exit $RESTORE_STATUS). Server perlu ditangani manual."
+            fi
+            exit 1

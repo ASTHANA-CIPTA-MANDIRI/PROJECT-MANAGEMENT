@@ -38,6 +38,23 @@ cache config/routes/views → `queue:restart` → `artisan up`. The production
 deploy also records the current release (`storage/app/PREVIOUS_RELEASE`) and
 takes a **pre-deploy DB snapshot** for rollback.
 
+### Failing safely
+
+All three SSH workflows (staging deploy, production deploy, rollback) wrap their
+release steps in a subshell with `trap 'php artisan up' EXIT` around them. Under
+a plain `set -e` a failing `composer install`, `npm run build` or
+`migrate --force` aborted the script before the final `artisan up`, leaving the
+site stuck on the maintenance page until someone SSHed in.
+
+The two deploys also **restore the previous commit** when a step fails
+(reinstall dependencies, rebuild assets, re-cache) and then exit non-zero so the
+run shows up red. The rollback workflow is itself the fallback, so it only lifts
+maintenance mode and reports loudly.
+
+The scripts run under the deploy user's login shell, which may be `dash` — keep
+them POSIX, with no `set -o pipefail` or other bashisms. `DeployWorkflowTest`
+syntax-checks each one and rejects bashisms.
+
 ### Production: CI gate and automatic recovery
 
 A `v*` tag triggers the production workflow directly, and CI does not run on
@@ -48,18 +65,14 @@ a red or never-run suite never reaches the server. For an emergency, run the
 workflow manually with **skip_ci_check** ticked; a pushed tag can never bypass
 the gate.
 
-The release steps run inside a subshell, with `trap 'php artisan up' EXIT`
-around them. If any step fails (a broken build, a migration that blows up) the
-workflow:
+When a production release fails it checks the code back out at
+`PREVIOUS_RELEASE` (see *Failing safely* above), but the **database is
+deliberately left alone**: restoring it is destructive, so if migrations ran
+partially, follow up with the rollback workflow below and `restore_db` ticked.
 
-1. checks the code back out at `PREVIOUS_RELEASE`, reinstalls dependencies,
-   rebuilds assets and re-caches,
-2. lifts maintenance mode either way — even if that restore itself fails,
-3. and still exits non-zero, so the run shows up red.
-
-The **database is deliberately left alone**: restoring it is destructive, so if
-migrations ran partially, follow up with the rollback workflow below and
-`restore_db` ticked.
+Staging is **not** gated on CI — finding out that `main` is broken is what
+staging is for. It still restores the previous commit on a failed deploy, but it
+takes no pre-deploy snapshot, so its database is never rolled back.
 
 ### Required secrets (per environment)
 
@@ -107,7 +120,9 @@ Manual workflow (*Actions → Rollback (production) → Run workflow*) with inpu
   via [`scripts/db-restore.sh`](../scripts/db-restore.sh).
 
 It re-checks out the ref, reinstalls dependencies, rebuilds assets, optionally
-restores the DB, re-caches and brings the app back up.
+restores the DB, re-caches and brings the app back up. A blank **ref** with no
+recorded `PREVIOUS_RELEASE` fails *before* the site is taken down, so a mistyped
+run cannot cause the outage it was meant to fix.
 
 ### Manual rollback (from the server)
 

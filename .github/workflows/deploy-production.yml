@@ -91,8 +91,8 @@ jobs:
           # site: the code is put back on the previous release and the EXIT trap
           # always lifts maintenance mode.
           script: |
-            set -eo pipefail
-            cd ${{ secrets.DEPLOY_PATH }}
+            set -e
+            cd "${{ secrets.DEPLOY_PATH }}"
             PREVIOUS_RELEASE="$(git rev-parse HEAD)"
             echo "$PREVIOUS_RELEASE" > storage/app/PREVIOUS_RELEASE
 
