@@ -4,6 +4,7 @@ namespace Tests\Unit\Helpers;
 
 use App\Helpers\KanbanScrumHelper;
 use App\Models\Project;
+use App\Models\Sprint;
 use App\Models\Ticket;
 use App\Models\TicketRelation;
 use App\Models\TicketStatus;
@@ -93,5 +94,70 @@ class KanbanScrumHelperTest extends TestCase
         $this->assertSame(2, $result[$statuses[0]->id]['size']);
         $this->assertSame(1, $result[$statuses[1]->id]['size']);
         $this->assertSame(0, $result[$statuses[2]->id]['size']);
+    }
+
+    public function test_scrum_board_without_a_running_sprint_is_empty_instead_of_failing(): void
+    {
+        $user = User::factory()->create();
+        $this->actingAs($user);
+
+        $project = Project::factory()->scrum()->create(['owner_id' => $user->id]);
+        // Backlog tickets: no sprint at all.
+        Ticket::factory()->count(2)->create([
+            'project_id' => $project->id,
+            'owner_id' => $user->id,
+            'sprint_id' => null,
+        ]);
+        // A ticket left over from a sprint that has already been closed.
+        $closedSprint = Sprint::factory()->ended()->create(['project_id' => $project->id]);
+        Ticket::factory()->create([
+            'project_id' => $project->id,
+            'owner_id' => $user->id,
+            'sprint_id' => $closedSprint->id,
+        ]);
+
+        $helper = $this->helperFor($project);
+
+        // The refresh action calls getRecords() directly, so it has to hold up
+        // on its own rather than rely on the template's @if guard.
+        $this->assertCount(0, $helper->getRecords());
+    }
+
+    public function test_scrum_board_shows_only_the_running_sprint(): void
+    {
+        $user = User::factory()->create();
+        $this->actingAs($user);
+
+        $project = Project::factory()->scrum()->create(['owner_id' => $user->id]);
+        $sprint = Sprint::factory()->started()->create(['project_id' => $project->id]);
+        $inSprint = Ticket::factory()->create([
+            'project_id' => $project->id,
+            'owner_id' => $user->id,
+            'sprint_id' => $sprint->id,
+        ]);
+        Ticket::factory()->create([
+            'project_id' => $project->id,
+            'owner_id' => $user->id,
+            'sprint_id' => null,
+        ]);
+
+        $records = $this->helperFor($project)->getRecords();
+
+        $this->assertCount(1, $records);
+        $this->assertSame($inSprint->id, $records->first()['id']);
+    }
+
+    /**
+     * A bare object carrying the trait, standing in for the Kanban/Scrum page.
+     */
+    private function helperFor(Project $project): object
+    {
+        $helper = new class
+        {
+            use KanbanScrumHelper;
+        };
+        $helper->project = $project;
+
+        return $helper;
     }
 }

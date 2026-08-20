@@ -116,16 +116,34 @@ trait KanbanScrumHelper
      * current sprint. Renumbering after a drag works on this set, so cards
      * hidden by a filter keep their place instead of being shuffled away.
      *
+     * Without a project - or, on a scrum board, without a running sprint -
+     * there is no board, so the query matches nothing. Left to the query
+     * builder, where('sprint_id', null) becomes "sprint_id is null" and a
+     * project between sprints would show its whole backlog instead of an
+     * empty board, and let those tickets be dragged (authorizedBoardTicket()
+     * scopes to this same query).
+     *
      * @return Builder<Ticket>
      */
     protected function boardTicketsQuery(): Builder
     {
-        return Ticket::query()
-            ->where('project_id', $this->project->id)
-            ->when(
-                $this->project->type === 'scrum',
-                fn (Builder $query) => $query->where('sprint_id', $this->project->currentSprint?->id)
-            );
+        $query = Ticket::query();
+
+        if (! $this->project) {
+            return $query->whereRaw('1 = 0');
+        }
+
+        $query->where('project_id', $this->project->id);
+
+        if ($this->project->type === 'scrum') {
+            $sprintId = $this->project->currentSprint?->id;
+
+            return $sprintId === null
+                ? $query->whereRaw('1 = 0')
+                : $query->where('sprint_id', $sprintId);
+        }
+
+        return $query;
     }
 
     /**

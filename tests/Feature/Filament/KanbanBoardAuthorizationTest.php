@@ -139,6 +139,32 @@ class KanbanBoardAuthorizationTest extends TestCase
         $this->assertSame($originalStatus, $backlogTicket->fresh()->status_id);
     }
 
+    public function test_nothing_can_be_moved_on_a_scrum_board_between_sprints(): void
+    {
+        // No sprint running: the board has no cards at all, so not even a
+        // backlog ticket may be dragged. This listener and the refresh action
+        // are reachable whatever the template chooses to show.
+        $project = Project::factory()->scrum()->create(['owner_id' => $this->user->id]);
+        Sprint::factory()->ended()->create(['project_id' => $project->id]);
+        $ticket = Ticket::factory()->create([
+            'project_id' => $project->id,
+            'owner_id' => $this->user->id,
+            'sprint_id' => null,
+        ]);
+        $originalStatus = $ticket->status_id;
+        $target = TicketStatus::factory()->create();
+
+        $this->assertNull($project->fresh()->currentSprint);
+
+        Livewire::test(Scrum::class, ['project' => $project])
+            ->call('recordUpdated', $ticket->id, 0, $target->id)
+            ->assertSuccessful()
+            ->call('filter')
+            ->assertSuccessful();
+
+        $this->assertSame($originalStatus, $ticket->fresh()->status_id);
+    }
+
     public function test_the_project_owner_can_still_move_a_ticket_on_their_own_board(): void
     {
         $project = Project::factory()->create(['owner_id' => $this->user->id]);
