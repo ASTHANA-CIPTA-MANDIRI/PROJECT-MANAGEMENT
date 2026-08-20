@@ -40,4 +40,23 @@ return [
         ? '*'
         : array_values(array_filter(array_map('trim', explode(',', $trustedProxies)))),
 
+    /*
+    |--------------------------------------------------------------------------
+    | Trusted Hosts
+    |--------------------------------------------------------------------------
+    |
+    | Extra Host headers to accept, on top of APP_URL and its subdomains, which
+    | are always trusted. Anything else is rejected before it can poison
+    | generated URLs (password resets, signed links, cache keys).
+    |
+    | Only needed when the app answers to more than one name, e.g.
+    | TRUSTED_HOSTS="rencanakan.id,cdn.rencanakan.id"
+    |
+    */
+
+    'trusted_hosts' => array_values(array_filter(array_map(
+        'trim',
+        explode(',', (string) env('TRUSTED_HOSTS', ''))
+    ))),
+
 ];
