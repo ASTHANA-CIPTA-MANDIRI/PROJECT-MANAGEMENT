@@ -40,12 +40,22 @@ class Sprint extends Model
         return $this->belongsTo(Epic::class, 'epic_id', 'id');
     }
 
+    /**
+     * Whole days left in a running sprint, counting today as one of them:
+     * 1 on the closing day, 0 the day after, negative once overdue. Null when
+     * the sprint has not started or has already been closed.
+     *
+     * Counted from the start of today rather than from `now()`, so the number
+     * does not tick over halfway through the day, and signed — diffInDays()
+     * is absolute by default, which used to make an overdue sprint report a
+     * growing number of days *remaining*.
+     */
     public function remaining(): Attribute
     {
         return new Attribute(
             get: function () {
                 if ($this->starts_at && $this->ends_at && $this->started_at && ! $this->ended_at) {
-                    return $this->ends_at->diffInDays(now()) + 1;
+                    return now()->startOfDay()->diffInDays($this->ends_at, false) + 1;
                 }
 
                 return null;

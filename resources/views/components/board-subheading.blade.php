@@ -6,8 +6,10 @@
         <span class="text-xs text-gray-400">
             {{ __('Started at:') }} {{ $sprint->started_at->format(__('Y-m-d')) }} -
             {{ __('Ends at:') }} {{ $sprint->ends_at->format(__('Y-m-d')) }}
-            @if ($sprint->remaining)
+            @if ($sprint->remaining > 0)
                 - {{ __('Remaining:') }} {{ $sprint->remaining }} {{ __('days') }}
+            @elseif ($sprint->remaining !== null)
+                - {{ __('Overdue') }}
             @endif
         </span>
     </div>

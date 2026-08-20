@@ -105,8 +105,61 @@ class SprintAndEpicTest extends TestCase
             'ends_at' => now()->addDays(3),
         ]);
 
-        $this->assertNotNull($sprint->remaining);
-        $this->assertGreaterThan(0, $sprint->remaining);
+        // Today plus the three days up to and including the end date.
+        $this->assertSame(4, $sprint->remaining);
+    }
+
+    public function test_remaining_is_one_on_the_closing_day(): void
+    {
+        $sprint = Sprint::factory()->started()->create([
+            'starts_at' => now()->subDays(5),
+            'ends_at' => now(),
+        ]);
+
+        $this->assertSame(1, $sprint->remaining);
+    }
+
+    /**
+     * diffInDays() is absolute by default, so an overdue sprint used to report
+     * a *growing* number of days remaining — three days late read as "4 days
+     * left" on the Scrum board.
+     */
+    public function test_remaining_goes_negative_once_the_sprint_is_overdue(): void
+    {
+        $sprint = Sprint::factory()->started()->create([
+            'starts_at' => now()->subDays(10),
+            'ends_at' => now()->subDays(3),
+        ]);
+
+        $this->assertSame(-2, $sprint->remaining);
+    }
+
+    public function test_remaining_is_zero_the_day_after_the_end_date(): void
+    {
+        $sprint = Sprint::factory()->started()->create([
+            'starts_at' => now()->subDays(10),
+            'ends_at' => now()->subDay(),
+        ]);
+
+        $this->assertSame(0, $sprint->remaining);
+    }
+
+    /**
+     * Counting from the start of today keeps the number stable all day long,
+     * instead of dropping by one somewhere in the afternoon.
+     */
+    public function test_remaining_does_not_depend_on_the_time_of_day(): void
+    {
+        $this->travelTo(now()->startOfDay()->addHours(23));
+
+        $sprint = Sprint::factory()->started()->create([
+            'starts_at' => now()->subDay(),
+            'ends_at' => now()->addDays(2),
+        ]);
+
+        $this->assertSame(3, $sprint->remaining);
+
+        $this->travelBack();
     }
 
     public function test_a_sprint_soft_deletes(): void

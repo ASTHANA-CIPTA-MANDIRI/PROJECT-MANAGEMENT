@@ -68,7 +68,10 @@ class SprintsRelationManager extends RelationManager
 
                 Tables\Columns\TextColumn::make('remaining')
                     ->label(__('Remaining'))
-                    ->suffix(fn ($record) => $record->remaining ? (' '.__('days')) : '')
+                    // Negative means the sprint ran past its end date; say so
+                    // instead of printing "-3 days" as if it were a countdown.
+                    ->formatStateUsing(fn ($state) => $state !== null && $state <= 0 ? __('Overdue') : $state)
+                    ->suffix(fn ($record) => $record->remaining > 0 ? (' '.__('days')) : '')
                     ->sortable()
                     ->searchable(),
 
