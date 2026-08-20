@@ -29,15 +29,23 @@ class Kanban extends AuthorizedPage implements HasForms
     public function mount(Project $project)
     {
         $this->project = $project;
-        if ($this->project->type === 'scrum') {
-            $this->redirect(route('filament.pages.scrum/{project}', ['project' => $project]));
-        } elseif (
+
+        // Checked before the board-type redirect: sending a stranger over to
+        // the Scrum board would only move the same 403 one request further on.
+        if (
             $this->project->owner_id != auth()->user()->id
             &&
-            ! $this->project->users->where('id', auth()->user()->id)->count()
+            ! $this->project->users()->whereKey(auth()->user()->id)->exists()
         ) {
             abort(403);
         }
+
+        if ($this->project->type === 'scrum') {
+            // Returned, not just called: without it mount() carried on and
+            // filled the form of a board this project does not even use.
+            return $this->redirect(route('filament.pages.scrum/{project}', ['project' => $project]));
+        }
+
         $this->form->fill();
     }
 
