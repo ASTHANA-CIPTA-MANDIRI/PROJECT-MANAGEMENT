@@ -96,6 +96,48 @@ class RoadMapDataTest extends TestCase
         $this->actingAs($this->user)->get($this->url($project))->assertSuccessful();
     }
 
+    /**
+     * A ticket with logged hours but no estimation used to divide by a single
+     * second, producing a percentage so large the Gantt clamped it to 100 —
+     * every unestimated ticket looked finished on the road map.
+     */
+    public function test_an_unestimated_ticket_is_not_reported_as_complete(): void
+    {
+        $project = Project::factory()->create(['owner_id' => $this->user->id]);
+        $epic = Epic::factory()->create(['project_id' => $project->id]);
+        $ticket = Ticket::factory()->create([
+            'project_id' => $project->id,
+            'epic_id' => $epic->id,
+            'owner_id' => $this->user->id,
+            'estimation' => null,
+        ]);
+        TicketHour::factory()->hours(200)->create(['ticket_id' => $ticket->id]);
+
+        $rows = $this->actingAs($this->user)->get($this->url($project))->json();
+        $row = collect($rows)->firstWhere('pName', $ticket->name);
+
+        $this->assertNotNull($row, 'the ticket must appear on the road map');
+        $this->assertSame(0, $row['pComp']);
+    }
+
+    public function test_an_estimated_ticket_reports_its_real_progress(): void
+    {
+        $project = Project::factory()->create(['owner_id' => $this->user->id]);
+        $epic = Epic::factory()->create(['project_id' => $project->id]);
+        $ticket = Ticket::factory()->create([
+            'project_id' => $project->id,
+            'epic_id' => $epic->id,
+            'owner_id' => $this->user->id,
+            'estimation' => 4,
+        ]);
+        TicketHour::factory()->hours(1)->create(['ticket_id' => $ticket->id]);
+
+        $rows = $this->actingAs($this->user)->get($this->url($project))->json();
+        $row = collect($rows)->firstWhere('pName', $ticket->name);
+
+        $this->assertSame(25, $row['pComp']);
+    }
+
     public function test_road_map_data_handles_a_project_without_epics(): void
     {
         $project = Project::factory()->create(['owner_id' => $this->user->id]);

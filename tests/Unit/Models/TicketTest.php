@@ -414,6 +414,28 @@ class TicketTest extends TestCase
         $this->assertEqualsWithDelta(0.0, $ticket->estimationProgress, 0.001);
     }
 
+    /**
+     * Without an estimation the divisor used to default to 1 *second*, turning
+     * 200 logged hours into 72,000,000% — a bar the Roadmap then clamped to a
+     * fully-complete 100%.
+     */
+    public function test_estimation_progress_is_null_without_an_estimation(): void
+    {
+        $ticket = Ticket::factory()->create(['estimation' => null]);
+        TicketHour::factory()->hours(200)->create(['ticket_id' => $ticket->id]);
+
+        $this->assertNull($ticket->estimationProgress);
+        $this->assertNull($ticket->completudePercentage);
+    }
+
+    public function test_estimation_progress_is_null_when_the_estimation_is_zero(): void
+    {
+        $ticket = Ticket::factory()->create(['estimation' => 0]);
+        TicketHour::factory()->hours(3)->create(['ticket_id' => $ticket->id]);
+
+        $this->assertNull($ticket->estimationProgress);
+    }
+
     public function test_completude_percentage_mirrors_estimation_progress(): void
     {
         $ticket = Ticket::factory()->estimated(4)->create();

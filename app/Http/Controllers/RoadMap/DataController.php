@@ -92,7 +92,8 @@ class DataController extends Controller
      */
     private function ticketObj(?Epic $epic, Ticket $ticket)
     {
-        $pComp = round($ticket->completudePercentage, 0);
+        // No estimation means no measurable progress, not a finished bar.
+        $pComp = round($ticket->completudePercentage ?? 0, 0);
 
         return [
             'pID' => ($epic?->id ?? 'N').$ticket->id,

@@ -232,11 +232,24 @@ class Ticket extends Model implements HasMedia
         );
     }
 
+    /**
+     * Share of the estimation already spent, in percent — null when the ticket
+     * carries no estimation, because there is nothing to be a share *of*.
+     *
+     * The null case used to fall back to a divisor of 1 *second*, so a ticket
+     * with 200 logged hours and no estimation reported 72,000,000% progress.
+     */
     public function estimationProgress(): Attribute
     {
         return new Attribute(
             get: function () {
-                return (($this->totalLoggedSeconds ?? 0) / ($this->estimationInSeconds ?? 1)) * 100;
+                $estimation = $this->estimationInSeconds;
+
+                if (! $estimation) {
+                    return null;
+                }
+
+                return (($this->totalLoggedSeconds ?? 0) / $estimation) * 100;
             }
         );
     }
