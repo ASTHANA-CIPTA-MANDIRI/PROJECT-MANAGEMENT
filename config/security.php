@@ -1,5 +1,15 @@
 <?php
 
+// A variable that is present but blank in .env ("CONTENT_SECURITY_POLICY=")
+// reaches env() as an empty string, not null, so it would win over the default
+// passed to env() and then — being falsy — make the middleware drop the header
+// altogether. Blank means "not configured", so resolve these by hand instead.
+$csp = trim((string) env('CONTENT_SECURITY_POLICY', ''));
+
+// Not cast to string first: env() already turns "false" into a boolean, and
+// (string) false is "" — which would be indistinguishable from a blank value.
+$cspEnabled = env('CSP_ENABLED', true);
+
 return [
 
     /*
@@ -13,13 +23,14 @@ return [
     | Scripts and styles are served from this origin only — everything the panel
     | needs is compiled into the Vite bundle. Tighten it as you can; set
     | CSP_ENABLED=false to drop the header entirely (e.g. while debugging a
-    | blocked resource).
+    | blocked resource). Leaving CONTENT_SECURITY_POLICY blank (or omitting it)
+    | keeps the default below; only a non-empty value overrides it.
     |
     */
 
-    'csp_enabled' => (bool) env('CSP_ENABLED', true),
+    'csp_enabled' => $cspEnabled === '' ? true : filter_var($cspEnabled, FILTER_VALIDATE_BOOLEAN),
 
-    'csp' => env('CONTENT_SECURITY_POLICY', implode('; ', [
+    'csp' => $csp !== '' ? $csp : implode('; ', [
         "default-src 'self'",
         "base-uri 'self'",
         "form-action 'self'",
@@ -29,7 +40,7 @@ return [
         "script-src 'self' 'unsafe-inline' 'unsafe-eval'",
         "style-src 'self' 'unsafe-inline'",
         "connect-src 'self' https: wss:",
-    ])),
+    ]),
 
     /*
     |--------------------------------------------------------------------------
