@@ -71,9 +71,9 @@ class AnalyticsPageTest extends TestCase
         Livewire::test(Analytics::class)
             ->assertSet('projectId', $project->id)
             ->assertSuccessful()
-            ->assertSee('Team velocity')
-            ->assertSee('Sprint burn-down')
-            ->assertSee('Resource utilization');
+            ->assertSee(__('Team velocity'))
+            ->assertSee(__('Sprint burn-down'))
+            ->assertSee(__('Resource utilization'));
     }
 
     public function test_it_defaults_to_an_accessible_project(): void
@@ -270,6 +270,6 @@ class AnalyticsPageTest extends TestCase
 
         Livewire::test(Analytics::class)
             ->assertSuccessful()
-            ->assertSee('Not enough data'); // forecast fallback
+            ->assertSee(__('Not enough data')); // forecast fallback
     }
 }

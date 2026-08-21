@@ -197,7 +197,7 @@ class RegistrationWorkflowTest extends TestCase
 
         $html = strtolower(view('errors.403')->render());
 
-        $this->assertStringContainsString('awaiting approval', $html);
+        $this->assertStringContainsString(strtolower(__('Your account is awaiting approval')), $html);
     }
 
     public function test_a_user_with_a_role_sees_the_generic_forbidden_page(): void
@@ -208,7 +208,7 @@ class RegistrationWorkflowTest extends TestCase
 
         $html = strtolower(view('errors.403')->render());
 
-        $this->assertStringNotContainsString('awaiting approval', $html);
+        $this->assertStringNotContainsString(strtolower(__('Your account is awaiting approval')), $html);
         $this->assertStringContainsString('403', $html);
     }
 }
