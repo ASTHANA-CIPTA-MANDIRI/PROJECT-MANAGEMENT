@@ -332,4 +332,209 @@ class TicketApiTest extends TestCase
 
         $this->getJson("/api/v1/tickets/{$ticket->id}")->assertForbidden();
     }
+
+    // ------------------------------------------------------------- update
+
+    /**
+     * A ticket in a project the given user owns, plus a complete body for a
+     * PUT that replaces it.
+     *
+     * @return array{0: Ticket, 1: array<string, mixed>}
+     */
+    private function ticketWithPayload(User $user): array
+    {
+        $project = Project::factory()->create(['owner_id' => $user->id]);
+        $ticket = Ticket::factory()->create([
+            'project_id' => $project->id,
+            'owner_id' => $user->id,
+            'name' => 'Old name',
+        ]);
+
+        return [$ticket, [
+            'name' => $ticket->name,
+            'content' => $ticket->content,
+            'status_id' => $ticket->status_id,
+            'type_id' => $ticket->type_id,
+            'priority_id' => $ticket->priority_id,
+        ]];
+    }
+
+    public function test_updating_requires_authentication(): void
+    {
+        $ticket = Ticket::factory()->create();
+
+        $this->putJson("/api/v1/tickets/{$ticket->id}", ['name' => 'X'])->assertUnauthorized();
+    }
+
+    public function test_it_updates_a_ticket(): void
+    {
+        $user = $this->actingWith(['Update ticket']);
+        [$ticket, $payload] = $this->ticketWithPayload($user);
+
+        $this->putJson("/api/v1/tickets/{$ticket->id}", ['name' => 'New name'] + $payload)
+            ->assertOk()
+            ->assertJsonPath('data.id', $ticket->id)
+            ->assertJsonPath('data.name', 'New name');
+
+        $this->assertDatabaseHas('tickets', ['id' => $ticket->id, 'name' => 'New name']);
+    }
+
+    public function test_updating_requires_the_update_permission(): void
+    {
+        $user = $this->actingWith(['View ticket']); // wrong permission
+        [$ticket, $payload] = $this->ticketWithPayload($user);
+
+        $this->putJson("/api/v1/tickets/{$ticket->id}", ['name' => 'Nope'] + $payload)
+            ->assertForbidden();
+
+        $this->assertDatabaseMissing('tickets', ['id' => $ticket->id, 'name' => 'Nope']);
+    }
+
+    public function test_it_forbids_updating_a_ticket_of_an_inaccessible_project(): void
+    {
+        $this->actingWith(['Update ticket']);
+        $ticket = Ticket::factory()->create(); // someone else's project
+
+        $this->putJson("/api/v1/tickets/{$ticket->id}", ['name' => 'Nope'])->assertForbidden();
+    }
+
+    public function test_a_patch_changes_only_the_fields_it_carries(): void
+    {
+        $user = $this->actingWith(['Update ticket']);
+        [$ticket] = $this->ticketWithPayload($user);
+        $newStatus = TicketStatus::factory()->create();
+
+        $this->patchJson("/api/v1/tickets/{$ticket->id}", ['status_id' => $newStatus->id])
+            ->assertOk()
+            ->assertJsonPath('data.status_id', $newStatus->id)
+            ->assertJsonPath('data.name', 'Old name'); // untouched
+
+        $this->assertDatabaseHas('tickets', [
+            'id' => $ticket->id,
+            'status_id' => $newStatus->id,
+            'name' => 'Old name',
+        ]);
+
+        // Moving a ticket between statuses is journalled, whichever way it was
+        // moved — the board, the panel or the API.
+        $this->assertDatabaseHas('ticket_activities', [
+            'ticket_id' => $ticket->id,
+            'old_status_id' => $ticket->status_id,
+            'new_status_id' => $newStatus->id,
+        ]);
+    }
+
+    public function test_updating_cannot_move_a_ticket_to_another_project(): void
+    {
+        $user = $this->actingWith(['Update ticket']);
+        [$ticket, $payload] = $this->ticketWithPayload($user);
+        $other = Project::factory()->create(['owner_id' => $user->id]);
+
+        $this->patchJson("/api/v1/tickets/{$ticket->id}", ['project_id' => $other->id] + $payload)
+            ->assertOk()
+            ->assertJsonPath('data.project_id', $ticket->project_id);
+
+        $this->assertDatabaseHas('tickets', [
+            'id' => $ticket->id,
+            'project_id' => $ticket->project_id,
+        ]);
+    }
+
+    public function test_updating_keeps_the_owner_when_it_is_omitted(): void
+    {
+        $user = $this->actingWith(['Update ticket']);
+        $project = Project::factory()->create(['owner_id' => $user->id]);
+        $member = User::factory()->create();
+        $project->users()->attach($member->id, ['role' => 'employee']);
+        $ticket = Ticket::factory()->create([
+            'project_id' => $project->id,
+            'owner_id' => $member->id,
+        ]);
+
+        // A body without owner_id must not quietly reassign the ticket to
+        // whoever happens to be editing it.
+        $this->putJson("/api/v1/tickets/{$ticket->id}", [
+            'name' => 'Edited',
+            'content' => $ticket->content,
+            'status_id' => $ticket->status_id,
+            'type_id' => $ticket->type_id,
+            'priority_id' => $ticket->priority_id,
+        ])->assertOk()->assertJsonPath('data.owner_id', $member->id);
+
+        $this->assertDatabaseHas('tickets', ['id' => $ticket->id, 'owner_id' => $member->id]);
+    }
+
+    public function test_updating_rejects_a_sprint_from_another_project(): void
+    {
+        $user = $this->actingWith(['Update ticket']);
+        [$ticket, $payload] = $this->ticketWithPayload($user);
+        $foreignSprint = Sprint::factory()->create();
+
+        $this->putJson("/api/v1/tickets/{$ticket->id}", ['sprint_id' => $foreignSprint->id] + $payload)
+            ->assertStatus(422)
+            ->assertJsonValidationErrors(['sprint_id']);
+    }
+
+    public function test_updating_accepts_a_sprint_of_the_same_project_and_syncs_the_epic(): void
+    {
+        $user = $this->actingWith(['Update ticket']);
+        [$ticket, $payload] = $this->ticketWithPayload($user);
+        $sprint = Sprint::factory()->create(['project_id' => $ticket->project_id]);
+
+        $this->putJson("/api/v1/tickets/{$ticket->id}", ['sprint_id' => $sprint->id] + $payload)
+            ->assertOk()
+            ->assertJsonPath('data.sprint_id', $sprint->id)
+            ->assertJsonPath('data.epic_id', $sprint->fresh()->epic_id);
+    }
+
+    public function test_updating_rejects_a_responsible_who_is_not_on_the_project(): void
+    {
+        $user = $this->actingWith(['Update ticket']);
+        [$ticket, $payload] = $this->ticketWithPayload($user);
+        $outsider = User::factory()->create();
+
+        $this->putJson("/api/v1/tickets/{$ticket->id}", ['responsible_id' => $outsider->id] + $payload)
+            ->assertStatus(422)
+            ->assertJsonValidationErrors(['responsible_id']);
+    }
+
+    // ------------------------------------------------------------ destroy
+
+    public function test_it_deletes_a_ticket(): void
+    {
+        $user = $this->actingWith(['Delete ticket']);
+        $ticket = Ticket::factory()->create(['owner_id' => $user->id]);
+
+        $this->deleteJson("/api/v1/tickets/{$ticket->id}")->assertNoContent();
+
+        $this->assertSoftDeleted('tickets', ['id' => $ticket->id]);
+    }
+
+    public function test_deleting_requires_the_delete_permission(): void
+    {
+        $user = $this->actingWith(['Update ticket']); // wrong permission
+        $ticket = Ticket::factory()->create(['owner_id' => $user->id]);
+
+        $this->deleteJson("/api/v1/tickets/{$ticket->id}")->assertForbidden();
+
+        $this->assertDatabaseHas('tickets', ['id' => $ticket->id, 'deleted_at' => null]);
+    }
+
+    public function test_it_forbids_deleting_an_inaccessible_ticket(): void
+    {
+        $this->actingWith(['Delete ticket']);
+        $ticket = Ticket::factory()->create();
+
+        $this->deleteJson("/api/v1/tickets/{$ticket->id}")->assertForbidden();
+    }
+
+    public function test_a_deleted_ticket_is_gone_from_the_api(): void
+    {
+        $user = $this->actingWith(['Delete ticket', 'View ticket']);
+        $ticket = Ticket::factory()->create(['owner_id' => $user->id]);
+
+        $this->deleteJson("/api/v1/tickets/{$ticket->id}")->assertNoContent();
+
+        $this->getJson("/api/v1/tickets/{$ticket->id}")->assertNotFound();
+    }
 }

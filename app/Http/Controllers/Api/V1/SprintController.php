@@ -64,4 +64,35 @@ class SprintController extends ApiController
 
         return new SprintResource($sprint);
     }
+
+    /**
+     * PUT|PATCH /api/v1/sprints/{sprint}
+     *
+     * project_id stays the sprint's own (SprintRequest): its epic and its
+     * tickets live in that project. PUT replaces the sprint, PATCH changes
+     * only the fields it carries.
+     */
+    public function update(SprintRequest $request, Sprint $sprint)
+    {
+        $this->authorize('update', $sprint);
+
+        $sprint->update($request->validated());
+
+        return new SprintResource($sprint);
+    }
+
+    /**
+     * DELETE /api/v1/sprints/{sprint}
+     *
+     * Soft delete, matching the panel's delete action: the tickets planned in
+     * the sprint stay where they are.
+     */
+    public function destroy(Sprint $sprint)
+    {
+        $this->authorize('delete', $sprint);
+
+        $sprint->delete();
+
+        return response()->noContent();
+    }
 }

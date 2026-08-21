@@ -2,7 +2,9 @@
 
 namespace App\Http\Requests;
 
+use App\Http\Requests\Concerns\ValidatesPartialUpdates;
 use App\Models\Project;
+use App\Models\Ticket;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Validation\Rule;
 use Illuminate\Validation\Rules\Exists;
@@ -22,6 +24,8 @@ use Illuminate\Validation\Rules\Exists;
  */
 class TicketRequest extends FormRequest
 {
+    use ValidatesPartialUpdates;
+
     /**
      * Determine if the user is authorized to make this request.
      */
@@ -32,30 +36,58 @@ class TicketRequest extends FormRequest
             return false;
         }
 
-        return $this->isMethod('POST')
-            ? $user->can('Create ticket')
+        if ($this->isMethod('POST')) {
+            return $user->can('Create ticket');
+        }
+
+        // An update is judged against the ticket itself, here rather than in
+        // the controller alone: authorization runs before validation, so a
+        // caller with no business touching this ticket is turned away instead
+        // of being told, field by field, who is on the project.
+        return ($ticket = $this->routeTicket())
+            ? $user->can('update', $ticket)
             : $user->can('Update ticket');
     }
 
     /**
      * Fill in values the API derives from the route/session before validating:
-     * the parent project (nested route) and a default owner (current user).
+     * the parent project and a default owner.
+     *
+     * The project comes from the nested create route or from the ticket being
+     * updated, never from the body: moving a ticket to another project would
+     * leave its code, sprint and epic pointing at the project it left.
      */
     protected function prepareForValidation(): void
     {
         $data = [];
+        $ticket = $this->routeTicket();
 
         if ($project = $this->route('project')) {
             $data['project_id'] = is_object($project) ? $project->getKey() : $project;
+        } elseif ($ticket) {
+            $data['project_id'] = $ticket->project_id;
         }
 
-        if (! $this->filled('owner_id') && $this->user()) {
-            $data['owner_id'] = $this->user()->getKey();
+        // An update keeps the ticket's own owner unless the caller names a new
+        // one; only a create falls back to the caller.
+        if (! $this->filled('owner_id') && $owner = ($ticket?->owner_id ?? $this->user()?->getKey())) {
+            $data['owner_id'] = $owner;
         }
 
         if ($data) {
             $this->merge($data);
         }
+    }
+
+    /**
+     * The ticket being updated, when the request went through a route that
+     * binds one. Null on create and outside the HTTP lifecycle.
+     */
+    protected function routeTicket(): ?Ticket
+    {
+        $ticket = $this->route('ticket');
+
+        return $ticket instanceof Ticket ? $ticket : null;
     }
 
     /**
@@ -81,7 +113,7 @@ class TicketRequest extends FormRequest
     {
         $project = $this->project();
 
-        return [
+        return $this->whenPartial([
             'name' => ['required', 'string', 'max:255'],
             'content' => ['required', 'string'],
             'project_id' => ['required', Rule::exists('projects', 'id')->whereNull('deleted_at')],
@@ -93,7 +125,7 @@ class TicketRequest extends FormRequest
             'estimation' => ['nullable', 'numeric', 'min:0'],
             'epic_id' => ['nullable', $this->sameProjectRule('epics', $project)],
             'sprint_id' => ['nullable', $this->sameProjectRule('sprints', $project)],
-        ];
+        ]);
     }
 
     /**

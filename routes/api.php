@@ -35,23 +35,34 @@ Route::middleware('auth:sanctum')->group(function () {
         // Full-text search across projects, tickets and comments
         Route::get('search', SearchController::class);
 
-        // Projects
+        // Projects. PUT replaces a resource, PATCH updates only the fields it
+        // carries; both land on the same controller action.
         Route::get('projects', [ProjectController::class, 'index']);
         Route::post('projects', [ProjectController::class, 'store']);
         Route::get('projects/{project}', [ProjectController::class, 'show']);
+        Route::match(['put', 'patch'], 'projects/{project}', [ProjectController::class, 'update']);
+        Route::delete('projects/{project}', [ProjectController::class, 'destroy']);
 
-        // Tickets nested under a project
+        // Tickets nested under a project; a single ticket is addressed on its
+        // own, since it cannot move to another project anyway.
         Route::get('projects/{project}/tickets', [TicketController::class, 'index']);
         Route::post('projects/{project}/tickets', [TicketController::class, 'store']);
         Route::get('tickets/{ticket}', [TicketController::class, 'show']);
+        Route::match(['put', 'patch'], 'tickets/{ticket}', [TicketController::class, 'update']);
+        Route::delete('tickets/{ticket}', [TicketController::class, 'destroy']);
 
-        // Comments nested under a ticket
+        // Comments nested under a ticket, likewise addressed on their own once
+        // they exist.
         Route::get('tickets/{ticket}/comments', [TicketCommentController::class, 'index']);
         Route::post('tickets/{ticket}/comments', [TicketCommentController::class, 'store']);
+        Route::match(['put', 'patch'], 'comments/{comment}', [TicketCommentController::class, 'update']);
+        Route::delete('comments/{comment}', [TicketCommentController::class, 'destroy']);
 
         // Sprints
         Route::get('sprints', [SprintController::class, 'index']);
         Route::post('sprints', [SprintController::class, 'store']);
         Route::get('sprints/{sprint}', [SprintController::class, 'show']);
+        Route::match(['put', 'patch'], 'sprints/{sprint}', [SprintController::class, 'update']);
+        Route::delete('sprints/{sprint}', [SprintController::class, 'destroy']);
     });
 });

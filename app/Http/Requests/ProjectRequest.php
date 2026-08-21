@@ -2,8 +2,11 @@
 
 namespace App\Http\Requests;
 
+use App\Http\Requests\Concerns\ValidatesPartialUpdates;
+use App\Models\Project;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Validation\Rule;
+use Illuminate\Validation\Rules\Exists;
 
 /**
  * Validation rules for creating and updating a Project.
@@ -13,6 +16,8 @@ use Illuminate\Validation\Rule;
  */
 class ProjectRequest extends FormRequest
 {
+    use ValidatesPartialUpdates;
+
     /**
      * Determine if the user is authorized to make this request.
      */
@@ -23,20 +28,42 @@ class ProjectRequest extends FormRequest
             return false;
         }
 
-        return $this->isMethod('POST')
-            ? $user->can('Create project')
+        if ($this->isMethod('POST')) {
+            return $user->can('Create project');
+        }
+
+        // An update is judged against the project itself, here rather than in
+        // the controller alone: authorization runs before validation, so an
+        // outsider is turned away before the rules answer questions about the
+        // project's members and ticket prefix.
+        return ($project = $this->routeProject())
+            ? $user->can('update', $project)
             : $user->can('Update project');
     }
 
     /**
      * On create the owner is always the authenticated user: force owner_id and
      * ignore any value from the body, so a project cannot be attributed to
-     * someone else. (Updates keep whatever owner_id is provided.)
+     * someone else.
+     *
+     * On update the owner may be handed over (see ownerRule below), but an
+     * omitted owner_id keeps the project where it is instead of failing the
+     * "required" rule on a PUT that only means to rename it.
      */
     protected function prepareForValidation(): void
     {
-        if ($this->isMethod('POST') && $this->user()) {
-            $this->merge(['owner_id' => $this->user()->getKey()]);
+        if (! $user = $this->user()) {
+            return;
+        }
+
+        if ($this->isMethod('POST')) {
+            $this->merge(['owner_id' => $user->getKey()]);
+
+            return;
+        }
+
+        if (! $this->filled('owner_id') && $project = $this->routeProject()) {
+            $this->merge(['owner_id' => $project->owner_id]);
         }
     }
 
@@ -51,10 +78,10 @@ class ProjectRequest extends FormRequest
         // ignore the current record when checking the unique ticket prefix.
         $projectId = $this->route('project')?->id ?? $this->route('project');
 
-        return [
+        return $this->whenPartial([
             'name' => ['required', 'string', 'max:255'],
             'description' => ['nullable', 'string'],
-            'owner_id' => ['required', Rule::exists('users', 'id')->whereNull('deleted_at')],
+            'owner_id' => ['required', $this->ownerRule()],
             'status_id' => ['required', Rule::exists('project_statuses', 'id')],
             'ticket_prefix' => [
                 'required',
@@ -66,7 +93,40 @@ class ProjectRequest extends FormRequest
             ],
             'type' => ['required', Rule::in(['kanban', 'scrum'])],
             'status_type' => ['required', Rule::in(['default', 'custom'])],
-        ];
+        ]);
+    }
+
+    /**
+     * The project being updated, when the request went through a route that
+     * binds one. Null on create, and on the rule sets built outside the HTTP
+     * lifecycle (the Livewire forms and the tests).
+     */
+    protected function routeProject(): ?Project
+    {
+        $project = $this->route('project');
+
+        return $project instanceof Project ? $project : null;
+    }
+
+    /**
+     * An existing project may only be handed to someone already on it — its
+     * current owner or one of its members. Any other user would suddenly own a
+     * project, and everything filed under it, that they were never given
+     * access to. On create the owner is the caller, so the plain rule is enough.
+     */
+    private function ownerRule(): Exists
+    {
+        $rule = Rule::exists('users', 'id')->whereNull('deleted_at');
+
+        if (! $project = $this->routeProject()) {
+            return $rule;
+        }
+
+        return $rule->whereIn('id', $project->users()
+            ->pluck('users.id')
+            ->push($project->owner_id)
+            ->unique()
+            ->all());
     }
 
     /**

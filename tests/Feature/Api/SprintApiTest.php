@@ -226,4 +226,153 @@ class SprintApiTest extends TestCase
 
         $this->getJson("/api/v1/sprints/{$sprint->id}")->assertForbidden();
     }
+
+    // ------------------------------------------------------------- update
+
+    public function test_updating_requires_authentication(): void
+    {
+        $sprint = Sprint::factory()->create();
+
+        $this->putJson("/api/v1/sprints/{$sprint->id}", ['name' => 'X'])->assertUnauthorized();
+    }
+
+    public function test_it_updates_a_sprint(): void
+    {
+        $user = $this->actingWith(['Update sprint']);
+        $project = Project::factory()->create(['owner_id' => $user->id]);
+        $sprint = Sprint::factory()->create(['project_id' => $project->id]);
+
+        $this->putJson("/api/v1/sprints/{$sprint->id}", [
+            'name' => 'Sprint renamed',
+            'starts_at' => '2026-03-01',
+            'ends_at' => '2026-03-14',
+        ])
+            ->assertOk()
+            ->assertJsonPath('data.id', $sprint->id)
+            ->assertJsonPath('data.name', 'Sprint renamed')
+            ->assertJsonPath('data.starts_at', '2026-03-01');
+
+        $this->assertDatabaseHas('sprints', ['id' => $sprint->id, 'name' => 'Sprint renamed']);
+    }
+
+    public function test_updating_requires_the_update_permission(): void
+    {
+        $user = $this->actingWith(['View sprint']); // wrong permission
+        $project = Project::factory()->create(['owner_id' => $user->id]);
+        $sprint = Sprint::factory()->create(['project_id' => $project->id]);
+
+        $this->putJson("/api/v1/sprints/{$sprint->id}", ['name' => 'Nope'])->assertForbidden();
+
+        $this->assertDatabaseMissing('sprints', ['id' => $sprint->id, 'name' => 'Nope']);
+    }
+
+    public function test_a_plain_member_cannot_update_a_sprint(): void
+    {
+        // Planning belongs to whoever manages the project, not to every
+        // member who happens to hold "Update sprint".
+        $user = $this->actingWith(['Update sprint']);
+        $project = Project::factory()->create();
+        $project->users()->attach($user->id, ['role' => 'employee']);
+        $sprint = Sprint::factory()->create(['project_id' => $project->id]);
+
+        $this->putJson("/api/v1/sprints/{$sprint->id}", ['name' => 'Nope'])->assertForbidden();
+    }
+
+    public function test_a_managing_member_can_update_a_sprint(): void
+    {
+        $user = $this->actingWith(['Update sprint']);
+        $project = Project::factory()->create();
+        $project->users()->attach($user->id, ['role' => 'administrator']);
+        $sprint = Sprint::factory()->create(['project_id' => $project->id]);
+
+        $this->patchJson("/api/v1/sprints/{$sprint->id}", ['name' => 'Managed'])
+            ->assertOk()
+            ->assertJsonPath('data.name', 'Managed');
+    }
+
+    public function test_a_patch_keeps_the_dates_it_does_not_carry(): void
+    {
+        $user = $this->actingWith(['Update sprint']);
+        $project = Project::factory()->create(['owner_id' => $user->id]);
+        $sprint = Sprint::factory()->create([
+            'project_id' => $project->id,
+            'starts_at' => '2026-02-01',
+            'ends_at' => '2026-02-14',
+        ]);
+
+        $this->patchJson("/api/v1/sprints/{$sprint->id}", ['name' => 'Renamed'])
+            ->assertOk()
+            ->assertJsonPath('data.starts_at', '2026-02-01')
+            ->assertJsonPath('data.ends_at', '2026-02-14');
+    }
+
+    public function test_a_single_date_is_still_checked_against_the_stored_one(): void
+    {
+        $user = $this->actingWith(['Update sprint']);
+        $project = Project::factory()->create(['owner_id' => $user->id]);
+        $sprint = Sprint::factory()->create([
+            'project_id' => $project->id,
+            'starts_at' => '2026-02-01',
+            'ends_at' => '2026-02-14',
+        ]);
+
+        // A start pushed past the sprint's stored end is still an inverted
+        // sprint, even though the body says nothing about the end date.
+        $this->patchJson("/api/v1/sprints/{$sprint->id}", ['starts_at' => '2026-03-01'])
+            ->assertStatus(422)
+            ->assertJsonValidationErrors(['starts_at']);
+
+        $this->assertDatabaseHas('sprints', ['id' => $sprint->id, 'name' => $sprint->name]);
+    }
+
+    public function test_updating_cannot_move_a_sprint_to_another_project(): void
+    {
+        $user = $this->actingWith(['Update sprint']);
+        $project = Project::factory()->create(['owner_id' => $user->id]);
+        $other = Project::factory()->create(['owner_id' => $user->id]);
+        $sprint = Sprint::factory()->create(['project_id' => $project->id]);
+
+        $this->patchJson("/api/v1/sprints/{$sprint->id}", [
+            'name' => 'Stay put',
+            'project_id' => $other->id,
+        ])
+            ->assertOk()
+            ->assertJsonPath('data.project_id', $project->id);
+
+        $this->assertDatabaseHas('sprints', ['id' => $sprint->id, 'project_id' => $project->id]);
+    }
+
+    // ------------------------------------------------------------ destroy
+
+    public function test_it_deletes_a_sprint(): void
+    {
+        $user = $this->actingWith(['Delete sprint']);
+        $project = Project::factory()->create(['owner_id' => $user->id]);
+        $sprint = Sprint::factory()->create(['project_id' => $project->id]);
+
+        $this->deleteJson("/api/v1/sprints/{$sprint->id}")->assertNoContent();
+
+        $this->assertSoftDeleted('sprints', ['id' => $sprint->id]);
+    }
+
+    public function test_deleting_requires_the_delete_permission(): void
+    {
+        $user = $this->actingWith(['Update sprint']); // wrong permission
+        $project = Project::factory()->create(['owner_id' => $user->id]);
+        $sprint = Sprint::factory()->create(['project_id' => $project->id]);
+
+        $this->deleteJson("/api/v1/sprints/{$sprint->id}")->assertForbidden();
+
+        $this->assertDatabaseHas('sprints', ['id' => $sprint->id, 'deleted_at' => null]);
+    }
+
+    public function test_a_plain_member_cannot_delete_a_sprint(): void
+    {
+        $user = $this->actingWith(['Delete sprint']);
+        $project = Project::factory()->create();
+        $project->users()->attach($user->id, ['role' => 'employee']);
+        $sprint = Sprint::factory()->create(['project_id' => $project->id]);
+
+        $this->deleteJson("/api/v1/sprints/{$sprint->id}")->assertForbidden();
+    }
 }

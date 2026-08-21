@@ -43,4 +43,32 @@ class TicketCommentController extends ApiController
             ->response()
             ->setStatusCode(201);
     }
+
+    /**
+     * PUT|PATCH /api/v1/comments/{comment}
+     *
+     * Only `content` is editable; the author and the parent ticket are kept as
+     * they were. TicketCommentPolicy limits this to the author and the
+     * project's administrators.
+     */
+    public function update(TicketCommentRequest $request, TicketComment $comment)
+    {
+        $this->authorize('update', $comment);
+
+        $comment->update($request->validated());
+
+        return new TicketCommentResource($comment->load('user'));
+    }
+
+    /**
+     * DELETE /api/v1/comments/{comment}
+     */
+    public function destroy(TicketComment $comment)
+    {
+        $this->authorize('delete', $comment);
+
+        $comment->delete();
+
+        return response()->noContent();
+    }
 }
