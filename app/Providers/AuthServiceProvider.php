@@ -32,6 +32,8 @@ use App\Policies\TicketPriorityPolicy;
 use App\Policies\TicketStatusPolicy;
 use App\Policies\TicketTypePolicy;
 use App\Policies\UserPolicy;
+use Filament\Resources\RelationManagers\RelationManager;
+use Filament\Resources\Resource;
 use Illuminate\Foundation\Support\Providers\AuthServiceProvider as ServiceProvider;
 
 class AuthServiceProvider extends ServiceProvider
@@ -74,6 +76,15 @@ class AuthServiceProvider extends ServiceProvider
     {
         $this->registerPolicies();
 
-        //
+        // Make Filament authorization fail closed. By default both Resource::can()
+        // and RelationManager::can() return true when the model has no policy, or
+        // when the policy has no method for the ability being checked - so an
+        // ability nobody wrote a method for is granted to everyone. Both then fall
+        // through to the very same Gate::check() call we force here, so this only
+        // removes the two "allow by default" shortcuts; it does not change how any
+        // existing decision is computed. FilamentAuthorizationTest pins the
+        // abilities the panel actually asks for to real policy methods.
+        Resource::authorizeWithGate();
+        RelationManager::authorizeWithGate();
     }
 }

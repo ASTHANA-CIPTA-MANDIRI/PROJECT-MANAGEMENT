@@ -69,4 +69,18 @@ class TicketStatusPolicy
     {
         return $user->can('Delete ticket status');
     }
+
+    /**
+     * Determine whether the user can reorder the models.
+     *
+     * TicketStatusResource's table is reorderable, and the order it writes drives
+     * the board column order for everyone. That is an edit, so it needs the same
+     * permission as any other edit - not merely the permission to see the list.
+     *
+     * @return \Illuminate\Auth\Access\Response|bool
+     */
+    public function reorder(User $user)
+    {
+        return $user->can('Update ticket status');
+    }
 }

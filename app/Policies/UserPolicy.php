@@ -68,4 +68,40 @@ class UserPolicy
     {
         return $user->can('Delete user');
     }
+
+    /**
+     * Determine whether the user can attach a user to a project.
+     *
+     * Filament asks the *related* model's policy, so project membership changes
+     * land here rather than on ProjectPolicy. The gate is therefore the project
+     * permission, not a user-management one: this states the rule that the
+     * Project edit page already enforces (ProjectPolicy::update) instead of
+     * leaving the ability ungoverned.
+     *
+     * @return \Illuminate\Auth\Access\Response|bool
+     */
+    public function attach(User $user)
+    {
+        return $user->can('Update project');
+    }
+
+    /**
+     * Determine whether the user can detach a user from a project.
+     *
+     * @return \Illuminate\Auth\Access\Response|bool
+     */
+    public function detach(User $user, User $model)
+    {
+        return $user->can('Update project');
+    }
+
+    /**
+     * Determine whether the user can bulk detach users from a project.
+     *
+     * @return \Illuminate\Auth\Access\Response|bool
+     */
+    public function detachAny(User $user)
+    {
+        return $user->can('Update project');
+    }
 }
