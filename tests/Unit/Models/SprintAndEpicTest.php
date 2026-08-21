@@ -41,6 +41,58 @@ class SprintAndEpicTest extends TestCase
         $this->assertSame($project->id, $sprint->fresh()->epic->project_id);
     }
 
+    /**
+     * The road map draws the epic, not the sprint, so an epic that only ever
+     * copied the sprint's opening state kept showing the name and the bar the
+     * sprint had on the day it was created.
+     */
+    public function test_renaming_a_sprint_renames_its_epic(): void
+    {
+        $sprint = Sprint::factory()->create(['name' => 'Sprint Alpha']);
+
+        $sprint->update(['name' => 'Sprint Beta']);
+
+        $this->assertSame('Sprint Beta', $sprint->fresh()->epic->name);
+    }
+
+    public function test_rescheduling_a_sprint_moves_its_epic(): void
+    {
+        $sprint = Sprint::factory()->create([
+            'starts_at' => '2026-02-01',
+            'ends_at' => '2026-02-14',
+        ]);
+
+        $sprint->update(['starts_at' => '2026-03-02', 'ends_at' => '2026-03-15']);
+
+        $epic = $sprint->fresh()->epic;
+        $this->assertSame('2026-03-02', $epic->starts_at->toDateString());
+        $this->assertSame('2026-03-15', $epic->ends_at->toDateString());
+    }
+
+    public function test_changing_anything_else_leaves_the_epic_alone(): void
+    {
+        $sprint = Sprint::factory()->create(['name' => 'Sprint Alpha']);
+        $epic = $sprint->fresh()->epic;
+        $epic->update(['name' => 'Renamed by hand']);
+
+        // Only the mirrored fields copy over, so an epic renamed on the road
+        // map survives a sprint edit that has nothing to do with it.
+        $sprint->update(['description' => 'Notes', 'started_at' => now()]);
+
+        $this->assertSame('Renamed by hand', $epic->fresh()->name);
+    }
+
+    public function test_a_sprint_without_an_epic_still_updates(): void
+    {
+        $sprint = Sprint::factory()->create();
+        $sprint->epic->delete();
+        Sprint::whereKey($sprint->id)->update(['epic_id' => null]);
+
+        $sprint->fresh()->update(['name' => 'Orphan sprint']);
+
+        $this->assertDatabaseHas('sprints', ['id' => $sprint->id, 'name' => 'Orphan sprint']);
+    }
+
     public function test_two_sprints_cannot_share_the_same_epic(): void
     {
         $project = Project::factory()->create();

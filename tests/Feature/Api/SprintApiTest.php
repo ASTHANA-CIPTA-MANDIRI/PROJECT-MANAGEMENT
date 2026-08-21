@@ -255,6 +255,25 @@ class SprintApiTest extends TestCase
         $this->assertDatabaseHas('sprints', ['id' => $sprint->id, 'name' => 'Sprint renamed']);
     }
 
+    public function test_updating_a_sprint_keeps_its_epic_in_step(): void
+    {
+        $user = $this->actingWith(['Update sprint']);
+        $project = Project::factory()->create(['owner_id' => $user->id]);
+        $sprint = Sprint::factory()->create(['project_id' => $project->id]);
+
+        $this->patchJson("/api/v1/sprints/{$sprint->id}", [
+            'name' => 'Sprint Beta',
+            'starts_at' => '2026-04-01',
+            'ends_at' => '2026-04-14',
+        ])->assertOk();
+
+        // The road map draws the epic, so it has to follow the sprint.
+        $epic = $sprint->fresh()->epic;
+        $this->assertSame('Sprint Beta', $epic->name);
+        $this->assertSame('2026-04-01', $epic->starts_at->toDateString());
+        $this->assertSame('2026-04-14', $epic->ends_at->toDateString());
+    }
+
     public function test_updating_requires_the_update_permission(): void
     {
         $user = $this->actingWith(['View sprint']); // wrong permission
