@@ -1,5 +1,6 @@
 <?php
 
+use App\Http\Controllers\Api\V1\ApiTokenController;
 use App\Http\Controllers\Api\V1\ProjectController;
 use App\Http\Controllers\Api\V1\SearchController;
 use App\Http\Controllers\Api\V1\SprintController;
@@ -32,6 +33,13 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::get('/user', fn (Request $request) => $request->user());
 
     Route::prefix('v1')->group(function () {
+        // The caller's own API tokens. Issuing one needs a first-party session
+        // (see ApiTokenController), so a token cannot renew itself past the
+        // expiry window; listing and revoking work with either.
+        Route::get('tokens', [ApiTokenController::class, 'index']);
+        Route::post('tokens', [ApiTokenController::class, 'store']);
+        Route::delete('tokens/{token}', [ApiTokenController::class, 'destroy']);
+
         // Full-text search across projects, tickets and comments
         Route::get('search', SearchController::class);
 

@@ -18,20 +18,56 @@ error shapes all live there.
 All endpoints require a Sanctum personal access token.
 
 ```bash
-# Create a token (from tinker or your own endpoint)
-php artisan tinker
->>> App\Models\User::first()->createToken('my-app')->plainTextToken
-
 # Use it
 curl -H "Authorization: Bearer <token>" \
      -H "Accept: application/json" \
      http://localhost:8000/api/v1/projects
 ```
 
+## Getting a token
+
+Every user manages their own tokens — no shell and no administrator needed.
+
+**From the panel:** *Settings → API tokens*. Give the token a name, optionally
+pick an earlier expiry, and copy the secret from the banner: it is stored
+hashed, so that is the only time it can be read.
+
+**From the API**, using your panel session:
+
+```bash
+curl -X POST -b cookies.txt \
+     -H "Content-Type: application/json" -H "Accept: application/json" \
+     -d '{"name": "ci-pipeline"}' \
+     http://localhost:8000/api/v1/tokens
+# → 201 { "data": { "id": 12, ... }, "plain_text_token": "12|IkE0f9..." }
+```
+
+| Method | Path | Description |
+|--------|------|-------------|
+| GET | `/api/v1/tokens` | List your tokens (never their secrets) |
+| POST | `/api/v1/tokens` | Issue a token; the secret is returned once |
+| DELETE | `/api/v1/tokens/{id}` | Revoke one of your tokens |
+
+Three rules worth knowing:
+
+- **Issuing needs a session.** A request authenticated with a bearer token gets
+  `403` when it asks for another one. Bounded expiry is what stops a leaked
+  token living forever, and a token able to mint successors would renew itself
+  indefinitely. Revoking, by contrast, works with a token — including the one
+  making the request, which is how you burn a leaked credential.
+- **Every token expires.** `expires_at` is stamped on creation and capped by
+  `SANCTUM_TOKEN_EXPIRATION` (14 days by default). Asking for a later date only
+  gets you the cap; asking for an earlier one works.
+- **Tokens carry `["*"]`.** Authorization is decided by the user's roles and the
+  policies below, so a token grants exactly what its owner can do — no more, and
+  never something the owner has since lost.
+
 ## Endpoints
 
 | Method | Path | Description |
 |--------|------|-------------|
+| GET / POST | `/api/v1/tokens` | List / issue your own API tokens |
+| DELETE | `/api/v1/tokens/{id}` | Revoke one of your own tokens |
 | GET / POST | `/api/v1/projects` | List / create projects |
 | GET / PUT / PATCH / DELETE | `/api/v1/projects/{id}` | Show / replace / update / delete a project |
 | GET / POST | `/api/v1/projects/{id}/tickets` | List / create tickets in a project |
