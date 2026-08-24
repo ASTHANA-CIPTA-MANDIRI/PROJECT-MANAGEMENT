@@ -210,6 +210,44 @@ class QueryOptimizationTest extends TestCase
     }
 
     /**
+     * TicketObserver::updating() used to write epic_id via a separate query
+     * builder update fired mid-event, before the ticket's own save() had run
+     * its UPDATE - it only worked because save() happened to write just its
+     * dirty attributes afterwards, an implicit contract nobody guaranteed.
+     * Moved to updated(), the epic sync must now run strictly after the
+     * ticket's own UPDATE has completed.
+     */
+    public function test_epic_sync_runs_after_the_tickets_own_update_completes(): void
+    {
+        $project = Project::factory()->create();
+        $sprint = Sprint::factory()->create(['project_id' => $project->id]);
+        $ticket = Ticket::factory()->create(['project_id' => $project->id]);
+
+        DB::connection()->flushQueryLog();
+        DB::connection()->enableQueryLog();
+
+        $ticket->update(['sprint_id' => $sprint->id]);
+
+        $queries = collect(DB::connection()->getQueryLog())->pluck('query');
+        DB::connection()->disableQueryLog();
+
+        $ticketUpdateIndex = $queries->search(
+            fn (string $sql) => str_starts_with($sql, 'update "tickets" set') && str_contains($sql, '"sprint_id"')
+        );
+        $epicUpdateIndex = $queries->search(
+            fn (string $sql) => str_starts_with($sql, 'update "tickets" set')
+                && str_contains($sql, '"epic_id"') && ! str_contains($sql, '"sprint_id"')
+        );
+
+        $this->assertNotFalse($ticketUpdateIndex, 'expected the ticket\'s own update: '.$queries->implode(' | '));
+        $this->assertNotFalse($epicUpdateIndex, 'expected the epic sync update: '.$queries->implode(' | '));
+        $this->assertGreaterThan(
+            $ticketUpdateIndex, $epicUpdateIndex,
+            'epic sync should run only after the ticket\'s own save completes: '.$queries->implode(' | ')
+        );
+    }
+
+    /**
      * TicketResource::getEloquentQuery() renders an avatar (with ticket/project
      * counts) for the owner and responsible of every row. Without eager-loaded
      * counts that's 4 extra queries per unique user; this must stay constant.

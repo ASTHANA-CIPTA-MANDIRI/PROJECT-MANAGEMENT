@@ -65,8 +65,13 @@ class TicketObserver
             // Live update for anyone watching the project board.
             TicketStatusChanged::dispatch($ticket, $oldStatus, (int) $ticket->status_id, auth()->id());
         }
+    }
 
-        // Ticket sprint update
+    public function updated(Ticket $ticket): void
+    {
+        // The main save() just finished, so this write no longer races with
+        // it. getOriginal() still holds the pre-update value here: Eloquent
+        // only syncs it after the 'saved' event, which fires later.
         $oldSprint = $ticket->getOriginal('sprint_id');
         if ($oldSprint && ! $ticket->sprint_id) {
             Ticket::where('id', $ticket->id)->update(['epic_id' => null]);
