@@ -7,6 +7,7 @@ use App\Listeners\NotifyAdminsOfRegistration;
 use App\Models\Permission;
 use App\Models\Role;
 use App\Models\User;
+use App\Notifications\CustomVerifyEmail;
 use App\Notifications\NewUserPendingApproval;
 use App\Settings\GeneralSettings;
 use Illuminate\Auth\Events\Registered;
@@ -189,6 +190,24 @@ class RegistrationWorkflowTest extends TestCase
         event(new Registered(User::factory()->create()));
 
         Notification::assertSentTo($admin, NewUserPendingApproval::class);
+    }
+
+    public function test_a_registrant_receives_the_branded_verification_mail(): void
+    {
+        // AppServiceProvider used to register a VerifyEmail::toMailUsing
+        // fallback to brand this mail, but it never fired: User overrides
+        // sendEmailVerificationNotification() to send CustomVerifyEmail
+        // directly. The branding has to hold without that fallback.
+        $this->withDefaultRole(null);
+        $user = User::factory()->unverified()->create();
+
+        event(new Registered($user));
+
+        Notification::assertSentTo(
+            $user,
+            CustomVerifyEmail::class,
+            fn ($notification) => $notification->toMail($user)->salutation === __('Thanks, Rencanakan Team')
+        );
     }
 
     public function test_a_pending_user_sees_the_awaiting_approval_page(): void

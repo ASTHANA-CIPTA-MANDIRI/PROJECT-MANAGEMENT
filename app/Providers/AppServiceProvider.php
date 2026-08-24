@@ -3,14 +3,12 @@
 namespace App\Providers;
 
 use App\Models\User;
-use App\Notifications\CustomVerifyEmail;
 use App\Settings\GeneralSettings;
 use App\Support\BulkDeleteAuthorizer;
 use DutchCodingCompany\FilamentSocialite\FilamentSocialite;
 use Filament\Facades\Filament;
 use Filament\Notifications\Notification;
 use Filament\Tables;
-use Illuminate\Auth\Notifications\VerifyEmail;
 use Illuminate\Database\Eloquent\Collection as EloquentCollection;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Foundation\Vite;
@@ -135,12 +133,6 @@ class AppServiceProvider extends ServiceProvider
         if (config('app.force_https')) {
             URL::forceScheme('https');
         }
-
-        // CustomVerifyEmail builds its own signed URL, so the $url handed to
-        // this callback is unused - it must not be passed to the constructor.
-        VerifyEmail::toMailUsing(function ($notifiable) {
-            return (new CustomVerifyEmail)->toMail($notifiable);
-        });
 
         // Social login (Google/GitHub) creates its own users. Mark them as
         // "social" so the User model does not treat them as admin-created
