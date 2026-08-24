@@ -110,7 +110,7 @@ class ViewTicket extends ViewRecord implements HasForms
                         ->searchable()
                         ->reactive()
                         ->options(function ($get, $set) {
-                            return Activity::all()->pluck('name', 'id')->toArray();
+                            return Activity::query()->pluck('name', 'id')->toArray();
                         }),
                     Textarea::make('comment')
                         ->label(__('Comment'))

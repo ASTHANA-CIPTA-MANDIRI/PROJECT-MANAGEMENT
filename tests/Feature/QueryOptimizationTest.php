@@ -5,12 +5,16 @@ namespace Tests\Feature;
 use App\Filament\Pages\Kanban;
 use App\Filament\Resources\ProjectResource;
 use App\Filament\Resources\TicketResource;
+use App\Models\Activity;
+use App\Models\Label;
 use App\Models\Project;
 use App\Models\Sprint;
 use App\Models\Ticket;
 use App\Models\TicketHour;
+use App\Models\TicketPriority;
 use App\Models\TicketRelation;
 use App\Models\TicketStatus;
+use App\Models\TicketType;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Cache;
@@ -321,6 +325,36 @@ class QueryOptimizationTest extends TestCase
         $this->assertFalse(
             $queries->contains(fn (string $sql) => str_starts_with($sql, 'select * from "tickets"')),
             'no query should fetch every ticket row: '.$queries->implode(' | ')
+        );
+    }
+
+    /**
+     * The type/priority/activity/label dropdowns (ticket filters and forms)
+     * used to read Model::all()->pluck('name', 'id') - hydrating every column
+     * of every row just to keep two of them. They must select only what the
+     * dropdown needs.
+     */
+    public function test_reference_dropdowns_select_only_name_and_id(): void
+    {
+        TicketType::factory()->count(3)->create();
+        TicketPriority::factory()->count(3)->create();
+        Activity::factory()->count(3)->create();
+        Label::factory()->count(3)->create();
+
+        DB::connection()->flushQueryLog();
+        DB::connection()->enableQueryLog();
+
+        TicketType::query()->pluck('name', 'id');
+        TicketPriority::query()->pluck('name', 'id');
+        Activity::query()->pluck('name', 'id');
+        Label::query()->pluck('name', 'id');
+
+        $queries = collect(DB::connection()->getQueryLog())->pluck('query');
+        DB::connection()->disableQueryLog();
+
+        $this->assertFalse(
+            $queries->contains(fn (string $sql) => str_starts_with($sql, 'select * from')),
+            'reference dropdowns should not hydrate full rows: '.$queries->implode(' | ')
         );
     }
 

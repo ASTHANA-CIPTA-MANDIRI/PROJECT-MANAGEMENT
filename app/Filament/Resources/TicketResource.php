@@ -169,12 +169,12 @@ class TicketResource extends Resource
                 Tables\Filters\SelectFilter::make('type_id')
                     ->label(__('Type'))
                     ->multiple()
-                    ->options(fn () => TicketType::all()->pluck('name', 'id')->toArray()),
+                    ->options(fn () => TicketType::query()->pluck('name', 'id')->toArray()),
 
                 Tables\Filters\SelectFilter::make('priority_id')
                     ->label(__('Priority'))
                     ->multiple()
-                    ->options(fn () => TicketPriority::all()->pluck('name', 'id')->toArray()),
+                    ->options(fn () => TicketPriority::query()->pluck('name', 'id')->toArray()),
             ])
             ->actions([
                 Tables\Actions\ViewAction::make(),

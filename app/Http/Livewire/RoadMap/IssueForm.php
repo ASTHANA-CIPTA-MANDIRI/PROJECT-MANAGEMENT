@@ -146,13 +146,13 @@ class IssueForm extends Component implements HasForms
                             Forms\Components\Select::make('type_id')
                                 ->label(__('Ticket type'))
                                 ->searchable()
-                                ->options(fn () => TicketType::all()->pluck('name', 'id')->toArray())
+                                ->options(fn () => TicketType::query()->pluck('name', 'id')->toArray())
                                 ->required(),
 
                             Forms\Components\Select::make('priority_id')
                                 ->label(__('Ticket priority'))
                                 ->searchable()
-                                ->options(fn () => TicketPriority::all()->pluck('name', 'id')->toArray())
+                                ->options(fn () => TicketPriority::query()->pluck('name', 'id')->toArray())
                                 ->required(),
                         ]),
                 ]),

@@ -41,17 +41,17 @@ class BoardFilterForm
                     Select::make('types')
                         ->label(__('Ticket types'))
                         ->multiple()
-                        ->options(TicketType::all()->pluck('name', 'id')),
+                        ->options(TicketType::query()->pluck('name', 'id')),
 
                     Select::make('priorities')
                         ->label(__('Ticket priorities'))
                         ->multiple()
-                        ->options(TicketPriority::all()->pluck('name', 'id')),
+                        ->options(TicketPriority::query()->pluck('name', 'id')),
 
                     Select::make('labels')
                         ->label(__('Labels'))
                         ->multiple()
-                        ->options(Label::all()->pluck('name', 'id')),
+                        ->options(Label::query()->pluck('name', 'id')),
 
                     Toggle::make('includeNotAffectedTickets')
                         ->label(__('Show only not affected tickets'))
