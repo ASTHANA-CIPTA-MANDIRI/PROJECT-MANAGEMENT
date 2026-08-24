@@ -436,11 +436,6 @@ parameters:
 			path: app/Policies/ProjectStatusPolicy.php
 
 		-
-			message: "#^Class App\\\\Notifications\\\\CustomVerifyEmail does not have a constructor and must be instantiated without any parameters\\.$#"
-			count: 1
-			path: app/Providers/AppServiceProvider.php
-
-		-
 			message: "#^Method App\\\\Services\\\\Analytics\\\\BurndownReport\\:\\:completedAtByTicket\\(\\) should return Illuminate\\\\Support\\\\Collection\\<int, Carbon\\\\Carbon\\> but returns Illuminate\\\\Support\\\\Collection\\<\\(int\\|string\\), Carbon\\\\Carbon\\|null\\>\\.$#"
 			count: 1
 			path: app/Services/Analytics/BurndownReport.php
