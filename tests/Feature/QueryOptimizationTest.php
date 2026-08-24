@@ -127,6 +127,89 @@ class QueryOptimizationTest extends TestCase
         $this->assertLessThanOrEqual(8, $queryCount, "Expected eager loading, ran {$queryCount} queries");
     }
 
+    /**
+     * user-avatar.blade.php used to read ->ticketsOwned / ->ticketsResponsible /
+     * ->projectsOwning / ->projectsAffected as properties (lazy-loading and
+     * hydrating every row) just to merge/unique/count them in PHP. The
+     * accessors must give the same, deduped answer via a single COUNT query.
+     */
+    public function test_tickets_and_projects_counts_are_correct_and_deduped(): void
+    {
+        $user = User::factory()->create();
+
+        // Owned and responsible on the same ticket must count once, not twice.
+        Ticket::factory()->create(['owner_id' => $user->id, 'responsible_id' => $user->id]);
+        Ticket::factory()->create(['owner_id' => $user->id]);
+        Ticket::factory()->create(['responsible_id' => $user->id]);
+
+        $this->assertSame(3, $user->ticketsCount);
+
+        // Owning a project and also being a pivot member of it must count once.
+        $ownedAndMember = Project::factory()->create(['owner_id' => $user->id]);
+        $ownedAndMember->users()->attach($user->id, ['role' => 'member']);
+        Project::factory()->create(['owner_id' => $user->id]);
+        Project::factory()->create()->users()->attach($user->id, ['role' => 'member']);
+
+        $this->assertSame(3, $user->projectsCount);
+    }
+
+    /**
+     * The old implementation ran SELECT * on every ticket/project the user
+     * touched just to count them - unbounded per-render memory for a user
+     * with thousands of tickets. The accessor must never hydrate those rows.
+     */
+    public function test_tickets_and_projects_counts_never_hydrate_full_rows(): void
+    {
+        $user = User::factory()->create();
+        Ticket::factory()->count(5)->create(['owner_id' => $user->id]);
+        Project::factory()->count(5)->create(['owner_id' => $user->id]);
+
+        DB::connection()->flushQueryLog();
+        DB::connection()->enableQueryLog();
+
+        $user->ticketsCount;
+        $user->projectsCount;
+
+        $queries = collect(DB::connection()->getQueryLog())->pluck('query');
+        DB::connection()->disableQueryLog();
+
+        $this->assertFalse(
+            $queries->contains(fn (string $sql) => str_starts_with($sql, 'select * from "tickets"')
+                || str_starts_with($sql, 'select * from "projects"')),
+            'no query should fetch full ticket/project rows: '.$queries->implode(' | ')
+        );
+        $this->assertTrue(
+            $queries->every(fn (string $sql) => str_contains($sql, 'count(')),
+            'every query should be an aggregate count: '.$queries->implode(' | ')
+        );
+    }
+
+    /**
+     * TicketResource::getEloquentQuery() renders an avatar (with ticket/project
+     * counts) for the owner and responsible of every row. Without eager-loaded
+     * counts that's 4 extra queries per unique user; this must stay constant.
+     */
+    public function test_ticket_listing_query_eager_loads_avatar_counts(): void
+    {
+        $owner = User::factory()->create();
+        $project = Project::factory()->create();
+        Ticket::factory()->count(5)->create(['project_id' => $project->id, 'owner_id' => $owner->id]);
+
+        DB::connection()->flushQueryLog();
+        DB::connection()->enableQueryLog();
+
+        $tickets = TicketResource::getEloquentQuery()->get();
+        foreach ($tickets as $ticket) {
+            $ticket->owner->ticketsCount;
+            $ticket->owner->projectsCount;
+        }
+
+        $queryCount = count(DB::connection()->getQueryLog());
+        DB::connection()->disableQueryLog();
+
+        $this->assertLessThanOrEqual(10, $queryCount, "Expected eager-loaded counts, ran {$queryCount} queries");
+    }
+
     public function test_ticket_listing_query_eager_loads_relations(): void
     {
         $project = Project::factory()->create();

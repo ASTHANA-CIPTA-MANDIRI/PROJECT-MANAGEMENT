@@ -35,8 +35,7 @@
                     <li class="mr-2">
                         <div>
                         <span class="font-semibold text-gray-900 dark:text-white">
-                            {{ collect(($user->ticketsOwned ?? collect())
-                                    ->merge(($user->ticketsResponsible ?? collect())))->unique('id')->count() }}
+                            {{ $user->ticketsCount }}
                         </span>
                             <span>{{ __('Tickets') }}</span>
                         </div>
@@ -44,8 +43,7 @@
                     <li>
                         <div>
                         <span class="font-semibold text-gray-900 dark:text-white">
-                            {{ collect(($user->projectsOwning ?? collect())
-                                ->merge(($user->projectsAffected ?? collect())))->unique('id')->count() }}
+                            {{ $user->projectsCount }}
                         </span>
                             <span>{{ __('Projects') }}</span>
                         </div>

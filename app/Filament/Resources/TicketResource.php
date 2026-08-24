@@ -31,7 +31,12 @@ class TicketResource extends Resource
     public static function getEloquentQuery(): \Illuminate\Database\Eloquent\Builder
     {
         return parent::getEloquentQuery()
-            ->with(['project', 'owner', 'responsible', 'status', 'type', 'priority', 'labels']);
+            ->with([
+                'project',
+                'owner' => fn ($query) => $query->withTicketsAndProjectsCounts(),
+                'responsible' => fn ($query) => $query->withTicketsAndProjectsCounts(),
+                'status', 'type', 'priority', 'labels',
+            ]);
     }
 
     protected static function getNavigationLabel(): string

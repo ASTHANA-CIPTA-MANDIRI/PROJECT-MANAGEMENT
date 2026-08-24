@@ -100,6 +100,58 @@ class User extends Authenticatable implements FilamentUser, MustVerifyEmail
         return $this->hasMany(Ticket::class, 'responsible_id', 'id');
     }
 
+    /**
+     * Number of distinct tickets this user owns and/or is responsible for.
+     * A single COUNT query — never hydrates the tickets themselves — so it
+     * stays cheap for users with thousands of tickets. When eager-loaded via
+     * scopeWithTicketsAndProjectsCounts() the precomputed value is reused
+     * instead, same as Ticket::loggedHoursValue() prefers hours_sum_value.
+     */
+    public function ticketsCount(): Attribute
+    {
+        return new Attribute(
+            get: fn () => array_key_exists('tickets_count', $this->attributes)
+                ? (int) $this->attributes['tickets_count']
+                : Ticket::where('owner_id', $this->id)->orWhere('responsible_id', $this->id)->count()
+        );
+    }
+
+    /**
+     * Number of distinct projects this user owns and/or belongs to. See
+     * ticketsCount() for why this is a COUNT query rather than relation
+     * hydration + PHP-side merge/unique.
+     */
+    public function projectsCount(): Attribute
+    {
+        return new Attribute(
+            get: fn () => array_key_exists('projects_count', $this->attributes)
+                ? (int) $this->attributes['projects_count']
+                : Project::where('owner_id', $this->id)
+                    ->orWhereHas('users', fn (Builder $query) => $query->whereKey($this->id))
+                    ->count()
+        );
+    }
+
+    /**
+     * Eager-load ticketsCount/projectsCount as SQL subqueries, so listings
+     * that show many avatars (e.g. the ticket table) don't run two COUNT
+     * queries per row on top of the base query.
+     */
+    public function scopeWithTicketsAndProjectsCounts(Builder $query): Builder
+    {
+        return $query->addSelect([
+            'tickets_count' => Ticket::selectRaw('count(*)')
+                ->whereColumn('owner_id', 'users.id')
+                ->orWhereColumn('responsible_id', 'users.id'),
+            'projects_count' => Project::selectRaw('count(*)')
+                ->where(fn (Builder $q) => $q->whereColumn('owner_id', 'users.id')
+                    ->orWhereExists(fn ($sub) => $sub->selectRaw(1)
+                        ->from('project_users')
+                        ->whereColumn('project_users.project_id', 'projects.id')
+                        ->whereColumn('project_users.user_id', 'users.id'))),
+        ]);
+    }
+
     public function socials(): HasMany
     {
         return $this->hasMany(SocialiteUser::class, 'user_id', 'id');
