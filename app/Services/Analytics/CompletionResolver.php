@@ -26,7 +26,7 @@ class CompletionResolver
      */
     public static function completedStatusIds(Project $project): array
     {
-        $final = static::statusQuery($project)
+        $final = self::statusQuery($project)
             ->where('is_final', true)
             ->pluck('id')
             ->all();
@@ -35,7 +35,7 @@ class CompletionResolver
             return $final;
         }
 
-        $highestOrder = static::statusQuery($project)
+        $highestOrder = self::statusQuery($project)
             ->orderByDesc('order')
             ->value('id');
 

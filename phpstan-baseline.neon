@@ -446,11 +446,6 @@ parameters:
 			path: app/Services/Analytics/BurndownReport.php
 
 		-
-			message: "#^Unsafe call to private method App\\\\Services\\\\Analytics\\\\CompletionResolver\\:\\:statusQuery\\(\\) through static\\:\\:\\.$#"
-			count: 1
-			path: app/Services/Analytics/CompletionResolver.php
-
-		-
 			message: "#^Access to an undefined property App\\\\Models\\\\TicketHour\\:\\:\\$hours\\.$#"
 			count: 2
 			path: app/Services/Analytics/ResourceUtilizationReport.php
