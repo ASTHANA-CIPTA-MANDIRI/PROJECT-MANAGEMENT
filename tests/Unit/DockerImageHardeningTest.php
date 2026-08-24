@@ -109,6 +109,19 @@ class DockerImageHardeningTest extends TestCase
         $this->assertStringNotContainsString('cache:clear', $runScript);
     }
 
+    public function test_the_supervisor_config_runs_the_task_scheduler(): void
+    {
+        // app/Console/Kernel.php schedules reports:daily, tickets:due-date-reminders
+        // and cleanup:old-activities. Without schedule:work running as its own
+        // supervised process, those commands are defined but never invoked —
+        // there is no cron inside the container to fire schedule:run instead.
+        $this->assertStringContainsString(
+            'artisan schedule:work',
+            $this->instructions('docker/supervisord.conf'),
+            'Nothing runs the scheduled commands from app/Console/Kernel.php inside the container.'
+        );
+    }
+
     public function test_no_workflow_uses_an_unpinned_third_party_action(): void
     {
         foreach (glob(dirname(__DIR__, 2).'/.github/workflows/*.yml') as $workflow) {

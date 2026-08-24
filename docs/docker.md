@@ -1,8 +1,9 @@
 # Docker
 
 The application ships a `Dockerfile` that produces a self-contained image: nginx
-and PHP-FPM serving the app on port 8000, plus a queue worker, all supervised by
-`supervisord` and running as the unprivileged `www-data` user.
+and PHP-FPM serving the app on port 8000, plus a queue worker and the task
+scheduler, all supervised by `supervisord` and running as the unprivileged
+`www-data` user.
 
 There is **no published image**. The image has to be built from this
 repository. The Docker Hub image belonging to the upstream project
@@ -73,8 +74,9 @@ docker compose exec helper php artisan db:seed
 | `nginx` | Serves `public/` on port 8000 and passes PHP to FPM over a unix socket |
 | `php-fpm` | Runs the application |
 | `php artisan queue:work` | Processes queued jobs — notifications, mail |
+| `php artisan schedule:work` | Runs `app/Console/Kernel.php`'s scheduled commands (`reports:daily`, `tickets:due-date-reminders`, `cleanup:old-activities`) — there is no separate cron |
 
-`supervisord` starts all three and restarts any that exit. Their output goes to
+`supervisord` starts all four and restarts any that exit. Their output goes to
 the container's stdout/stderr, so `docker compose logs -f helper` shows
 everything.
 
