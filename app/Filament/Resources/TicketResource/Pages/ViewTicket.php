@@ -67,10 +67,17 @@ class ViewTicket extends ViewRecord implements HasForms
                         $sub->delete();
                         $this->notify('success', __('You unsubscribed from the ticket'));
                     } else {
-                        TicketSubscriber::create([
-                            'user_id' => auth()->user()->id,
-                            'ticket_id' => $this->record->id,
-                        ]);
+                        try {
+                            TicketSubscriber::create([
+                                'user_id' => auth()->user()->id,
+                                'ticket_id' => $this->record->id,
+                            ]);
+                        } catch (\Illuminate\Database\QueryException $e) {
+                            // Already subscribed via an overlapping request; nothing to do.
+                            if ($e->getCode() !== '23000') {
+                                throw $e;
+                            }
+                        }
                         $this->notify('success', __('You subscribed to the ticket'));
                     }
                     $this->record->refresh();

@@ -133,10 +133,17 @@ class ProjectResource extends Resource
                         if ($projectFavorite) {
                             $projectFavorite->delete();
                         } else {
-                            ProjectFavorite::create([
-                                'project_id' => $projectId,
-                                'user_id' => auth()->user()->id,
-                            ]);
+                            try {
+                                ProjectFavorite::create([
+                                    'project_id' => $projectId,
+                                    'user_id' => auth()->user()->id,
+                                ]);
+                            } catch (\Illuminate\Database\QueryException $e) {
+                                // Already favorited by an overlapping request; nothing to do.
+                                if ($e->getCode() !== '23000') {
+                                    throw $e;
+                                }
+                            }
                         }
                         Filament::notify('success', __('Project updated'));
                     }),
