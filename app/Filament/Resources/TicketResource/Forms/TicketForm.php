@@ -217,6 +217,21 @@ class TicketForm
             ->collapsed()
             ->orderable()
             ->defaultItems(0)
+            ->rules([fn () => function (string $attribute, $value, \Closure $fail) {
+                $seen = [];
+
+                foreach ((array) $value as $item) {
+                    $key = ($item['type'] ?? '').'|'.($item['relation_id'] ?? '');
+
+                    if (isset($seen[$key])) {
+                        $fail(__('This ticket relation has already been added.'));
+
+                        return;
+                    }
+
+                    $seen[$key] = true;
+                }
+            }])
             ->schema([
                 Forms\Components\Grid::make()
                     ->columns(3)
