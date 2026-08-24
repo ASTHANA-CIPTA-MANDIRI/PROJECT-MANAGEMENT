@@ -54,6 +54,19 @@ APP_KEY=base64:...
 Compose reads that file, so `docker compose up` picks it up automatically. It
 will refuse to start with an explicit error if the variable is missing.
 
+**`DB_PASSWORD` / `DB_ROOT_PASSWORD` default to `helper`**, same as before,
+but can now be overridden the same way as `APP_KEY` — add them to the `.env`
+file next to `docker-compose.yml`:
+
+```dotenv
+DB_PASSWORD=a-stronger-password
+DB_ROOT_PASSWORD=a-different-stronger-password
+```
+
+The MySQL container is not published on a host port (only reachable over the
+Compose network), so the shipped default is low-risk out of the box; change
+it before exposing the database beyond this Compose network.
+
 ## Seeding a fresh installation
 
 The container runs `php artisan migrate` on every start, so schema changes are
