@@ -92,10 +92,7 @@ class ViewTicket extends ViewRecord implements HasForms
                 ->modalHeading(__('Log worked time'))
                 ->modalSubheading(__('Use the following form to add your worked time in this ticket.'))
                 ->modalButton(__('Log'))
-                ->visible(fn () => in_array(
-                    auth()->user()->id,
-                    [$this->record->owner_id, $this->record->responsible_id]
-                ))
+                ->visible(fn () => $this->canLogHours())
                 ->form([
                     TextInput::make('time')
                         ->label(__('Time to log'))
@@ -113,6 +110,8 @@ class ViewTicket extends ViewRecord implements HasForms
                         ->rows(3),
                 ])
                 ->action(function (Collection $records, array $data): void {
+                    abort_unless($this->canLogHours(), 403);
+
                     $value = $data['time'];
                     $comment = $data['comment'];
                     TicketHour::create([
@@ -218,6 +217,21 @@ class ViewTicket extends ViewRecord implements HasForms
         $this->record->refresh();
         $this->cancelEditComment();
         $this->notify('success', __('Comment saved'));
+    }
+
+    /**
+     * Gate for the "Log time" action: authenticated ticket owner/responsible
+     * AND allowed by TicketHourPolicy. Filament already refuses to mount or
+     * call an action whose visible() is false (Actions\Concerns\CanBeDisabled
+     * ::isDisabled() counts hidden as disabled), but that is an indirect
+     * guarantee buried in the framework, so action() states its own
+     * condition rather than inheriting one - see Attachments::perform() for
+     * the same reasoning.
+     */
+    protected function canLogHours(): bool
+    {
+        return auth()->user()->can('create', TicketHour::class)
+            && in_array(auth()->user()->id, [$this->record->owner_id, $this->record->responsible_id]);
     }
 
     public function isAdministrator(): bool
