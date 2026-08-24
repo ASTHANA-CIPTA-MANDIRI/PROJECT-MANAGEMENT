@@ -48,10 +48,9 @@ class TicketObserver
 
     public function updating(Ticket $ticket): void
     {
-        $old = Ticket::where('id', $ticket->id)->first();
-
-        // Ticket activity based on status
-        $oldStatus = $old->status_id;
+        // Eloquent already keeps the as-loaded-from-DB values on the model
+        // itself; no need for a second query to read them back.
+        $oldStatus = $ticket->getOriginal('status_id');
         if ($oldStatus != $ticket->status_id) {
             $activity = TicketActivity::create([
                 'ticket_id' => $ticket->id,
@@ -68,7 +67,7 @@ class TicketObserver
         }
 
         // Ticket sprint update
-        $oldSprint = $old->sprint_id;
+        $oldSprint = $ticket->getOriginal('sprint_id');
         if ($oldSprint && ! $ticket->sprint_id) {
             Ticket::where('id', $ticket->id)->update(['epic_id' => null]);
         } elseif ($ticket->sprint_id && $ticket->sprint->epic_id) {

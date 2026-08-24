@@ -185,6 +185,31 @@ class QueryOptimizationTest extends TestCase
     }
 
     /**
+     * TicketObserver::updating() used to re-fetch the ticket it was already
+     * handed (Ticket::where('id', $ticket->id)->first()) just to read the
+     * pre-update status/sprint. Eloquent already carries those as-loaded
+     * values via getOriginal(); no extra SELECT should run.
+     */
+    public function test_updating_a_ticket_does_not_re_query_its_original_row(): void
+    {
+        $ticket = Ticket::factory()->create();
+        $newStatus = TicketStatus::factory()->create();
+
+        DB::connection()->flushQueryLog();
+        DB::connection()->enableQueryLog();
+
+        $ticket->update(['status_id' => $newStatus->id]);
+
+        $queries = collect(DB::connection()->getQueryLog())->pluck('query');
+        DB::connection()->disableQueryLog();
+
+        $this->assertFalse(
+            $queries->contains(fn (string $sql) => str_starts_with($sql, 'select * from "tickets" where "id"')),
+            'updating a ticket should not re-select its own row: '.$queries->implode(' | ')
+        );
+    }
+
+    /**
      * TicketResource::getEloquentQuery() renders an avatar (with ticket/project
      * counts) for the owner and responsible of every row. Without eager-loaded
      * counts that's 4 extra queries per unique user; this must stay constant.
