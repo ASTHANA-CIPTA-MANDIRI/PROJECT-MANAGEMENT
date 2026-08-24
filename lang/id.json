@@ -292,7 +292,7 @@
     "A ticket you are involved with is due today.": "Ada Tugas yang melibatkan Anda dan jatuh tempo hari ini.",
     "A ticket you are involved with is due tomorrow.": "Ada Tugas yang melibatkan Anda dan jatuh tempo besok.",
     "Final status": "Status akhir",
-    "If checked, tickets in this status are considered done and will no longer receive due-date reminders": "Jika dicentang, Tugas dengan status ini dianggap selesai dan tidak lagi menerima pengingat jatuh tempo",
+    "If checked, tickets in this status are considered done: they stop receiving due-date reminders and count as completed in reports": "Jika dicentang, Tugas dengan status ini dianggap selesai: berhenti menerima pengingat jatuh tempo dan dihitung selesai di laporan",
     "Type @ to mention a project member.": "Ketik @ untuk menyebut anggota proyek.",
     "You were mentioned on :ticket": "Anda disebut pada :ticket",
     ":name mentioned you in a comment on the ticket :ticket.": ":name menyebut Anda dalam komentar pada Tugas :ticket.",

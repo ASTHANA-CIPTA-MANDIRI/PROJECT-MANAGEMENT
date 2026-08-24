@@ -61,7 +61,7 @@ class TicketStatusResource extends Resource
                                 Forms\Components\Checkbox::make('is_final')
                                     ->label(__('Final status'))
                                     ->helperText(
-                                        __('If checked, tickets in this status are considered done and will no longer receive due-date reminders')
+                                        __('If checked, tickets in this status are considered done: they stop receiving due-date reminders and count as completed in reports')
                                     ),
 
                                 Forms\Components\TextInput::make('order')

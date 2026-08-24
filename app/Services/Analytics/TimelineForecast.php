@@ -47,17 +47,17 @@ class TimelineForecast
     }
 
     /**
-     * Sum of estimations for tickets that have not reached the final status.
+     * Sum of estimations for tickets that have not reached a final status.
      */
     private function remainingPoints(): float
     {
-        $completedStatusId = CompletionResolver::completedStatusId($this->project);
+        $completedStatusIds = CompletionResolver::completedStatusIds($this->project);
 
         return round((float) Ticket::query()
             ->where('project_id', $this->project->id)
             ->when(
-                $completedStatusId,
-                fn ($q) => $q->where(fn ($w) => $w->where('status_id', '<>', $completedStatusId)
+                $completedStatusIds !== [],
+                fn ($q) => $q->where(fn ($w) => $w->whereNotIn('status_id', $completedStatusIds)
                     ->orWhereNull('status_id'))
             )
             ->sum('estimation'), 2);

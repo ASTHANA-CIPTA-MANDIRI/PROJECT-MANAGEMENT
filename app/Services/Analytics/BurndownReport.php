@@ -11,15 +11,16 @@ use Carbon\CarbonPeriod;
 /**
  * Burn-down for a single sprint: remaining estimated work per day, against the
  * ideal straight-line burn. A ticket's work is "burned" on the day it entered
- * the project's final status.
+ * one of the project's final statuses.
  */
 class BurndownReport
 {
-    private ?int $completedStatusId;
+    /** @var array<int, int> */
+    private array $completedStatusIds;
 
     public function __construct(private Sprint $sprint)
     {
-        $this->completedStatusId = CompletionResolver::completedStatusId($sprint->project);
+        $this->completedStatusIds = CompletionResolver::completedStatusIds($sprint->project);
     }
 
     /**
@@ -35,7 +36,7 @@ class BurndownReport
         $completedAtByTicket = $this->completedAtByTicket($tickets);
         $completedAt = $tickets->mapWithKeys(
             fn (Ticket $t) => [$t->id => $completedAtByTicket->get($t->id)
-                ?? ($t->status_id === $this->completedStatusId ? $t->updated_at : null)]
+                ?? (in_array((int) $t->status_id, $this->completedStatusIds, true) ? $t->updated_at : null)]
         );
 
         $start = $this->sprint->starts_at->copy()->startOfDay();
@@ -71,22 +72,26 @@ class BurndownReport
     }
 
     /**
-     * When each ticket entered the completed status (latest such transition
-     * per ticket). Missing keys mean no recorded activity; the caller falls
-     * back to the ticket's updated_at when it is currently completed.
+     * When each ticket entered a completed status (latest such transition per
+     * ticket). Missing keys mean no recorded activity; the caller falls back
+     * to the ticket's updated_at when it is currently completed.
      *
      * @param  \Illuminate\Support\Collection<int, Ticket>  $tickets
      * @return \Illuminate\Support\Collection<int, Carbon>
      */
     private function completedAtByTicket($tickets)
     {
-        if (! $this->completedStatusId) {
+        if ($this->completedStatusIds === []) {
             return collect();
         }
 
         return TicketActivity::query()
             ->whereIn('ticket_id', $tickets->pluck('id'))
-            ->where('new_status_id', $this->completedStatusId)
+            ->whereIn('new_status_id', $this->completedStatusIds)
+            // Moving between two final statuses (Done -> Archived) is not a
+            // fresh completion, so it must not push the burn day later.
+            ->where(fn ($query) => $query->whereNull('old_status_id')
+                ->orWhereNotIn('old_status_id', $this->completedStatusIds))
             ->orderByDesc('created_at')
             ->get()
             ->groupBy('ticket_id')

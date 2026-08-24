@@ -33,9 +33,9 @@ class AnalyticsTest extends TestCase
         parent::setUp();
         Notification::fake();
 
-        // Global workflow: the highest-order status is "done".
+        // Global workflow: "done" is the status flagged as final.
         $this->todo = TicketStatus::factory()->create(['order' => 1, 'is_default' => false]);
-        $this->done = TicketStatus::factory()->create(['order' => 5, 'is_default' => false]);
+        $this->done = TicketStatus::factory()->final()->create(['order' => 5, 'is_default' => false]);
     }
 
     private function project(): Project
@@ -45,9 +45,36 @@ class AnalyticsTest extends TestCase
 
     // ------------------------------------------------- completion resolver
 
-    public function test_completion_resolver_picks_the_highest_order_status(): void
+    public function test_completion_resolver_uses_the_is_final_flag_not_the_order(): void
     {
-        $this->assertSame($this->done->id, CompletionResolver::completedStatusId($this->project()));
+        // A later column that is not flagged final must not count as done.
+        TicketStatus::factory()->create(['order' => 9, 'is_default' => false]);
+
+        $this->assertSame([$this->done->id], CompletionResolver::completedStatusIds($this->project()));
+    }
+
+    public function test_completion_resolver_returns_every_final_status(): void
+    {
+        // The default workflow ships two: "Done" and "Archived".
+        $archived = TicketStatus::factory()->final()->create(['order' => 6, 'is_default' => false]);
+
+        $ids = CompletionResolver::completedStatusIds($this->project());
+
+        sort($ids);
+        $expected = [$this->done->id, $archived->id];
+        sort($expected);
+        $this->assertSame($expected, $ids);
+    }
+
+    public function test_completion_resolver_falls_back_to_the_highest_order_status(): void
+    {
+        // Workflow from before the is_final flag existed: nothing is flagged,
+        // so the old "last column wins" guess keeps the reports working.
+        $project = Project::factory()->customStatuses()->create();
+        TicketStatus::factory()->forProject($project)->create(['order' => 1]);
+        $last = TicketStatus::factory()->forProject($project)->create(['order' => 2]);
+
+        $this->assertSame([$last->id], CompletionResolver::completedStatusIds($project));
     }
 
     // ------------------------------------------------------------ velocity
@@ -68,6 +95,22 @@ class AnalyticsTest extends TestCase
         $this->assertEqualsWithDelta(8.0, $row['completed_points'], 0.01);
         $this->assertSame(2, $row['completed_count']);
         $this->assertTrue($row['is_closed']);
+    }
+
+    public function test_velocity_counts_tickets_in_any_final_status(): void
+    {
+        $project = $this->project();
+        $sprint = Sprint::factory()->ended()->create(['project_id' => $project->id]);
+        $archived = TicketStatus::factory()->final()->create(['order' => 6, 'is_default' => false]);
+
+        Ticket::factory()->estimated(5)->create(['project_id' => $project->id, 'sprint_id' => $sprint->id, 'status_id' => $this->done->id]);
+        Ticket::factory()->estimated(3)->create(['project_id' => $project->id, 'sprint_id' => $sprint->id, 'status_id' => $archived->id]);
+
+        $row = (new VelocityReport($project))->perSprint()->firstWhere('sprint_id', $sprint->id);
+
+        // Both count: the workflow calls both statuses done, so the report must too.
+        $this->assertEqualsWithDelta(8.0, $row['completed_points'], 0.01);
+        $this->assertSame(2, $row['completed_count']);
     }
 
     public function test_average_velocity_uses_closed_sprints_only(): void
@@ -147,6 +190,29 @@ class AnalyticsTest extends TestCase
         $this->assertEqualsWithDelta(0.0, $data['ideal'][4], 0.01);
     }
 
+    public function test_burndown_ignores_moves_between_two_final_statuses(): void
+    {
+        $this->actingAs(User::factory()->create());
+        $project = $this->project();
+        $archived = TicketStatus::factory()->final()->create(['order' => 6, 'is_default' => false]);
+
+        $start = Carbon::parse('2026-03-02');
+        $sprint = Sprint::factory()->create([
+            'project_id' => $project->id,
+            'starts_at' => $start,
+            'ends_at' => $start->copy()->addDays(4),
+        ]);
+
+        $ticket = Ticket::factory()->estimated(4)->create(['project_id' => $project->id, 'sprint_id' => $sprint->id, 'status_id' => $this->todo->id]);
+        $this->completeOn($ticket, $start->copy()->addDays(1));
+        // Archiving on day 3 is bookkeeping, not a second completion.
+        $this->moveOn($ticket, $this->done, $archived, $start->copy()->addDays(3));
+
+        $data = (new BurndownReport($sprint->fresh()))->data();
+
+        $this->assertEqualsWithDelta(0.0, $data['remaining'][1], 0.01); // burned on day 1
+    }
+
     public function test_burndown_uses_one_query_for_all_tickets_activity_history(): void
     {
         $this->actingAs(User::factory()->create());
@@ -179,10 +245,15 @@ class AnalyticsTest extends TestCase
 
     private function completeOn(Ticket $ticket, Carbon $date): void
     {
+        $this->moveOn($ticket, $this->todo, $this->done, $date);
+    }
+
+    private function moveOn(Ticket $ticket, TicketStatus $from, TicketStatus $to, Carbon $date): void
+    {
         $activity = TicketActivity::create([
             'ticket_id' => $ticket->id,
-            'old_status_id' => $this->todo->id,
-            'new_status_id' => $this->done->id,
+            'old_status_id' => $from->id,
+            'new_status_id' => $to->id,
             'user_id' => auth()->id(),
         ]);
         $activity->forceFill(['created_at' => $date])->save();
@@ -266,6 +337,19 @@ class AnalyticsTest extends TestCase
         $this->assertEqualsWithDelta(10.0, $forecast['avg_velocity'], 0.01);
         $this->assertSame(3, $forecast['sprints_remaining']);
         $this->assertNotNull($forecast['forecast_date']);
+    }
+
+    public function test_forecast_excludes_tickets_in_any_final_status(): void
+    {
+        $project = $this->project();
+        $archived = TicketStatus::factory()->final()->create(['order' => 6, 'is_default' => false]);
+
+        Ticket::factory()->estimated(7)->create(['project_id' => $project->id, 'status_id' => $this->todo->id]);
+        Ticket::factory()->estimated(5)->create(['project_id' => $project->id, 'status_id' => $this->done->id]);
+        Ticket::factory()->estimated(3)->create(['project_id' => $project->id, 'status_id' => $archived->id]);
+
+        // Only the to-do ticket is outstanding work.
+        $this->assertEqualsWithDelta(7.0, (new TimelineForecast($project))->forecast()['remaining_points'], 0.01);
     }
 
     public function test_forecast_is_not_confident_without_velocity(): void

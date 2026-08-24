@@ -9,16 +9,17 @@ use Illuminate\Support\Collection;
 
 /**
  * Team velocity: how much estimated work a project completes per sprint.
- * "Completed" means a ticket reached the project's final status
+ * "Completed" means a ticket reached one of the project's final statuses
  * (see CompletionResolver).
  */
 class VelocityReport
 {
-    private ?int $completedStatusId;
+    /** @var array<int, int> */
+    private array $completedStatusIds;
 
     public function __construct(private Project $project)
     {
-        $this->completedStatusId = CompletionResolver::completedStatusId($project);
+        $this->completedStatusIds = CompletionResolver::completedStatusIds($project);
     }
 
     /**
@@ -38,7 +39,7 @@ class VelocityReport
 
         return $sprints->map(function (Sprint $sprint) use ($ticketsBySprint) {
             $tickets = $ticketsBySprint->get($sprint->id, collect());
-            $completed = $tickets->where('status_id', $this->completedStatusId);
+            $completed = $tickets->whereIn('status_id', $this->completedStatusIds);
 
             return [
                 'sprint_id' => $sprint->id,
