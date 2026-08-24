@@ -156,4 +156,28 @@ class TicketCommentAuthorizationTest extends TestCase
 
         $this->assertSoftDeleted($comment);
     }
+
+    /**
+     * isAdministrator() must read the managing-role name from config, the
+     * same source Project::isManageableBy() uses, instead of a literal
+     * 'administrator' string. Otherwise renaming the role in config would
+     * silently disable comment moderation without any test noticing.
+     */
+    public function test_moderation_follows_the_configured_managing_role_not_a_literal_string(): void
+    {
+        config(['system.projects.affectations.roles.can_manage' => 'lead']);
+
+        $lead = $this->makeViewer();
+        $project = Project::factory()->create();
+        $project->users()->attach($lead->id, ['role' => 'lead']);
+        $ticket = Ticket::factory()->create(['project_id' => $project->id]);
+        $comment = TicketComment::factory()->create(['ticket_id' => $ticket->id]);
+
+        $this->actingAs($lead);
+
+        Livewire::test(ViewTicket::class, ['record' => $ticket->getRouteKey()])
+            ->call('doDeleteComment', $comment->id);
+
+        $this->assertSoftDeleted($comment);
+    }
 }
