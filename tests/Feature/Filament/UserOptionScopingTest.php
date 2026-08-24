@@ -3,6 +3,7 @@
 namespace Tests\Feature\Filament;
 
 use App\Filament\Pages\Kanban;
+use App\Filament\Resources\TicketResource;
 use App\Filament\Resources\TicketResource\Pages\CreateTicket;
 use App\Http\Livewire\RoadMap\IssueForm;
 use App\Models\Project;
@@ -162,5 +163,27 @@ class UserOptionScopingTest extends TestCase
             ->assertSee($this->mate->name)
             ->assertDontSee($this->colleague->name)
             ->assertDontSee($this->stranger->name);
+    }
+
+    public function test_the_ticket_list_status_filter_does_not_list_other_tenants_statuses(): void
+    {
+        $ownStatus = TicketStatus::factory()->create([
+            'project_id' => $this->project->id,
+            'name' => 'Status Proyek Sendiri',
+        ]);
+        $globalStatus = TicketStatus::factory()->create([
+            'project_id' => null,
+            'name' => 'Status Bawaan Global',
+        ]);
+        $foreignProject = Project::factory()->create(['owner_id' => $this->stranger->id]);
+        $foreignStatus = TicketStatus::factory()->create([
+            'project_id' => $foreignProject->id,
+            'name' => 'Status Proyek Asing',
+        ]);
+
+        Livewire::test(TicketResource\Pages\ListTickets::class)
+            ->assertSee($ownStatus->name)
+            ->assertSee($globalStatus->name)
+            ->assertDontSee($foreignStatus->name);
     }
 }

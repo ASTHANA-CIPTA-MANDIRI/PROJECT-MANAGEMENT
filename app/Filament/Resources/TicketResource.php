@@ -162,7 +162,9 @@ class TicketResource extends Resource
                 Tables\Filters\SelectFilter::make('status_id')
                     ->label(__('Status'))
                     ->multiple()
-                    ->options(fn () => TicketStatus::all()->pluck('name', 'id')->toArray()),
+                    ->options(fn () => TicketStatus::whereNull('project_id')
+                        ->orWhereHas('project', fn ($query) => $query->accessibleBy(auth()->user()))
+                        ->pluck('name', 'id')->toArray()),
 
                 Tables\Filters\SelectFilter::make('type_id')
                     ->label(__('Type'))
