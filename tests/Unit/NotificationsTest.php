@@ -10,9 +10,11 @@ use App\Notifications\TicketCommented;
 use App\Notifications\TicketCreated;
 use App\Notifications\TicketStatusUpdated;
 use App\Notifications\UserCreatedNotification;
+use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Notifications\Messages\MailMessage;
 use Illuminate\Support\Facades\Notification;
+use ReflectionClass;
 use Tests\TestCase;
 
 /**
@@ -222,6 +224,40 @@ class NotificationsTest extends TestCase
         // rendering the same text regardless of app locale.
         $this->assertSame('Verifikasi Alamat Email Anda', $indonesian->subject);
         $this->assertSame('Verify Your Email Address', $english->subject);
+    }
+
+    public function test_the_verify_email_notification_is_queued(): void
+    {
+        // Registration used to build and hand this mail to the mailer inside
+        // the request, so the response waited on the SMTP round-trip.
+        $this->assertInstanceOf(ShouldQueue::class, new CustomVerifyEmail);
+        $this->assertTrue((new CustomVerifyEmail)->afterCommit);
+    }
+
+    public function test_the_verification_mail_is_dispatched_as_a_queued_notification(): void
+    {
+        $user = User::factory()->unverified()->create();
+
+        $user->sendEmailVerificationNotification();
+
+        Notification::assertSentTo(
+            $user,
+            CustomVerifyEmail::class,
+            fn ($notification) => $notification instanceof ShouldQueue
+        );
+    }
+
+    public function test_every_notification_is_queued(): void
+    {
+        // Keeps a newly added notification from silently blocking a request.
+        foreach (glob(app_path('Notifications/*.php')) as $file) {
+            $class = 'App\\Notifications\\'.basename($file, '.php');
+
+            $this->assertTrue(
+                (new ReflectionClass($class))->implementsInterface(ShouldQueue::class),
+                $class.' must implement ShouldQueue.'
+            );
+        }
     }
 
     public function test_the_user_created_notification_exposes_an_array_representation(): void

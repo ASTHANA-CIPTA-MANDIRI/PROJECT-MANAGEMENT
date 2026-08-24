@@ -3,12 +3,23 @@
 namespace App\Notifications;
 
 use Illuminate\Auth\Notifications\VerifyEmail;
+use Illuminate\Bus\Queueable;
+use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Notifications\Messages\MailMessage;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\URL;
 
-class CustomVerifyEmail extends VerifyEmail
+class CustomVerifyEmail extends VerifyEmail implements ShouldQueue
 {
+    use Queueable;
+
+    public function __construct()
+    {
+        // Defer queued dispatch until the surrounding DB transaction commits,
+        // so the worker never renders a link for a user row that rolled back.
+        $this->afterCommit = true;
+    }
+
     /**
      * Build the verification email message.
      *

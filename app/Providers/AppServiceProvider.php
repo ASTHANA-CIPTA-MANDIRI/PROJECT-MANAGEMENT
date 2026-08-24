@@ -136,8 +136,10 @@ class AppServiceProvider extends ServiceProvider
             URL::forceScheme('https');
         }
 
-        VerifyEmail::toMailUsing(function ($notifiable, $url) {
-            return (new CustomVerifyEmail($url))->toMail($notifiable);
+        // CustomVerifyEmail builds its own signed URL, so the $url handed to
+        // this callback is unused - it must not be passed to the constructor.
+        VerifyEmail::toMailUsing(function ($notifiable) {
+            return (new CustomVerifyEmail)->toMail($notifiable);
         });
 
         // Social login (Google/GitHub) creates its own users. Mark them as
