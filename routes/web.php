@@ -41,7 +41,7 @@ Route::redirect('/login-redirect', '/login')->name('login');
 
 // Road map JSON data
 Route::get('road-map/data/{project}', [DataController::class, 'data'])
-    ->middleware(['verified', 'auth'])
+    ->middleware(['auth', 'verified'])
     ->name('road-map.data');
 
 // Ticket attachments / project covers - authorization is enforced in the
