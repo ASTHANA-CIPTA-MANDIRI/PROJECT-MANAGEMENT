@@ -20,8 +20,10 @@ class JiraImportService
      */
     public function connect(string $host, string $username, string $token): Client
     {
+        $validated = JiraHost::validate($host);
+
         return new Client([
-            'base_uri' => JiraHost::sanitize($host),
+            'base_uri' => $validated['origin'],
             'allow_redirects' => false,
             'timeout' => (float) config('jira.timeout', 10),
             'connect_timeout' => (float) config('jira.connect_timeout', 5),
@@ -29,6 +31,16 @@ class JiraImportService
                 'Content-Type' => 'application/json',
                 'Accept' => 'application/json',
                 'Authorization' => 'Basic '.base64_encode($username.':'.$token),
+            ],
+            // Pin the connection to the address(es) already checked above,
+            // instead of letting curl resolve the hostname again on its own
+            // right before connecting - that second, unchecked lookup is
+            // what a DNS-rebinding attack would target.
+            'curl' => [
+                CURLOPT_RESOLVE => array_map(
+                    fn (string $ip) => $validated['hostname'].':'.$validated['port'].':'.(str_contains($ip, ':') ? '['.$ip.']' : $ip),
+                    $validated['addresses']
+                ),
             ],
         ]);
     }

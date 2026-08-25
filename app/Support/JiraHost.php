@@ -50,6 +50,25 @@ class JiraHost
      */
     public static function sanitize(string $host): string
     {
+        return self::validate($host)['origin'];
+    }
+
+    /**
+     * Same checks as sanitize(), but also returns the hostname, port and the
+     * exact addresses that were resolved and cleared - so the caller can pin
+     * the connection to them (e.g. Guzzle's CURLOPT_RESOLVE) instead of
+     * letting the HTTP client resolve the hostname again on its own moments
+     * later. Without pinning, a host can pass this check and then, by the
+     * time the request actually connects, resolve to a different (internal)
+     * address - a DNS-rebinding TOCTOU between this validation and Guzzle's
+     * own lookup.
+     *
+     * @return array{origin: string, hostname: string, port: int, addresses: array<int, string>}
+     *
+     * @throws InvalidArgumentException when the host may not be called.
+     */
+    public static function validate(string $host): array
+    {
         $host = trim($host);
         $parts = parse_url($host);
 
@@ -86,7 +105,12 @@ class JiraHost
             }
         }
 
-        return $scheme.'://'.$parts['host'].(isset($parts['port']) ? ':'.$parts['port'] : '');
+        return [
+            'origin' => $scheme.'://'.$parts['host'].(isset($parts['port']) ? ':'.$parts['port'] : ''),
+            'hostname' => $hostname,
+            'port' => $parts['port'] ?? ($scheme === 'https' ? 443 : 80),
+            'addresses' => $addresses,
+        ];
     }
 
     private static function isAllowlisted(string $hostname): bool

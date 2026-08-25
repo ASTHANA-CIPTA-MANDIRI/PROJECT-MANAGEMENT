@@ -155,6 +155,43 @@ class JiraHostSsrfTest extends TestCase
     }
 
     /**
+     * The client must be pinned to the exact address(es) that were resolved
+     * and checked against the blocklist, not left to resolve the hostname
+     * again on its own - otherwise a rebinding DNS server could pass this
+     * check and then serve an internal address for the real connection.
+     */
+    public function test_the_client_is_pinned_to_the_validated_address(): void
+    {
+        JiraHost::resolveUsing(fn () => ['185.166.143.48']);
+
+        $config = app(JiraImportService::class)
+            ->connect('https://example.atlassian.net:8443', 'user', 'token')
+            ->getConfig();
+
+        $this->assertSame(
+            ['example.atlassian.net:8443:185.166.143.48'],
+            $config['curl'][CURLOPT_RESOLVE]
+        );
+    }
+
+    public function test_the_client_pins_every_resolved_address(): void
+    {
+        JiraHost::resolveUsing(fn () => ['185.166.143.48', '2a01:111:200a::1']);
+
+        $config = app(JiraImportService::class)
+            ->connect('https://example.atlassian.net', 'user', 'token')
+            ->getConfig();
+
+        $this->assertSame(
+            [
+                'example.atlassian.net:443:185.166.143.48',
+                'example.atlassian.net:443:[2a01:111:200a::1]',
+            ],
+            $config['curl'][CURLOPT_RESOLVE]
+        );
+    }
+
+    /**
      * Partial mock: connect() runs for real (and must throw), while the fetch
      * methods are the ones that would perform the actual request.
      */
