@@ -9,8 +9,19 @@ use Illuminate\Foundation\Auth\EmailVerificationRequest;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Route;
 
-// Share ticket (public, throttled to 60/min per IP)
-Route::get('/tickets/share/{ticket:code}', function (Ticket $ticket) {
+// Share ticket (public, throttled to 60/min per IP). The ticket is looked up
+// manually rather than through route-model binding: a guest gets the exact
+// same redirect-to-login response whether the code exists or not, so a batch
+// of guesses cannot be scored by response shape (ticket code enumeration).
+// Only a signed-in user - who still needs the ticket policy's blessing to
+// actually view it - sees the 404 for a code that does not exist.
+Route::get('/tickets/share/{code}', function (string $code) {
+    if (! auth()->check()) {
+        return redirect()->guest(route('login'));
+    }
+
+    $ticket = Ticket::where('code', $code)->firstOrFail();
+
     return redirect()->to(route('filament.resources.tickets.view', $ticket));
 })->middleware('throttle:public')->name('filament.resources.tickets.share');
 
