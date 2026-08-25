@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Filament\Pages;
 
+use Closure;
 use Filament\Forms\Components\Card;
 use Filament\Forms\Components\DatePicker;
 use Filament\Forms\Components\Grid;
@@ -49,6 +50,7 @@ class TimesheetExport extends AuthorizedPage implements HasForms
                         DatePicker::make('end_date')
                             ->required()
                             ->reactive()
+                            ->afterOrEqual(fn (Closure $get) => $get('start_date'))
                             ->label('End date'),
                     ]),
             ]),
