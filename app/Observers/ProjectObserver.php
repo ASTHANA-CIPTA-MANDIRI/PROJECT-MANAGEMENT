@@ -3,6 +3,7 @@
 namespace App\Observers;
 
 use App\Models\Project;
+use Illuminate\Support\Facades\DB;
 
 /**
  * Project uses SoftDeletes, but Ticket/Sprint/Epic don't cascade on their
@@ -13,10 +14,31 @@ use App\Models\Project;
  */
 class ProjectObserver
 {
+    /**
+     * Kept low enough that a project with tens of thousands of tickets never
+     * holds more than one chunk's worth of models in memory at once.
+     */
+    private const CHUNK_SIZE = 200;
+
+    /**
+     * chunkById (not get()->each) so a large project's tickets/sprints/epics
+     * are streamed through in bounded batches instead of being hydrated all
+     * at once - and chunkById specifically, because it is safe to delete rows
+     * while chunking through them (it re-queries by id > lastId, so it never
+     * skips a row shifted by the previous batch's deletes the way an
+     * offset-based chunk() would).
+     *
+     * Wrapped in one transaction so a failure partway through (e.g. a
+     * timeout on a huge project) leaves nothing cascaded rather than half of
+     * it - callers (API, Filament) also wrap the outer $project->delete()
+     * itself in a transaction, and this one nests into that via a savepoint.
+     */
     public function deleting(Project $project): void
     {
-        $project->tickets()->get()->each->delete();
-        $project->sprints()->get()->each->delete();
-        $project->epics()->get()->each->delete();
+        DB::transaction(function () use ($project) {
+            $project->tickets()->chunkById(self::CHUNK_SIZE, fn ($tickets) => $tickets->each->delete());
+            $project->sprints()->chunkById(self::CHUNK_SIZE, fn ($sprints) => $sprints->each->delete());
+            $project->epics()->chunkById(self::CHUNK_SIZE, fn ($epics) => $epics->each->delete());
+        });
     }
 }

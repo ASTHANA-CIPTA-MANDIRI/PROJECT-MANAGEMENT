@@ -9,12 +9,17 @@ use App\Filament\Resources\ProjectResource\RelationManagers;
 use App\Models\Project;
 use App\Models\ProjectFavorite;
 use App\Models\ProjectStatus;
+use App\Support\BulkDeleteAuthorizer;
 use App\Support\UserOptions;
 use Filament\Facades\Filament;
+use Filament\Notifications\Notification;
 use Filament\Resources\Form;
 use Filament\Resources\Resource;
 use Filament\Resources\Table;
 use Filament\Tables;
+use Illuminate\Database\Eloquent\Collection as EloquentCollection;
+use Illuminate\Database\Eloquent\Model;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\HtmlString;
 use Illuminate\Support\Str;
 use Maatwebsite\Excel\Facades\Excel;
@@ -179,7 +184,36 @@ class ProjectResource extends Resource
                 ])->color('secondary'),
             ])
             ->bulkActions([
-                Tables\Actions\DeleteBulkAction::make(),
+                // The shared DeleteBulkAction default (AppServiceProvider) does
+                // not wrap each record's delete() in a transaction. That is a
+                // no-op for most resources, but Project's cascade (tickets,
+                // sprints, epics - see ProjectObserver) needs it to be atomic
+                // with the project's own row, the same as the single-record
+                // delete action and the API's destroy() already are.
+                Tables\Actions\DeleteBulkAction::make()
+                    ->using(static function (EloquentCollection $records): void {
+                        $denied = 0;
+
+                        $records->each(function (Model $record) use (&$denied): void {
+                            if (! BulkDeleteAuthorizer::allows($record)) {
+                                $denied++;
+
+                                return;
+                            }
+
+                            DB::transaction(fn () => $record->delete());
+                        });
+
+                        if ($denied > 0) {
+                            Notification::make()
+                                ->warning()
+                                ->title(__('Some records were not deleted'))
+                                ->body(__(':count record(s) you are not allowed to delete were skipped.', [
+                                    'count' => $denied,
+                                ]))
+                                ->send();
+                        }
+                    }),
             ]);
     }
 

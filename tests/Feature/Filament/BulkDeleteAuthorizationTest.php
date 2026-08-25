@@ -7,6 +7,7 @@ use App\Models\Permission;
 use App\Models\Project;
 use App\Models\ProjectStatus;
 use App\Models\Role;
+use App\Models\Ticket;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Livewire\Livewire;
@@ -122,5 +123,29 @@ class BulkDeleteAuthorizationTest extends TestCase
             ->callTableBulkAction('delete', [$project]);
 
         $this->assertNull(Project::find($project->id));
+    }
+
+    // ---------------------------------------- cascade via the Filament UI (M-6)
+
+    /**
+     * The bulk delete action (ProjectResource) was given its own ->using()
+     * override so a cascading project is deleted atomically there too, not
+     * just from the row-level DeleteAction.
+     */
+    public function test_bulk_deleting_a_project_cascades_to_its_tickets(): void
+    {
+        $project = $this->project('Mine', 'MIN');
+        $project->owner_id = $this->user->id;
+        $project->save();
+        $project->users()->attach($this->user->id, [
+            'role' => config('system.projects.affectations.roles.default'),
+        ]);
+        $ticket = Ticket::factory()->create(['project_id' => $project->id]);
+
+        Livewire::test(ListProjects::class)
+            ->callTableBulkAction('delete', [$project]);
+
+        $this->assertNull(Project::find($project->id));
+        $this->assertNull(Ticket::find($ticket->id));
     }
 }

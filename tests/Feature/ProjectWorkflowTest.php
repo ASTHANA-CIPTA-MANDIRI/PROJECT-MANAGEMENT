@@ -218,4 +218,57 @@ class ProjectWorkflowTest extends TestCase
         $this->assertNull(Sprint::find($sprint->id));
         $this->assertNull(Epic::find($epic->id));
     }
+
+    /**
+     * ProjectObserver used to pull every ticket into memory with get()->each
+     * before deleting them. chunkById streams them in bounded batches instead
+     * - this proves the cascade still reaches every row regardless of count,
+     * not just the handful a single chunk would cover.
+     */
+    public function test_deleting_a_project_with_many_tickets_deletes_them_all(): void
+    {
+        $project = Project::factory()->create();
+        $tickets = Ticket::factory()->count(12)->create(['project_id' => $project->id]);
+
+        $project->delete();
+
+        foreach ($tickets as $ticket) {
+            $this->assertSoftDeleted($ticket);
+        }
+        $this->assertSame(0, Ticket::where('project_id', $project->id)->count());
+    }
+
+    /**
+     * The ticket/sprint/epic cascade runs inside one DB transaction. If
+     * anything in it fails partway through, nothing before it may be left
+     * soft-deleted either - and the project itself must not end up deleted
+     * with its cascade only half-applied.
+     */
+    public function test_a_failure_partway_through_the_cascade_rolls_back_everything(): void
+    {
+        $project = Project::factory()->scrum()->create();
+        $sprint = Sprint::factory()->create(['project_id' => $project->id]);
+        $tickets = Ticket::factory()->count(3)->create(['project_id' => $project->id]);
+        $poisoned = $tickets->last();
+
+        Ticket::deleting(function (Ticket $ticket) use ($poisoned) {
+            if ($ticket->id === $poisoned->id) {
+                throw new \RuntimeException('simulated failure mid-cascade');
+            }
+        });
+
+        try {
+            $project->delete();
+            $this->fail('expected the cascade failure to propagate to the caller');
+        } catch (\RuntimeException $e) {
+            $this->assertSame('simulated failure mid-cascade', $e->getMessage());
+        }
+
+        foreach ($tickets as $ticket) {
+            $this->assertNull($ticket->fresh()->deleted_at, 'no ticket should be left soft-deleted');
+        }
+        $this->assertNull($sprint->fresh()->deleted_at, 'the sprint must not be left soft-deleted');
+        $this->assertNull($sprint->fresh()->epic->deleted_at, 'the mirrored epic must not be left soft-deleted');
+        $this->assertNull($project->fresh()->deleted_at, 'the project itself must not end up deleted');
+    }
 }
