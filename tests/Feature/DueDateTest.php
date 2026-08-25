@@ -104,6 +104,30 @@ class DueDateTest extends TestCase
         $this->assertNotNull($record['due_date']);
     }
 
+    public function test_the_kanban_card_due_date_is_not_mangled_by_a_translation_override(): void
+    {
+        // Force the 'id' JSON group to load, then override just the "Y-m-d"
+        // line - simulating a translator turning it into a localized (and
+        // Carbon-invalid) date format. The card must still render the real
+        // ISO date: the format string must never pass through __().
+        app('translator')->get('force-load');
+        app('translator')->addLines(['*.Y-m-d' => 'BROKEN-FORMAT'], 'id');
+
+        $admin = $this->makeAdmin();
+        $this->actingAs($admin);
+        $project = \App\Models\Project::factory()->create(['owner_id' => $admin->id]);
+        $dueDate = now()->addDays(3)->startOfDay();
+        Ticket::factory()->create([
+            'project_id' => $project->id,
+            'owner_id' => $admin->id,
+            'due_date' => $dueDate,
+        ]);
+
+        Livewire::test(\App\Filament\Pages\Kanban::class, ['project' => $project])
+            ->assertSee($dueDate->format('Y-m-d'))
+            ->assertDontSee('BROKEN-FORMAT');
+    }
+
     private function makeAdmin(): User
     {
         $modules = ['project', 'ticket'];

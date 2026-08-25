@@ -21,7 +21,7 @@
                     border-radius:9999px;font-size:.75rem;color:#fff;
                     background-color: {{ $record['is_overdue'] ? '#ef4444' : '#9ca3af' }};">
             <x-heroicon-o-calendar class="w-3 h-3" />
-            {{ $record['due_date']->format(__('Y-m-d')) }}
+            {{ $record['due_date']->format('Y-m-d') }}
         </div>
     @endif
     @if($record['labels']?->count())
