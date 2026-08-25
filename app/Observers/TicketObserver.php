@@ -8,6 +8,7 @@ use App\Models\Ticket;
 use App\Models\TicketActivity;
 use App\Notifications\TicketCreated;
 use App\Notifications\TicketStatusUpdated;
+use App\Support\WidgetDataCache;
 
 /**
  * Side effects for the Ticket lifecycle, kept out of the model itself:
@@ -47,6 +48,7 @@ class TicketObserver
             $user->notify(new TicketCreated($ticket));
         }
         $ticket->project?->forgetStatistics();
+        WidgetDataCache::invalidate();
     }
 
     public function updating(Ticket $ticket): void
@@ -81,10 +83,21 @@ class TicketObserver
         } elseif ($ticket->sprint_id && $ticket->sprint->epic_id) {
             Ticket::where('id', $ticket->id)->update(['epic_id' => $ticket->sprint->epic_id]);
         }
+
+        // Dashboard widgets (TicketsByType/TicketsByPriority/TimeLogged) group
+        // by fields like type/priority/status: any of those changing must not
+        // leave a stale chart on screen for up to an hour.
+        WidgetDataCache::invalidate();
     }
 
     public function deleted(Ticket $ticket): void
     {
         $ticket->project?->forgetStatistics();
+        WidgetDataCache::invalidate();
+    }
+
+    public function restored(Ticket $ticket): void
+    {
+        WidgetDataCache::invalidate();
     }
 }

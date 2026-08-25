@@ -2,6 +2,7 @@
 
 namespace App\Filament\Widgets\Concerns;
 
+use App\Support\WidgetDataCache;
 use Illuminate\Support\Facades\Cache;
 
 /**
@@ -42,9 +43,15 @@ trait WithCachedData
 
     /**
      * Per-user variant of the key, for widgets whose data depends on the viewer.
+     * Stamped with WidgetDataCache::version() so that ticket/logged-hours
+     * changes (see TicketObserver, TicketHour) invalidate every viewer's
+     * cached entry at once, without waiting out the TTL.
      */
     protected function userCacheKey(string $suffix = ''): string
     {
-        return $this->cacheKey(implode(':', array_filter(['user', auth()->id(), $suffix])));
+        return $this->cacheKey(implode(':', array_filter([
+            'v'.WidgetDataCache::version(),
+            'user', auth()->id(), $suffix,
+        ])));
     }
 }

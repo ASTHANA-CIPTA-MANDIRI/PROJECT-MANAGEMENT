@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Support\WidgetDataCache;
 use Carbon\CarbonInterval;
 use Illuminate\Database\Eloquent\Casts\Attribute;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
@@ -20,8 +21,12 @@ class TicketHour extends Model
     {
         parent::boot();
 
-        // Logged hours feed into Project::statistics(); keep that cache fresh.
-        $forget = fn (TicketHour $item) => $item->ticket?->project?->forgetStatistics();
+        // Logged hours feed into Project::statistics() and the TimeLogged
+        // dashboard widgets; keep both caches fresh.
+        $forget = function (TicketHour $item) {
+            $item->ticket?->project?->forgetStatistics();
+            WidgetDataCache::invalidate();
+        };
         static::created($forget);
         static::updated($forget);
         static::deleted($forget);

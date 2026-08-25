@@ -255,4 +255,84 @@ class WidgetsTest extends TestCase
         Livewire::test(\App\Filament\Widgets\LatestTickets::class)->assertSuccessful();
         Livewire::test(\App\Filament\Widgets\TicketsByType::class)->assertSuccessful();
     }
+
+    // -------------------------------------------- widget cache invalidation (M-4)
+
+    /**
+     * TicketsByType/TicketsByPriority (TicketsGroupedByChartWidget) cache their
+     * counts for an hour. A new ticket of a type must show up immediately, not
+     * after the TTL expires.
+     */
+    public function test_tickets_by_type_widget_reflects_a_new_ticket_without_waiting_for_ttl(): void
+    {
+        $type = TicketType::factory()->create(['name' => 'Bug hangat']);
+        $project = Project::factory()->create(['owner_id' => $this->user->id]);
+        Ticket::factory()->create([
+            'project_id' => $project->id,
+            'owner_id' => $this->user->id,
+            'type_id' => $type->id,
+        ]);
+
+        $before = $this->widgetData(\App\Filament\Widgets\TicketsByType::class);
+        $indexBefore = array_search($type->name, $before['labels'], true);
+        $this->assertSame(1, $before['datasets'][0]['data'][$indexBefore]);
+
+        Ticket::factory()->create([
+            'project_id' => $project->id,
+            'owner_id' => $this->user->id,
+            'type_id' => $type->id,
+        ]);
+
+        $after = $this->widgetData(\App\Filament\Widgets\TicketsByType::class);
+        $indexAfter = array_search($type->name, $after['labels'], true);
+
+        $this->assertSame(2, $after['datasets'][0]['data'][$indexAfter]);
+    }
+
+    /**
+     * Changing a ticket's type (Filament resource "update") must not leave the
+     * chart showing the ticket under its old type for up to an hour.
+     */
+    public function test_tickets_by_type_widget_reflects_a_tickets_type_being_changed(): void
+    {
+        $oldType = TicketType::factory()->create(['name' => 'Tipe lama']);
+        $newType = TicketType::factory()->create(['name' => 'Tipe baru']);
+        $project = Project::factory()->create(['owner_id' => $this->user->id]);
+        $ticket = Ticket::factory()->create([
+            'project_id' => $project->id,
+            'owner_id' => $this->user->id,
+            'type_id' => $oldType->id,
+        ]);
+
+        $before = $this->widgetData(\App\Filament\Widgets\TicketsByType::class);
+        $this->assertSame(1, $before['datasets'][0]['data'][array_search($oldType->name, $before['labels'], true)]);
+
+        $ticket->update(['type_id' => $newType->id]);
+
+        $after = $this->widgetData(\App\Filament\Widgets\TicketsByType::class);
+        $this->assertSame(0, $after['datasets'][0]['data'][array_search($oldType->name, $after['labels'], true)]);
+        $this->assertSame(1, $after['datasets'][0]['data'][array_search($newType->name, $after['labels'], true)]);
+    }
+
+    /**
+     * TicketTimeLogged/UserTimeLogged (TimeLoggedChartWidget) cache their sums
+     * for an hour. Logging (or deleting) hours must show up immediately.
+     */
+    public function test_time_logged_widget_reflects_newly_logged_hours_without_waiting_for_ttl(): void
+    {
+        $project = Project::factory()->create(['owner_id' => $this->user->id]);
+        $ticket = Ticket::factory()->create(['project_id' => $project->id, 'owner_id' => $this->user->id]);
+        TicketHour::factory()->hours(2)->create(['ticket_id' => $ticket->id, 'user_id' => $this->user->id]);
+
+        $before = $this->widgetData(\App\Filament\Widgets\TicketTimeLogged::class);
+        $indexBefore = array_search($ticket->code, $before['labels'], true);
+        $this->assertSame(2.0, $before['datasets'][0]['data'][$indexBefore]);
+
+        TicketHour::factory()->hours(3)->create(['ticket_id' => $ticket->id, 'user_id' => $this->user->id]);
+
+        $after = $this->widgetData(\App\Filament\Widgets\TicketTimeLogged::class);
+        $indexAfter = array_search($ticket->code, $after['labels'], true);
+
+        $this->assertSame(5.0, $after['datasets'][0]['data'][$indexAfter]);
+    }
 }
