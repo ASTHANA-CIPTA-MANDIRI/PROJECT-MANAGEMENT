@@ -3,16 +3,21 @@
 namespace App\Models;
 
 use App\Support\HtmlSanitizer;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Casts\Attribute;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Prunable;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\SoftDeletes;
 use Laravel\Scout\Searchable;
 
 class TicketComment extends Model
 {
-    use HasFactory, Searchable, SoftDeletes;
+    use HasFactory, Prunable, Searchable, SoftDeletes;
+
+    /** How long a soft-deleted comment is kept before model:prune removes it for good. */
+    private const PRUNE_AFTER_DAYS = 90;
 
     protected $fillable = [
         'user_id', 'ticket_id', 'content',
@@ -56,5 +61,17 @@ class TicketComment extends Model
     public function ticket(): BelongsTo
     {
         return $this->belongsTo(Ticket::class, 'ticket_id', 'id');
+    }
+
+    /**
+     * Comments are high-volume user content with no restore UI (unlike
+     * projects/tickets/users - see docs/soft-deletes.md), so once soft-deleted
+     * they are permanently removed after a retention period instead of
+     * accumulating forever. Runs via the scheduled `model:prune` command
+     * (app/Console/Kernel.php), which discovers this automatically.
+     */
+    public function prunable(): Builder
+    {
+        return static::onlyTrashed()->where('deleted_at', '<=', now()->subDays(self::PRUNE_AFTER_DAYS));
     }
 }

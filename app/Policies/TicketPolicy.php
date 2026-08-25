@@ -71,6 +71,16 @@ class TicketPolicy
     }
 
     /**
+     * Restoring is the undo of delete, so it is gated the same way.
+     *
+     * @return \Illuminate\Auth\Access\Response|bool
+     */
+    public function restore(User $user, Ticket $ticket)
+    {
+        return $this->delete($user, $ticket);
+    }
+
+    /**
      * The object-level half of every ticket ability: the user is the ticket's
      * owner, the person responsible for it, or has access to the project it
      * lives in. view/update/delete only ever differ in the permission they

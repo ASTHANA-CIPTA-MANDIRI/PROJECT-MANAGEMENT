@@ -69,4 +69,14 @@ class TicketPriorityPolicy
     {
         return $user->can('Delete ticket priority');
     }
+
+    /**
+     * Restoring is the undo of delete, so it is gated the same way.
+     *
+     * @return \Illuminate\Auth\Access\Response|bool
+     */
+    public function restore(User $user, TicketPriority $ticketPriority)
+    {
+        return $this->delete($user, $ticketPriority);
+    }
 }

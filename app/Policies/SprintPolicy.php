@@ -69,4 +69,14 @@ class SprintPolicy
     {
         return $user->can('Delete sprint');
     }
+
+    /**
+     * Restoring is the undo of delete, so it is gated the same way.
+     *
+     * @return \Illuminate\Auth\Access\Response|bool
+     */
+    public function restore(User $user, Sprint $sprint)
+    {
+        return $this->delete($user, $sprint);
+    }
 }

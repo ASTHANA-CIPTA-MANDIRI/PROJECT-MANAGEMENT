@@ -28,6 +28,12 @@ class Kernel extends ConsoleKernel
         $schedule->command('tickets:due-date-reminders')
             ->dailyAt('08:00')
             ->withoutOverlapping();
+
+        // Permanently remove soft-deleted records past their retention period
+        // (currently just TicketComment::prunable(), 90 days - see that model).
+        $schedule->command('model:prune')
+            ->dailyAt('03:00')
+            ->withoutOverlapping();
     }
 
     /**

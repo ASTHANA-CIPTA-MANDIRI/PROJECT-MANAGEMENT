@@ -14,6 +14,7 @@ use Filament\Resources\RelationManagers\RelationManager;
 use Filament\Resources\Table;
 use Filament\Tables;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\SoftDeletingScope;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\HtmlString;
 
@@ -26,6 +27,19 @@ class SprintsRelationManager extends RelationManager
     public static function canViewForRecord(Model $ownerRecord): bool
     {
         return $ownerRecord->type === 'scrum';
+    }
+
+    /**
+     * The SoftDeletingScope is dropped here (not just left to TrashedFilter)
+     * because row/bulk actions like RestoreAction resolve their target
+     * record through this unfiltered base query, not through the table's
+     * filtered query - with the scope still active a trashed sprint could
+     * never be found to restore it. TrashedFilter still controls what the
+     * *listing* shows by default.
+     */
+    protected function getTableQuery(): \Illuminate\Database\Eloquent\Builder
+    {
+        return parent::getTableQuery()->withoutGlobalScopes([SoftDeletingScope::class]);
     }
 
     public static function form(Form $form): Form
@@ -82,7 +96,7 @@ class SprintsRelationManager extends RelationManager
                     ->limit(),
             ])
             ->filters([
-                //
+                Tables\Filters\TrashedFilter::make(),
             ])
             ->headerActions([
                 Tables\Actions\CreateAction::make(),
@@ -216,9 +230,11 @@ class SprintsRelationManager extends RelationManager
 
                 Tables\Actions\EditAction::make(),
                 Tables\Actions\DeleteAction::make(),
+                Tables\Actions\RestoreAction::make(),
             ])
             ->bulkActions([
                 Tables\Actions\DeleteBulkAction::make(),
+                Tables\Actions\RestoreBulkAction::make(),
             ])
             ->defaultSort('id');
     }

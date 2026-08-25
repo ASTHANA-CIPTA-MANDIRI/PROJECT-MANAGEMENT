@@ -70,6 +70,16 @@ class UserPolicy
     }
 
     /**
+     * Restoring is the undo of delete, so it is gated the same way.
+     *
+     * @return \Illuminate\Auth\Access\Response|bool
+     */
+    public function restore(User $user, User $model)
+    {
+        return $this->delete($user, $model);
+    }
+
+    /**
      * Determine whether the user can attach a user to a project.
      *
      * Filament asks the *related* model's policy, so project membership changes

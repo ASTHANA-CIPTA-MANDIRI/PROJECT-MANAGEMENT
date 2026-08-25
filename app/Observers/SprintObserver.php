@@ -47,4 +47,17 @@ class SprintObserver
             'ends_at' => $sprint->ends_at,
         ]);
     }
+
+    /**
+     * Every sprint's epic is created by (and only by) this observer, so it is
+     * never "independently deleted" the way an unrelated child could be: if
+     * it is trashed while its sprint is being restored, it can only be there
+     * because the sprint took it down with it (see ProjectObserver, which
+     * cascades to both), so bringing it back along with the sprint is safe.
+     */
+    public function restoring(Sprint $sprint): void
+    {
+        $epic = $sprint->epic()->onlyTrashed()->first();
+        $epic?->restore();
+    }
 }

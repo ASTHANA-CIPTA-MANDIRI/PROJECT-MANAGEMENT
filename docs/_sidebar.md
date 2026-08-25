@@ -48,3 +48,6 @@
     - [Backup & rollback](/cicd?id=database-backup-db-backupyml)
 - [Security advisories](/security-advisories?id=known-amp-accepted-security-advisories)
     - [Accepted npm / composer advisories](/security-advisories?id=1-npm-esbuild-vite-laravel-vite-plugin-3-advisories-dev-only)
+- [Soft delete policy](/soft-deletes?id=soft-delete-policy)
+    - [Restorable models](/soft-deletes?id=restorable-filament-ui-trashed-filter-restore-action)
+    - [Prune only](/soft-deletes?id=prune-only-no-restore-ui)

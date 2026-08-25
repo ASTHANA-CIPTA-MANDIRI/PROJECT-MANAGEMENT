@@ -69,4 +69,14 @@ class ProjectPolicy
     {
         return $user->can('Delete project');
     }
+
+    /**
+     * Restoring is the undo of delete, so it is gated the same way.
+     *
+     * @return \Illuminate\Auth\Access\Response|bool
+     */
+    public function restore(User $user, Project $project)
+    {
+        return $this->delete($user, $project);
+    }
 }

@@ -69,4 +69,14 @@ class TicketTypePolicy
     {
         return $user->can('Delete ticket type');
     }
+
+    /**
+     * Restoring is the undo of delete, so it is gated the same way.
+     *
+     * @return \Illuminate\Auth\Access\Response|bool
+     */
+    public function restore(User $user, TicketType $ticketType)
+    {
+        return $this->delete($user, $ticketType);
+    }
 }

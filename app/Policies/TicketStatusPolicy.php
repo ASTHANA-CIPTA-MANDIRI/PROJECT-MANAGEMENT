@@ -71,6 +71,16 @@ class TicketStatusPolicy
     }
 
     /**
+     * Restoring is the undo of delete, so it is gated the same way.
+     *
+     * @return \Illuminate\Auth\Access\Response|bool
+     */
+    public function restore(User $user, TicketStatus $ticketStatus)
+    {
+        return $this->delete($user, $ticketStatus);
+    }
+
+    /**
      * Determine whether the user can reorder the models.
      *
      * TicketStatusResource's table is reorderable, and the order it writes drives

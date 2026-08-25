@@ -71,22 +71,12 @@ class ActivityPolicy
     }
 
     /**
-     * Determine whether the user can restore the model.
+     * Restoring is the undo of delete, so it is gated the same way.
      *
      * @return \Illuminate\Auth\Access\Response|bool
      */
     public function restore(User $user, Activity $activity)
     {
-        //
-    }
-
-    /**
-     * Determine whether the user can permanently delete the model.
-     *
-     * @return \Illuminate\Auth\Access\Response|bool
-     */
-    public function forceDelete(User $user, Activity $activity)
-    {
-        //
+        return $this->delete($user, $activity);
     }
 }

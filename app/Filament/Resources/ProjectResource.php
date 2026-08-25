@@ -19,6 +19,7 @@ use Filament\Resources\Table;
 use Filament\Tables;
 use Illuminate\Database\Eloquent\Collection as EloquentCollection;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\SoftDeletingScope;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\HtmlString;
 use Illuminate\Support\Str;
@@ -33,11 +34,18 @@ class ProjectResource extends Resource
     /**
      * Eager load the relations the table columns read (owner, status, members
      * and the cover media) so the listing runs a fixed number of queries
-     * instead of one per row.
+     * instead of one per row. The SoftDeletingScope is dropped here (not just
+     * left to TrashedFilter) because row/bulk actions like RestoreAction
+     * resolve their target record through this unfiltered base query, not
+     * through the table's filtered query - with the scope still active a
+     * trashed row could never be found to restore it. TrashedFilter still
+     * controls what the *listing* shows by default.
      */
     public static function getEloquentQuery(): \Illuminate\Database\Eloquent\Builder
     {
-        return parent::getEloquentQuery()->with(['owner', 'status', 'users', 'media']);
+        return parent::getEloquentQuery()
+            ->withoutGlobalScopes([SoftDeletingScope::class])
+            ->with(['owner', 'status', 'users', 'media']);
     }
 
     protected static ?int $navigationSort = 1;
@@ -122,6 +130,8 @@ class ProjectResource extends Resource
                     ->label(__('Status'))
                     ->multiple()
                     ->options(fn () => ProjectStatus::all()->pluck('name', 'id')->toArray()),
+
+                Tables\Filters\TrashedFilter::make(),
             ])
             ->actions([
 
@@ -155,6 +165,7 @@ class ProjectResource extends Resource
 
                 Tables\Actions\ViewAction::make(),
                 Tables\Actions\EditAction::make(),
+                Tables\Actions\RestoreAction::make(),
 
                 Tables\Actions\ActionGroup::make([
                     Tables\Actions\Action::make('exportLogHours')
@@ -214,6 +225,7 @@ class ProjectResource extends Resource
                                 ->send();
                         }
                     }),
+                Tables\Actions\RestoreBulkAction::make(),
             ]);
     }
 
