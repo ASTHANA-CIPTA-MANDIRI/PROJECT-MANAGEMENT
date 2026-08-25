@@ -193,8 +193,11 @@ trait KanbanScrumHelper
             // runs again on every Livewire interaction and every broadcast,
             // so a query per card is a query per card per keystroke.
             ->with([
-                'project', 'owner', 'responsible', 'status', 'type', 'priority', 'epic', 'labels',
+                'project', 'owner', 'status', 'type', 'priority', 'epic', 'labels',
                 'relations', 'relations.relation:id,code',
+                // Card avatar shows ticket/project counts (x-user-avatar); load
+                // them as subqueries so they don't re-query per card per user.
+                'responsible' => fn ($query) => $query->withTicketsAndProjectsCounts(),
             ])
             ->withSum('hours', 'value');
 

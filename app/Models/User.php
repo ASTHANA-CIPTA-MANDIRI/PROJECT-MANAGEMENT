@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Support\UserCountsMemo;
 use Devaslanphp\FilamentAvatar\Core\HasAvatarUrl;
 use DutchCodingCompany\FilamentSocialite\Models\SocialiteUser;
 use Filament\Models\Contracts\FilamentUser;
@@ -106,29 +107,38 @@ class User extends Authenticatable implements FilamentUser, MustVerifyEmail
      * stays cheap for users with thousands of tickets. When eager-loaded via
      * scopeWithTicketsAndProjectsCounts() the precomputed value is reused
      * instead, same as Ticket::loggedHoursValue() prefers hours_sum_value.
+     * Otherwise the query result is memoized per user id for the rest of the
+     * request (see UserCountsMemo), since the same user is often rendered as
+     * an avatar many times on one page (e.g. repeated comment authors).
      */
     public function ticketsCount(): Attribute
     {
         return new Attribute(
             get: fn () => array_key_exists('tickets_count', $this->attributes)
                 ? (int) $this->attributes['tickets_count']
-                : Ticket::where('owner_id', $this->id)->orWhere('responsible_id', $this->id)->count()
+                : app(UserCountsMemo::class)->tickets(
+                    $this->id,
+                    fn () => Ticket::where('owner_id', $this->id)->orWhere('responsible_id', $this->id)->count()
+                )
         );
     }
 
     /**
      * Number of distinct projects this user owns and/or belongs to. See
      * ticketsCount() for why this is a COUNT query rather than relation
-     * hydration + PHP-side merge/unique.
+     * hydration + PHP-side merge/unique, and why it is memoized per request.
      */
     public function projectsCount(): Attribute
     {
         return new Attribute(
             get: fn () => array_key_exists('projects_count', $this->attributes)
                 ? (int) $this->attributes['projects_count']
-                : Project::where('owner_id', $this->id)
-                    ->orWhereHas('users', fn (Builder $query) => $query->whereKey($this->id))
-                    ->count()
+                : app(UserCountsMemo::class)->projects(
+                    $this->id,
+                    fn () => Project::where('owner_id', $this->id)
+                        ->orWhereHas('users', fn (Builder $query) => $query->whereKey($this->id))
+                        ->count()
+                )
         );
     }
 

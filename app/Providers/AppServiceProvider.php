@@ -5,6 +5,7 @@ namespace App\Providers;
 use App\Models\User;
 use App\Settings\GeneralSettings;
 use App\Support\BulkDeleteAuthorizer;
+use App\Support\UserCountsMemo;
 use DutchCodingCompany\FilamentSocialite\FilamentSocialite;
 use Filament\Facades\Filament;
 use Filament\Notifications\Notification;
@@ -39,6 +40,8 @@ class AppServiceProvider extends ServiceProvider
             \DutchCodingCompany\FilamentSocialite\Http\Controllers\SocialiteLoginController::class,
             \App\Http\Controllers\Auth\SocialiteLoginController::class,
         );
+
+        $this->app->singleton(UserCountsMemo::class);
     }
 
     /**

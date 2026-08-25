@@ -573,4 +573,120 @@ class QueryOptimizationTest extends TestCase
             "Board queries scale with card count: {$smallCount} for 2 cards, {$largeCount} for 8"
         );
     }
+
+    /**
+     * Card avatars (x-user-avatar) read responsible->ticketsCount/projectsCount.
+     * Without eager-loaded counts on the `responsible` relation, that cost two
+     * extra COUNT queries per card even for the same user on every card.
+     */
+    public function test_the_board_does_not_run_extra_avatar_count_queries_per_card(): void
+    {
+        $user = $this->userWithPermissions(['List tickets', 'View ticket']);
+        $this->actingAs($user);
+
+        $project = $this->boardWithCards($user, 5);
+        Ticket::where('project_id', $project->id)->update(['responsible_id' => $user->id]);
+
+        $board = Livewire::test(Kanban::class, ['project' => $project])->instance();
+        $records = $board->getRecords();
+
+        DB::connection()->flushQueryLog();
+        DB::connection()->enableQueryLog();
+
+        foreach ($records as $record) {
+            $record['responsible']->ticketsCount;
+            $record['responsible']->projectsCount;
+        }
+
+        $queries = collect(DB::connection()->getQueryLog())->pluck('query');
+        DB::connection()->disableQueryLog();
+
+        $this->assertTrue(
+            $queries->isEmpty(),
+            'expected ticketsCount/projectsCount to already be eager-loaded onto responsible: '.$queries->implode(' | ')
+        );
+    }
+
+    // --------------------------------------------- user avatar counts (M-2)
+
+    /**
+     * ticketsCount/projectsCount used to re-run their COUNT query on every
+     * access. The same user is often rendered as an avatar many times on one
+     * page (e.g. a comment author appearing repeatedly), so a second User
+     * instance of the same row must reuse the first instance's answer for
+     * the rest of the request instead of querying again.
+     */
+    public function test_tickets_and_projects_counts_are_memoized_per_user_per_request(): void
+    {
+        $user = User::factory()->create();
+        Ticket::factory()->create(['owner_id' => $user->id]);
+        Project::factory()->create(['owner_id' => $user->id]);
+
+        DB::connection()->flushQueryLog();
+        DB::connection()->enableQueryLog();
+
+        // Two separate model instances of the same row, as happens when the
+        // same user is loaded via two different relations (e.g. a comment
+        // author and an activity author) rather than being the same object.
+        $first = User::find($user->id);
+        $second = User::find($user->id);
+
+        $first->ticketsCount;
+        $first->projectsCount;
+        $second->ticketsCount;
+        $second->projectsCount;
+
+        $countQueries = collect(DB::connection()->getQueryLog())
+            ->pluck('query')
+            ->filter(fn (string $sql) => str_contains($sql, 'count('));
+        DB::connection()->disableQueryLog();
+
+        $this->assertCount(
+            2, $countQueries,
+            'expected exactly one tickets-count query and one projects-count query for both instances combined: '
+                .$countQueries->implode(' | ')
+        );
+    }
+
+    /**
+     * The dashboard's "latest comments" widget renders one avatar per row;
+     * when several of the latest comments share the same author, the
+     * ticketsCount/projectsCount subqueries must be eager-loaded once on the
+     * `user` relation rather than costing two queries per row.
+     */
+    public function test_the_latest_comments_widget_eager_loads_avatar_counts(): void
+    {
+        $author = $this->userWithPermissions(['List tickets']);
+        $this->actingAs($author);
+
+        $project = Project::factory()->create(['owner_id' => $author->id]);
+        $tickets = Ticket::factory()->count(3)->create([
+            'project_id' => $project->id,
+            'owner_id' => $author->id,
+        ]);
+        foreach ($tickets as $ticket) {
+            \App\Models\TicketComment::factory()->create([
+                'ticket_id' => $ticket->id,
+                'user_id' => $author->id,
+            ]);
+        }
+
+        $comments = (fn () => $this->getTableQuery())->call(new \App\Filament\Widgets\LatestComments)->get();
+
+        DB::connection()->flushQueryLog();
+        DB::connection()->enableQueryLog();
+
+        foreach ($comments as $comment) {
+            $comment->user->ticketsCount;
+            $comment->user->projectsCount;
+        }
+
+        $queries = collect(DB::connection()->getQueryLog())->pluck('query');
+        DB::connection()->disableQueryLog();
+
+        $this->assertTrue(
+            $queries->isEmpty(),
+            'expected ticketsCount/projectsCount to already be eager-loaded onto comment.user: '.$queries->implode(' | ')
+        );
+    }
 }
