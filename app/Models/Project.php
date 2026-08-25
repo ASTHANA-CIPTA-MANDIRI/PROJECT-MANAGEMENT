@@ -179,7 +179,7 @@ class Project extends Model implements HasMedia
         // instead of misusing the media() relation.
         return new Attribute(
             get: fn () => $this->getFirstMedia()?->getFullUrl()
-                ?? 'https://ui-avatars.com/api/?background=3f84f3&color=ffffff&name='.$this->name
+                ?? 'https://ui-avatars.com/api/?background=3f84f3&color=ffffff&name='.urlencode($this->name)
         );
     }
 

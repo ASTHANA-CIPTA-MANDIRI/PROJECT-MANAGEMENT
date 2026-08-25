@@ -134,6 +134,13 @@ class ProjectTest extends TestCase
         $this->assertStringContainsString('ui-avatars.com', $project->cover);
     }
 
+    public function test_cover_encodes_special_characters_in_the_project_name(): void
+    {
+        $project = Project::factory()->create(['name' => 'Acme & Sons R&D']);
+
+        $this->assertStringContainsString('name=Acme+%26+Sons+R%26D', $project->cover);
+    }
+
     public function test_cover_returns_the_uploaded_media_url(): void
     {
         Storage::fake('media');
