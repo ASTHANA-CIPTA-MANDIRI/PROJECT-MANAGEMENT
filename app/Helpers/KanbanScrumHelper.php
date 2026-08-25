@@ -93,9 +93,11 @@ trait KanbanScrumHelper
     {
         $statuses = $this->statusesQuery()->orderBy('order')->get();
 
-        // One grouped COUNT instead of one query per status.
-        $ticketCounts = Ticket::query()
-            ->when($this->project, fn ($q) => $q->where('project_id', $this->project->id))
+        // One grouped COUNT instead of one query per status - built from the
+        // same query as the cards themselves, so the header count never
+        // drifts from what recordsQuery() actually shows (filter bar and
+        // visibility included).
+        $ticketCounts = $this->recordsQuery()
             ->whereIn('status_id', $statuses->pluck('id'))
             ->groupBy('status_id')
             ->selectRaw('status_id, count(*) as aggregate')

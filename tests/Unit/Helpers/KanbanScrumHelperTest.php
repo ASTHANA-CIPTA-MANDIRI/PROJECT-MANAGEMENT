@@ -96,6 +96,44 @@ class KanbanScrumHelperTest extends TestCase
         $this->assertSame(0, $result[$statuses[2]->id]['size']);
     }
 
+    /**
+     * The filter bar (e.g. narrowing to specific users) must move the header
+     * count in lockstep with the cards it actually leaves on the board.
+     */
+    public function test_get_statuses_count_respects_the_filter_bar(): void
+    {
+        $user = User::factory()->create();
+        $other = User::factory()->create();
+        $this->actingAs($user);
+
+        $project = Project::factory()->create(['owner_id' => $user->id]);
+        $status = TicketStatus::factory()->create();
+        Ticket::factory()->create([
+            'project_id' => $project->id,
+            'owner_id' => $user->id,
+            'responsible_id' => $user->id,
+            'status_id' => $status->id,
+        ]);
+        Ticket::factory()->create([
+            'project_id' => $project->id,
+            'owner_id' => $user->id,
+            'responsible_id' => $other->id,
+            'status_id' => $status->id,
+        ]);
+
+        $helper = new class
+        {
+            use KanbanScrumHelper;
+        };
+        $helper->project = $project;
+        $helper->users = [$other->id];
+
+        $result = $helper->getStatuses()->keyBy('id');
+
+        $this->assertSame(1, $result[$status->id]['size']);
+        $this->assertCount(1, $helper->getRecords());
+    }
+
     public function test_scrum_board_without_a_running_sprint_is_empty_instead_of_failing(): void
     {
         $user = User::factory()->create();
