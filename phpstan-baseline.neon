@@ -391,26 +391,6 @@ parameters:
 			path: app/Observers/TicketObserver.php
 
 		-
-			message: "#^Method App\\\\Policies\\\\ActivityPolicy\\:\\:forceDelete\\(\\) should return bool\\|Illuminate\\\\Auth\\\\Access\\\\Response but return statement is missing\\.$#"
-			count: 1
-			path: app/Policies/ActivityPolicy.php
-
-		-
-			message: "#^Method App\\\\Policies\\\\ActivityPolicy\\:\\:restore\\(\\) should return bool\\|Illuminate\\\\Auth\\\\Access\\\\Response but return statement is missing\\.$#"
-			count: 1
-			path: app/Policies/ActivityPolicy.php
-
-		-
-			message: "#^Method App\\\\Policies\\\\ProjectStatusPolicy\\:\\:forceDelete\\(\\) should return bool\\|Illuminate\\\\Auth\\\\Access\\\\Response but return statement is missing\\.$#"
-			count: 1
-			path: app/Policies/ProjectStatusPolicy.php
-
-		-
-			message: "#^Method App\\\\Policies\\\\ProjectStatusPolicy\\:\\:restore\\(\\) should return bool\\|Illuminate\\\\Auth\\\\Access\\\\Response but return statement is missing\\.$#"
-			count: 1
-			path: app/Policies/ProjectStatusPolicy.php
-
-		-
 			message: "#^Method App\\\\Services\\\\Analytics\\\\BurndownReport\\:\\:completedAtByTicket\\(\\) should return Illuminate\\\\Support\\\\Collection\\<int, Carbon\\\\Carbon\\> but returns Illuminate\\\\Support\\\\Collection\\<\\(int\\|string\\), Carbon\\\\Carbon\\|null\\>\\.$#"
 			count: 1
 			path: app/Services/Analytics/BurndownReport.php
