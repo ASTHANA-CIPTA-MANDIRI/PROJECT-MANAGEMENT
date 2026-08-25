@@ -27,7 +27,10 @@ class TicketObserver
         // A MAX() in SQL: reading the relation as a property loaded every
         // ticket of the project into memory just to look at one column, and it
         // read the last row by insertion order rather than the highest order.
-        $highestOrder = $project->tickets()->max('order');
+        // The Kanban board's order column is per status, not per project, so
+        // the max has to be scoped the same way or the new card lands in the
+        // wrong spot in its column.
+        $highestOrder = $project->tickets()->where('status_id', $ticket->status_id)->max('order');
 
         // Numbers come from the project's counter, never from a live count:
         // deleting a ticket must not free its code for the next one.

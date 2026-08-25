@@ -90,9 +90,10 @@ class TicketTest extends TestCase
     public function test_it_increments_order_for_subsequent_tickets(): void
     {
         $project = Project::factory()->create();
+        $status = TicketStatus::factory()->create();
 
-        Ticket::factory()->create(['project_id' => $project->id]);
-        $second = Ticket::factory()->create(['project_id' => $project->id]);
+        Ticket::factory()->create(['project_id' => $project->id, 'status_id' => $status->id]);
+        $second = Ticket::factory()->create(['project_id' => $project->id, 'status_id' => $status->id]);
 
         $this->assertSame(1, $second->order);
     }
@@ -105,15 +106,35 @@ class TicketTest extends TestCase
     public function test_order_continues_from_the_highest_value_not_the_last_inserted(): void
     {
         $project = Project::factory()->create();
-        $first = Ticket::factory()->create(['project_id' => $project->id]);
-        Ticket::factory()->create(['project_id' => $project->id]);
+        $status = TicketStatus::factory()->create();
+        $first = Ticket::factory()->create(['project_id' => $project->id, 'status_id' => $status->id]);
+        Ticket::factory()->create(['project_id' => $project->id, 'status_id' => $status->id]);
 
         // Mirrors a drag-and-drop reorder: the oldest ticket moves to the end.
         $first->update(['order' => 42]);
 
-        $next = Ticket::factory()->create(['project_id' => $project->id]);
+        $next = Ticket::factory()->create(['project_id' => $project->id, 'status_id' => $status->id]);
 
         $this->assertSame(43, $next->order);
+    }
+
+    /**
+     * The Kanban board's order column is per status (each column is
+     * independently numbered), not per project - a ticket already at the
+     * bottom of one column must not push a new ticket in another, empty
+     * column further down than position 0.
+     */
+    public function test_order_is_scoped_per_status_not_the_whole_project(): void
+    {
+        $project = Project::factory()->create();
+        $statusA = TicketStatus::factory()->create();
+        $statusB = TicketStatus::factory()->create();
+
+        Ticket::factory()->create(['project_id' => $project->id, 'status_id' => $statusA->id, 'order' => 42]);
+
+        $firstInStatusB = Ticket::factory()->create(['project_id' => $project->id, 'status_id' => $statusB->id]);
+
+        $this->assertSame(0, $firstInStatusB->order);
     }
 
     public function test_a_ticket_without_a_project_fails_with_a_clear_error(): void
