@@ -3,7 +3,6 @@
 namespace App\Filament\Resources;
 
 use App\Filament\Resources\RoleResource\Pages;
-use App\Models\Permission;
 use App\Models\Role;
 use Filament\Forms;
 use Filament\Resources\Form;
@@ -11,6 +10,7 @@ use Filament\Resources\Resource;
 use Filament\Resources\Table;
 use Filament\Tables;
 use Illuminate\Database\Eloquent\Builder;
+use Illuminate\Validation\Rules\Unique;
 
 class RoleResource extends Resource
 {
@@ -45,8 +45,16 @@ class RoleResource extends Resource
                             ->columns(1)
                             ->schema([
                                 Forms\Components\TextInput::make('name')
-                                    ->label(__('Permission name'))
-                                    ->unique(table: Permission::class, column: 'name')
+                                    ->label(__('Role name'))
+                                    ->unique(
+                                        table: Role::class,
+                                        column: 'name',
+                                        ignoreRecord: true,
+                                        callback: fn (Unique $rule, ?Role $record) => $rule->where(
+                                            'guard_name',
+                                            $record?->guard_name ?? config('auth.defaults.guard'),
+                                        ),
+                                    )
                                     ->maxLength(255)
                                     ->required(),
 
@@ -84,7 +92,7 @@ class RoleResource extends Resource
         return $table
             ->columns([
                 Tables\Columns\TextColumn::make('name')
-                    ->label(__('Permission name'))
+                    ->label(__('Role name'))
                     ->sortable()
                     ->searchable(),
 
