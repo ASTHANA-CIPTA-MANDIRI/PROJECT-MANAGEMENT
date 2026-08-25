@@ -1,5 +1,9 @@
 version: "3.3"
 
+# For local development only. Nothing here is hardened for a shared or public
+# host — no TLS termination, no secrets manager, no network policy beyond
+# Compose's own internal DNS.
+
 volumes:
   mysql_data:
   # Uploaded files (spatie/laravel-medialibrary stores them under
@@ -10,22 +14,21 @@ volumes:
 
 services:
   sqldb:
-    # 5.7 reached MySQL's own end-of-life in October 2023 and stopped
-    # receiving security patches; 8.0 is the actively supported LTS series
-    # and is what Laravel 9 + PHP 8.2's pdo_mysql already target.
-    image: mysql:8.0
+    # 8.0 reaches MySQL's own end-of-life in April 2026 and stops receiving
+    # security patches; 8.4 is the current LTS series and is what Laravel 9 +
+    # PHP 8.2's pdo_mysql already target.
+    image: mysql:8.4
     container_name: helper-mysql
     volumes:
       - mysql_data:/var/lib/mysql
     environment:
-      # Same defaults as before out of the box, but now overridable from the
-      # .env file next to this one — see APP_KEY above for how Compose reads
-      # it. Change these before exposing the database beyond this Compose
-      # network's internal DNS.
+      # No fallback password: a guessable default is exactly what let this
+      # image run unpatched with known credentials before. Same pattern as
+      # APP_KEY above — set these in the .env file next to this one.
       - MYSQL_DATABASE=helper
       - MYSQL_USER=helper
-      - MYSQL_PASSWORD=${DB_PASSWORD:-helper}
-      - MYSQL_ROOT_PASSWORD=${DB_ROOT_PASSWORD:-helper}
+      - MYSQL_PASSWORD=${DB_PASSWORD:?set DB_PASSWORD in .env}
+      - MYSQL_ROOT_PASSWORD=${DB_ROOT_PASSWORD:?set DB_ROOT_PASSWORD in .env}
     command: --default-storage-engine innodb
     restart: unless-stopped
     healthcheck:
@@ -56,7 +59,7 @@ services:
       - DB_PORT=3306
       - DB_DATABASE=helper
       - DB_USERNAME=helper
-      - DB_PASSWORD=${DB_PASSWORD:-helper}
+      - DB_PASSWORD=${DB_PASSWORD:?set DB_PASSWORD in .env}
       - MAIL_MAILER=smtp
       - MAIL_HOST=smtp.mailtrap.io
       - MAIL_PORT=2525
