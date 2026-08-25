@@ -36,11 +36,6 @@ parameters:
 			path: app/Filament/Pages/Board.php
 
 		-
-			message: "#^Called 'pluck' on Laravel collection, but could have been retrieved as a query\\.$#"
-			count: 3
-			path: app/Filament/Pages/Forms/BoardFilterForm.php
-
-		-
 			message: "#^Access to an undefined property App\\\\Filament\\\\Pages\\\\JiraImport\\:\\:\\$form\\.$#"
 			count: 1
 			path: app/Filament/Pages/JiraImport.php
@@ -202,28 +197,13 @@ parameters:
 
 		-
 			message: "#^Called 'pluck' on Laravel collection, but could have been retrieved as a query\\.$#"
-			count: 3
-			path: app/Filament/Resources/TicketResource.php
-
-		-
-			message: "#^Called 'pluck' on Laravel collection, but could have been retrieved as a query\\.$#"
-			count: 3
+			count: 1
 			path: app/Filament/Resources/TicketResource/Forms/TicketForm.php
 
 		-
 			message: "#^Access to an undefined property App\\\\Models\\\\TicketComment\\:\\:\\$content\\.$#"
 			count: 1
 			path: app/Filament/Resources/TicketResource/Pages/ViewTicket.php
-
-		-
-			message: "#^Called 'pluck' on Laravel collection, but could have been retrieved as a query\\.$#"
-			count: 1
-			path: app/Filament/Resources/TicketResource/Pages/ViewTicket.php
-
-		-
-			message: "#^Called 'pluck' on Laravel collection, but could have been retrieved as a query\\.$#"
-			count: 1
-			path: app/Filament/Resources/TimesheetResource.php
 
 		-
 			message: "#^Access to an undefined property App\\\\Models\\\\Project\\:\\:\\$contributors\\.$#"
@@ -283,11 +263,6 @@ parameters:
 		-
 			message: "#^Access to an undefined property Illuminate\\\\Database\\\\Eloquent\\\\Model\\:\\:\\$id\\.$#"
 			count: 1
-			path: app/Http/Livewire/RoadMap/IssueForm.php
-
-		-
-			message: "#^Called 'pluck' on Laravel collection, but could have been retrieved as a query\\.$#"
-			count: 2
 			path: app/Http/Livewire/RoadMap/IssueForm.php
 
 		-

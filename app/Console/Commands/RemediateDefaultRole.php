@@ -4,6 +4,7 @@ namespace App\Console\Commands;
 
 use App\Models\Permission;
 use App\Models\Role;
+use App\Models\User;
 use App\Settings\GeneralSettings;
 use Illuminate\Console\Command;
 
@@ -53,7 +54,7 @@ class RemediateDefaultRole extends Command
 
         $this->warn("Default role \"{$role->name}\" is escalating ({$held}/{$totalPermissions} permissions held).");
 
-        $holders = $role->users()->get();
+        $holders = User::whereHas('roles', fn ($query) => $query->whereKey($role->getKey()))->get();
 
         if ($holders->isEmpty()) {
             $this->line('  no users currently hold this role.');
