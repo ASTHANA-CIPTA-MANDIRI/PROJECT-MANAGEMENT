@@ -18,6 +18,22 @@ class TimeLogged extends Component implements HasTable
 
     public Ticket $ticket;
 
+    /**
+     * Reading logged hours follows TicketPolicy::view, the same rule the
+     * parent ticket page already applies - this component must not rely on
+     * that alone, since a Livewire component is reachable independently of
+     * whichever page happened to render it.
+     *
+     * The check lives in `booted()`, not `mount()`: mount() only runs on the
+     * initial page load, while `booted()` also runs on every subsequent
+     * Livewire request. It cannot be `boot()` because that fires before
+     * public properties are hydrated, so $this->ticket would not exist yet.
+     */
+    public function booted(): void
+    {
+        abort_unless(auth()->user()?->can('view', $this->ticket), 403);
+    }
+
     protected function getFormModel(): Model|string|null
     {
         return $this->ticket;
