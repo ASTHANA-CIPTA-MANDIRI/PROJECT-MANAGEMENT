@@ -5,6 +5,7 @@ namespace App\Filament\Resources\ProjectResource\Forms;
 use App\Models\Project;
 use App\Models\ProjectStatus;
 use App\Support\Colors;
+use App\Support\UniqueAmongTrashedRule;
 use App\Support\UserOptions;
 use Filament\Forms;
 
@@ -71,7 +72,19 @@ class ProjectForm
                             ->label(__('Ticket prefix'))
                             ->maxLength(3)
                             ->columnSpan(2)
-                            ->unique(Project::class, column: 'ticket_prefix', ignoreRecord: true)
+                            // A plain ->unique() either locks a trashed
+                            // project's prefix forever or (if scoped to
+                            // active rows) lets it through validation only to
+                            // hit the database's own unique index on save -
+                            // see UniqueAmongTrashedRule and M-3 in
+                            // docs/soft-deletes.md.
+                            ->rule(fn ($record) => UniqueAmongTrashedRule::make(
+                                Project::class,
+                                'ticket_prefix',
+                                $record?->id,
+                                __('This ticket prefix is already used by another project.'),
+                                __('This ticket prefix belongs to a deleted project. Restore that project to reuse it, or choose a different prefix.'),
+                            ))
                             ->disabled(
                                 fn ($record) => $record && $record->tickets()->count() != 0
                             )

@@ -5,6 +5,7 @@ namespace App\Filament\Resources;
 use App\Filament\Resources\UserResource\Pages;
 use App\Models\Role;
 use App\Models\User;
+use App\Support\UniqueAmongTrashedRule;
 use Filament\Forms;
 use Filament\Resources\Form;
 use Filament\Resources\Resource;
@@ -54,11 +55,21 @@ class UserResource extends Resource
                                     ->label(__('Email address'))
                                     ->email()
                                     ->required()
-                                    ->rule(
-                                        fn ($record) => 'unique:users,email,'
-                                            .($record ? $record->id : 'NULL')
-                                            .',id,deleted_at,NULL'
-                                    )
+                                    // The raw "...,deleted_at,NULL" rule this
+                                    // replaced ignored trashed users, so it let a
+                                    // trashed user's email pass validation only
+                                    // to hit the database's own unique index (no
+                                    // deleted_at awareness) and throw a raw
+                                    // QueryException on save - see
+                                    // UniqueAmongTrashedRule and M-3 in
+                                    // docs/soft-deletes.md.
+                                    ->rule(fn ($record) => UniqueAmongTrashedRule::make(
+                                        User::class,
+                                        'email',
+                                        $record?->id,
+                                        __('This email is already used by another user.'),
+                                        __('This email belongs to a deleted user. Restore that user to reuse it, or choose a different email.'),
+                                    ))
                                     ->maxLength(255),
 
                                 Forms\Components\CheckboxList::make('roles')

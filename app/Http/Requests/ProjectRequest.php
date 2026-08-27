@@ -4,6 +4,7 @@ namespace App\Http\Requests;
 
 use App\Http\Requests\Concerns\ValidatesPartialUpdates;
 use App\Models\Project;
+use App\Support\UniqueAmongTrashedRule;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Validation\Rule;
 use Illuminate\Validation\Rules\Exists;
@@ -87,9 +88,19 @@ class ProjectRequest extends FormRequest
                 'required',
                 'string',
                 'max:3',
-                Rule::unique('projects', 'ticket_prefix')
-                    ->ignore($projectId)
-                    ->whereNull('deleted_at'),
+                // ->whereNull('deleted_at') ignored trashed projects, so a
+                // trashed project's prefix passed this rule only to hit the
+                // database's own unique index (no deleted_at awareness) and
+                // throw a raw QueryException on save. UniqueAmongTrashedRule
+                // matches what ProjectForm (the Filament panel) already does -
+                // see M-3 in docs/soft-deletes.md.
+                UniqueAmongTrashedRule::make(
+                    Project::class,
+                    'ticket_prefix',
+                    $projectId,
+                    __('This ticket prefix is already used by another project.'),
+                    __('This ticket prefix belongs to a deleted project. Restore that project to reuse it, or choose a different prefix.'),
+                ),
             ],
             'type' => ['required', Rule::in(['kanban', 'scrum'])],
             'status_type' => ['required', Rule::in(['default', 'custom'])],
@@ -138,7 +149,9 @@ class ProjectRequest extends FormRequest
     {
         return [
             'ticket_prefix.max' => __('The ticket prefix may not be greater than 3 characters.'),
-            'ticket_prefix.unique' => __('This ticket prefix is already used by another project.'),
+            // No 'ticket_prefix.unique' entry: the closure rule
+            // (UniqueAmongTrashedRule) fails via $fail() with its own message
+            // directly, so it never falls back to a rule-name-keyed message.
             'type.in' => __('The project type must be either Kanban or Scrum.'),
         ];
     }
