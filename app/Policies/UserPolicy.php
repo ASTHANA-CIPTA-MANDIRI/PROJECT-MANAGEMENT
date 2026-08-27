@@ -80,6 +80,16 @@ class UserPolicy
     }
 
     /**
+     * Bulk restoring is the undo of bulk delete, so it is gated the same way.
+     *
+     * @return \Illuminate\Auth\Access\Response|bool
+     */
+    public function restoreAny(User $user)
+    {
+        return $this->deleteAny($user);
+    }
+
+    /**
      * Determine whether the user can attach a user to a project.
      *
      * Filament asks the *related* model's policy, so project membership changes

@@ -81,6 +81,16 @@ class TicketPolicy
     }
 
     /**
+     * Bulk restoring is the undo of bulk delete, so it is gated the same way.
+     *
+     * @return \Illuminate\Auth\Access\Response|bool
+     */
+    public function restoreAny(User $user)
+    {
+        return $this->deleteAny($user);
+    }
+
+    /**
      * The object-level half of every ticket ability: the user is the ticket's
      * owner, the person responsible for it, or has access to the project it
      * lives in. view/update/delete only ever differ in the permission they

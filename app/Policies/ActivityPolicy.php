@@ -79,4 +79,14 @@ class ActivityPolicy
     {
         return $this->delete($user, $activity);
     }
+
+    /**
+     * Bulk restoring is the undo of bulk delete, so it is gated the same way.
+     *
+     * @return \Illuminate\Auth\Access\Response|bool
+     */
+    public function restoreAny(User $user)
+    {
+        return $this->deleteAny($user);
+    }
 }
