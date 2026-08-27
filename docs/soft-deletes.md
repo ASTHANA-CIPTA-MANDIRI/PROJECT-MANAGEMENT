@@ -26,6 +26,33 @@ delete a record can undo that delete). `ForceDeleteAction` was deliberately
 operation better done deliberately (`php artisan tinker` / a future dedicated
 command) than exposed as a one-click button next to Restore.
 
+Restore is not force delete: restore undoes a soft delete and is reversible;
+force delete permanently removes the row (and, per `ProjectObserver`, cascades
+in ways restore also mirrors) and cannot be undone. Treat them as separate
+decisions, not a pair that ships together.
+
+### Prerequisite before adding ForceDeleteAction
+
+None of the policies above define `forceDelete()`/`forceDeleteAny()` — there
+is no reason to, since nothing calls them yet. Under this project's
+fail-closed authorization (see `FilamentAuthorizationTest`), an ability with
+no policy method is denied to everyone, including Super Admin, not silently
+allowed. This is exactly the bug M-1 caught for `RestoreBulkAction`.
+
+So before anyone adds `ForceDeleteAction`/`ForceDeleteBulkAction` to a
+resource's table:
+
+1. Add `forceDelete(User $user, Model $model)` and `forceDeleteAny(User $user)`
+   to that model's policy, gated by permission the same way `delete()`/
+   `deleteAny()` are (do not simply alias them — deciding *who* may
+   permanently purge is a separate, usually stricter, call than who may
+   soft-delete).
+2. Add the resource to a `FORCE_DELETABLE_RESOURCES`-style list in
+   `FilamentAuthorizationTest`, mirroring `RESTORABLE_RESOURCES` /
+   `test_the_restorable_resource_list_matches_the_tables`, so the test suite
+   keeps the policy and the table's declared actions from drifting apart.
+3. Only then wire up the Filament action itself.
+
 ### Parent-child restore
 
 - **Project → tickets/sprints/epics.** `ProjectObserver::deleting()` cascades
