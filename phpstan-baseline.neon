@@ -111,11 +111,6 @@ parameters:
 			path: app/Filament/Pages/RoadMap.php
 
 		-
-			message: "#^Call to an undefined method Illuminate\\\\Database\\\\Eloquent\\\\Builder\\:\\:accessibleBy\\(\\)\\.$#"
-			count: 1
-			path: app/Filament/Pages/RoadMap.php
-
-		-
 			message: "#^Access to an undefined property App\\\\Filament\\\\Pages\\\\Scrum\\:\\:\\$form\\.$#"
 			count: 2
 			path: app/Filament/Pages/Scrum.php
@@ -179,11 +174,6 @@ parameters:
 			message: "#^Called 'pluck' on Laravel collection, but could have been retrieved as a query\\.$#"
 			count: 1
 			path: app/Filament/Resources/ProjectResource/Forms/ProjectForm.php
-
-		-
-			message: "#^Call to an undefined method Illuminate\\\\Database\\\\Eloquent\\\\Builder\\:\\:accessibleBy\\(\\)\\.$#"
-			count: 1
-			path: app/Filament/Resources/ProjectResource/Pages/ListProjects.php
 
 		-
 			message: "#^Access to an undefined property Illuminate\\\\Database\\\\Eloquent\\\\Model\\:\\:\\$type\\.$#"
@@ -346,19 +336,9 @@ parameters:
 			path: app/Models/Ticket.php
 
 		-
-			message: "#^Call to an undefined method Illuminate\\\\Database\\\\Eloquent\\\\Builder\\:\\:accessibleBy\\(\\)\\.$#"
-			count: 1
-			path: app/Models/Ticket.php
-
-		-
 			message: "#^Access to an undefined property App\\\\Models\\\\TicketComment\\:\\:\\$content\\.$#"
 			count: 1
 			path: app/Models/TicketComment.php
-
-		-
-			message: "#^Call to an undefined method Illuminate\\\\Database\\\\Eloquent\\\\Builder\\:\\:accessibleBy\\(\\)\\.$#"
-			count: 2
-			path: app/Models/User.php
 
 		-
 			message: "#^Unsafe call to private method App\\\\Models\\\\User\\:\\:resolveSuperAdminRoleId\\(\\) through static\\:\\:\\.$#"

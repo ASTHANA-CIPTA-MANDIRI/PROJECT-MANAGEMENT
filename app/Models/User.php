@@ -72,8 +72,8 @@ class User extends Authenticatable implements FilamentUser, MustVerifyEmail
     public function scopeVisibleTo(Builder $query, User $user): Builder
     {
         return $query->where(fn (Builder $query) => $query->whereKey($user->id)
-            ->orWhereHas('projectsOwning', fn (Builder $query) => $query->accessibleBy($user))
-            ->orWhereHas('projectsAffected', fn (Builder $query) => $query->accessibleBy($user)));
+            ->orWhereHas('projectsOwning', fn ($query) => $query->accessibleBy($user))
+            ->orWhereHas('projectsAffected', fn ($query) => $query->accessibleBy($user)));
     }
 
     public function projectsOwning(): HasMany

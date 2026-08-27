@@ -145,7 +145,7 @@ class RoadMap extends AuthorizedPage implements HasForms
     public function updateEpic(int $epicId): void
     {
         $this->epic = Epic::query()
-            ->whereHas('project', fn (Builder $query) => $query->accessibleBy(auth()->user()))
+            ->whereHas('project', fn ($query) => $query->accessibleBy(auth()->user()))
             ->findOrFail($epicId);
     }
 

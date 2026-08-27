@@ -6,21 +6,50 @@ configuring GitHub **Environments** and **secrets**.
 
 ## Continuous Integration — `tests.yml`
 
-Runs on every branch push and on PRs to `main`, `master`, `dev`. Two jobs:
+Runs on every branch push and on PRs to `main`, `master`, `dev`. Three jobs:
 
 | Job | What it does |
 |-----|--------------|
-| **Code style (Pint)** | `vendor/bin/pint --test app tests` — fails on style violations |
+| **Lint** | `vendor/bin/pint --test app tests` + `vendor/bin/phpstan analyse` — fails on style violations or static analysis errors |
 | **Tests** | Full PHPUnit suite (SQLite in‑memory) + a **70% line coverage gate** |
+| **Dependency audit** | `composer audit` / `npm audit` (advisory, non‑blocking) |
 
-> Enforce these as required status checks in *Settings → Branches* so nothing
-> merges or deploys without passing.
+> Enforce lint + tests as required status checks in *Settings → Branches* so
+> nothing merges or deploys without passing — `deploy-production.yml`'s
+> `ci-gate` job already refuses to deploy a commit whose `tests.yml` run
+> did not conclude `success` (see below).
 
 Code style is applied with `pint.json` (Laravel preset). Fix locally with:
 
 ```bash
 vendor/bin/pint app tests
 ```
+
+### Static analysis (PHPStan/Larastan) and `phpstan-baseline.neon`
+
+`phpstan.neon` runs at level 5 over `app/`, with `phpstan-baseline.neon`
+suppressing only *pre-existing* issues — the gate is meant to catch *new*
+ones. That baseline is a list of `message` + `path` (+ `count`) entries, so it
+goes stale in either direction whenever code that used to trigger a listed
+error moves, changes, or gets fixed: an entry left behind for a location that
+no longer produces that error becomes an *unmatched ignored pattern*, which
+PHPStan itself reports as an error.
+
+When your change touches code covered by a baseline entry (you fixed the
+underlying issue, or moved the offending line elsewhere), don't hand-edit or
+copy baseline entries — regenerate the whole file so it matches the code as it
+now stands:
+
+```bash
+vendor/bin/phpstan analyse --no-progress --generate-baseline
+```
+
+Then re-run `vendor/bin/phpstan analyse --no-progress` and confirm it reports
+`[OK] No errors` — a diff of `phpstan-baseline.neon` should only ever shrink or
+shift for the lines you actually touched, never grow for unrelated code.
+Prefer fixing the root cause (usually a missing/incorrect PHPDoc generic, e.g.
+`Builder<Project>`, on a local Eloquent scope call site) over adding a new
+ignore — the baseline is a record of debt, not a place to file new issues.
 
 ## Deployment
 

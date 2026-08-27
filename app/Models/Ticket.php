@@ -64,7 +64,7 @@ class Ticket extends Model implements HasMedia
     {
         return $query->where(fn (Builder $query) => $query->where('owner_id', $user->id)
             ->orWhere('responsible_id', $user->id)
-            ->orWhereHas('project', fn (Builder $query) => $query->accessibleBy($user)));
+            ->orWhereHas('project', fn ($query) => $query->accessibleBy($user)));
     }
 
     public function owner(): BelongsTo
