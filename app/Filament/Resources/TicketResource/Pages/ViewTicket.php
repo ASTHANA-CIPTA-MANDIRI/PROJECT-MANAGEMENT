@@ -136,24 +136,19 @@ class ViewTicket extends ViewRecord implements HasForms
                     ->label(__('Export time logged'))
                     ->icon('heroicon-o-document-download')
                     ->color('warning')
-                    ->visible(
-                        fn () => $this->record->watchers->where('id', auth()->user()->id)->count()
-                            && $this->record->hours()->count()
-                    )
-                    ->action(fn () => Excel::download(
-                        new TicketHoursExport($this->record),
-                        'time_'.str_replace('-', '_', $this->record->code).'.csv',
-                        \Maatwebsite\Excel\Excel::CSV,
-                        ['Content-Type' => 'text/csv']
-                    )),
+                    ->visible(fn () => $this->canExportLogHours())
+                    ->action(function () {
+                        abort_unless($this->canExportLogHours(), 403);
+
+                        return Excel::download(
+                            new TicketHoursExport($this->record),
+                            'time_'.str_replace('-', '_', $this->record->code).'.csv',
+                            \Maatwebsite\Excel\Excel::CSV,
+                            ['Content-Type' => 'text/csv']
+                        );
+                    }),
             ])
-                ->visible(fn () => (in_array(
-                    auth()->user()->id,
-                    [$this->record->owner_id, $this->record->responsible_id]
-                )) || (
-                    $this->record->watchers->where('id', auth()->user()->id)->count()
-                    && $this->record->hours()->count()
-                ))
+                ->visible(fn () => $this->canExportLogHours())
                 ->color('secondary'),
         ];
     }
@@ -239,6 +234,19 @@ class ViewTicket extends ViewRecord implements HasForms
     {
         return auth()->user()->can('create', TicketHour::class)
             && in_array(auth()->user()->id, [$this->record->owner_id, $this->record->responsible_id]);
+    }
+
+    /**
+     * Gate for "Export time logged": owner/responsible, or a watcher on a
+     * ticket that already has hours logged. Used for both the group's and
+     * the action's visible() and re-checked inside action() itself - see
+     * canLogHours() above for why the framework's "hidden means disabled"
+     * behaviour is not relied on alone.
+     */
+    protected function canExportLogHours(): bool
+    {
+        return in_array(auth()->user()->id, [$this->record->owner_id, $this->record->responsible_id])
+            || ($this->record->watchers->where('id', auth()->user()->id)->count() && $this->record->hours()->count());
     }
 
     public function isAdministrator(): bool
