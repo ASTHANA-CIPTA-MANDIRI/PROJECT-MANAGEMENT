@@ -31,7 +31,7 @@ class ProjectFactory extends Factory
 
     public function scrum(): static
     {
-        return $this->state(fn() => ['type' => 'scrum']);
+        return $this->state(fn () => ['type' => 'scrum']);
     }
 
     /**
@@ -39,6 +39,6 @@ class ProjectFactory extends Factory
      */
     public function customStatuses(): static
     {
-        return $this->state(fn() => ['status_type' => 'custom']);
+        return $this->state(fn () => ['status_type' => 'custom']);
     }
 }

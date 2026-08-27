@@ -18,7 +18,7 @@ class SprintFactory extends Factory
         $startsAt = now()->startOfDay();
 
         return [
-            'name' => 'Sprint ' . fake()->unique()->numberBetween(1, 9999),
+            'name' => 'Sprint '.fake()->unique()->numberBetween(1, 9999),
             'starts_at' => $startsAt,
             'ends_at' => $startsAt->copy()->addWeek()->subDay(),
             'description' => fake()->sentence(),
@@ -33,7 +33,7 @@ class SprintFactory extends Factory
      */
     public function started(): static
     {
-        return $this->state(fn() => ['started_at' => now()]);
+        return $this->state(fn () => ['started_at' => now()]);
     }
 
     /**
@@ -41,7 +41,7 @@ class SprintFactory extends Factory
      */
     public function ended(): static
     {
-        return $this->state(fn() => [
+        return $this->state(fn () => [
             'started_at' => now()->subWeek(),
             'ended_at' => now(),
         ]);

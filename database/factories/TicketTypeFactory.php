@@ -24,6 +24,6 @@ class TicketTypeFactory extends Factory
 
     public function default(): static
     {
-        return $this->state(fn() => ['is_default' => true]);
+        return $this->state(fn () => ['is_default' => true]);
     }
 }

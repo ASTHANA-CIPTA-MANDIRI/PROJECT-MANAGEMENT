@@ -27,6 +27,6 @@ class TicketHourFactory extends Factory
 
     public function hours(float $value): static
     {
-        return $this->state(fn() => ['value' => $value]);
+        return $this->state(fn () => ['value' => $value]);
     }
 }
