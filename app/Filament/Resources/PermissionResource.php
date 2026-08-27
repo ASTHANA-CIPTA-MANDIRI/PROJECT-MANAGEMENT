@@ -12,6 +12,13 @@ use Filament\Tables;
 
 class PermissionResource extends Resource
 {
+    /**
+     * No getEloquentQuery() override, unlike every other resource here: the
+     * model isn't tenant/user-scoped (permissions are global, not per-project),
+     * doesn't use SoftDeletes (nothing to unscope), and the table below shows
+     * no relation that would need eager loading. Add an override only if one
+     * of those becomes true.
+     */
     protected static ?string $model = Permission::class;
 
     protected static ?string $navigationIcon = 'heroicon-o-clipboard-check';
