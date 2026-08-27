@@ -68,6 +68,30 @@ delete via direct DB access if truly needed — then permanently removed by
 the comment from the search index automatically when it is finally deleted
 (the same `deleted` hook that normally fires).
 
+## Unique values held by a trashed row (M-3)
+
+`users.email` and `projects.ticket_prefix` are unique at the database level,
+but that index has no idea what `deleted_at` means: a soft-deleted row still
+counts as a conflict. Left alone this goes wrong in one of two ways
+depending on how the uniqueness check is written:
+
+- Check every row (including trashed) → the value is locked forever, even
+  though the row holding it is invisible in every list and the admin has no
+  way to tell *why* their new value was rejected.
+- Exclude trashed rows from the check → validation passes, but the plain
+  database index still rejects the insert, and a raw `QueryException` bubbles
+  out as an HTTP 500 (this was happening for `UserResource` and the
+  `ProjectRequest` API endpoint before this fix).
+
+`App\Support\UniqueAmongTrashedRule` picks a third option: always find the
+conflict (so the database exception is never reached), but distinguish the
+two cases in the message — an active duplicate gets the normal "already
+taken", while a value held by a trashed row says so explicitly and points at
+restoring that row. Used by `UserResource` (email), `ProjectForm` (ticket
+prefix, Filament panel) and `ProjectRequest` (ticket prefix, API), so panel
+and API behave the same way. No schema or index change; the same restore
+path documented above is how an admin actually gets the value back.
+
 ## Why not everything
 
 `php artisan model:prune` only ever discovers models that opt in via the
