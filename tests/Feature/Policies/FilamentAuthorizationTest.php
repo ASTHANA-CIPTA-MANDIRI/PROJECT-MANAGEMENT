@@ -40,7 +40,7 @@ class FilamentAuthorizationTest extends TestCase
             'viewAny', 'create', 'update', 'delete', 'deleteAny',
         ],
         \App\Filament\Resources\ProjectResource\RelationManagers\SprintsRelationManager::class => [
-            'viewAny', 'create', 'update', 'delete', 'deleteAny',
+            'viewAny', 'create', 'update', 'delete', 'deleteAny', 'restore', 'restoreAny',
         ],
         \App\Filament\Resources\ProjectResource\RelationManagers\UsersRelationManager::class => [
             'viewAny', 'create', 'update', 'delete', 'deleteAny', 'attach', 'detach', 'detachAny',
@@ -83,6 +83,29 @@ class FilamentAuthorizationTest extends TestCase
         \App\Filament\Resources\TicketStatusResource::class,
     ];
 
+    /**
+     * Resources whose table declares `RestoreAction`/`RestoreBulkAction` -
+     * meaning the panel asks the policy for `restore`/`restoreAny` too. Not every
+     * resource's model uses SoftDeletes, so this is opt-in the same way
+     * REORDERABLE_RESOURCES is, and test_the_restorable_resource_list_matches_the_tables
+     * below keeps it from drifting out of sync with the tables themselves - this is
+     * exactly the gap that let M-1 (RestoreBulkAction with no restoreAny policy
+     * method, denied even to Super Admin under fail-closed authorization) go
+     * undetected.
+     *
+     * @var array<int, class-string>
+     */
+    private const RESTORABLE_RESOURCES = [
+        \App\Filament\Resources\ActivityResource::class,
+        \App\Filament\Resources\ProjectResource::class,
+        \App\Filament\Resources\ProjectStatusResource::class,
+        \App\Filament\Resources\TicketPriorityResource::class,
+        \App\Filament\Resources\TicketResource::class,
+        \App\Filament\Resources\TicketStatusResource::class,
+        \App\Filament\Resources\TicketTypeResource::class,
+        \App\Filament\Resources\UserResource::class,
+    ];
+
     public function test_every_resource_ability_has_a_policy_method(): void
     {
         $resources = Filament::getResources();
@@ -94,6 +117,11 @@ class FilamentAuthorizationTest extends TestCase
 
             if (in_array($resource, self::REORDERABLE_RESOURCES, true)) {
                 $abilities[] = 'reorder';
+            }
+
+            if (in_array($resource, self::RESTORABLE_RESOURCES, true)) {
+                $abilities[] = 'restore';
+                $abilities[] = 'restoreAny';
             }
 
             foreach ($abilities as $ability) {
@@ -115,6 +143,23 @@ class FilamentAuthorizationTest extends TestCase
                 $declares,
                 "{$resource} declares ->reorderable() but is not in REORDERABLE_RESOURCES (or "
                 .'the other way round), so its reorder ability is not being checked.'
+            );
+        }
+    }
+
+    public function test_the_restorable_resource_list_matches_the_tables(): void
+    {
+        foreach (Filament::getResources() as $resource) {
+            $declares = str_contains(
+                file_get_contents((new \ReflectionClass($resource))->getFileName()),
+                'RestoreBulkAction::make('
+            );
+
+            $this->assertSame(
+                in_array($resource, self::RESTORABLE_RESOURCES, true),
+                $declares,
+                "{$resource} declares RestoreBulkAction but is not in RESTORABLE_RESOURCES (or "
+                .'the other way round), so its restore/restoreAny abilities are not being checked.'
             );
         }
     }
