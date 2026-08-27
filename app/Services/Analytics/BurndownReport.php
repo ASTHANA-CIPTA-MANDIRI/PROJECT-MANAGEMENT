@@ -44,22 +44,21 @@ class BurndownReport
         $days = collect(CarbonPeriod::create($start, $end)->toArray());
         $spanDays = max($start->diffInDays($end), 1);
 
+        $burnedByDayIndex = $this->burnedByDayIndex($tickets, $completedAt, $start, $days->count());
+
         $labels = [];
         $ideal = [];
         $remaining = [];
+        $burned = 0.0;
 
         foreach ($days->values() as $index => $day) {
             $labels[] = $day->toDateString();
             $ideal[] = round($total - ($total * $index / $spanDays), 2);
 
-            $burned = $tickets->sum(function (Ticket $t) use ($completedAt, $day) {
-                $when = $completedAt[$t->id];
-
-                return $when && $when->lte($day->copy()->endOfDay())
-                    ? (float) $t->estimation
-                    : 0;
-            });
-
+            // Cumulative: a ticket burned on an earlier day stays burned on
+            // every day after it, so each day only ever adds its own bucket
+            // instead of re-summing every ticket again.
+            $burned += $burnedByDayIndex[$index];
             $remaining[] = round($total - $burned, 2);
         }
 
@@ -69,6 +68,42 @@ class BurndownReport
             'ideal' => $ideal,
             'remaining' => $remaining,
         ];
+    }
+
+    /**
+     * Each ticket's estimation, bucketed onto the index (within $days) of the
+     * first sprint day whose end it was completed on or before - the same day
+     * the O(days x tickets) `$when->lte($day->endOfDay())` scan used to place
+     * it on, just computed once per ticket instead of once per ticket per day.
+     * A ticket completed before the sprint started lands on day 0, matching
+     * the old scan (day 0's end is already >= a $when from before the sprint).
+     * A ticket completed after the sprint's last day, or not completed at
+     * all, is left out of every bucket.
+     *
+     * @param  \Illuminate\Support\Collection<int, Ticket>  $tickets
+     * @param  \Illuminate\Support\Collection<int, ?Carbon>  $completedAt
+     * @return array<int, float>
+     */
+    private function burnedByDayIndex($tickets, $completedAt, Carbon $start, int $dayCount): array
+    {
+        $burnedByDayIndex = array_fill(0, $dayCount, 0.0);
+        $lastIndex = $dayCount - 1;
+
+        foreach ($tickets as $t) {
+            $when = $completedAt[$t->id];
+            if (! $when) {
+                continue;
+            }
+
+            $dayIndex = $when->lte($start) ? 0 : $start->diffInDays($when->copy()->startOfDay());
+            if ($dayIndex > $lastIndex) {
+                continue;
+            }
+
+            $burnedByDayIndex[$dayIndex] += (float) $t->estimation;
+        }
+
+        return $burnedByDayIndex;
     }
 
     /**

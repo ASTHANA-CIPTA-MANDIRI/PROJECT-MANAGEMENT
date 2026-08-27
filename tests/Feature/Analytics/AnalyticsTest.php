@@ -213,6 +213,77 @@ class AnalyticsTest extends TestCase
         $this->assertEqualsWithDelta(0.0, $data['remaining'][1], 0.01); // burned on day 1
     }
 
+    /**
+     * BurndownReport used to re-sum every ticket for every displayed day
+     * (O(days x tickets)). It now buckets each ticket's estimation onto a
+     * single day once and sums cumulatively, so this covers the edge cases
+     * that reshuffle could get wrong: no tickets, a ticket completed before
+     * the sprint even started, and one never completed at all.
+     */
+    public function test_burndown_with_no_tickets_stays_flat_at_zero(): void
+    {
+        $this->actingAs(User::factory()->create());
+        $project = $this->project();
+
+        $start = Carbon::parse('2026-03-02');
+        $sprint = Sprint::factory()->create([
+            'project_id' => $project->id,
+            'starts_at' => $start,
+            'ends_at' => $start->copy()->addDays(4),
+        ]);
+
+        $data = (new BurndownReport($sprint->fresh()))->data();
+
+        $this->assertSame(0.0, $data['total']);
+        $this->assertEqualsWithDelta([0.0, 0.0, 0.0, 0.0, 0.0], $data['remaining'], 0.01);
+    }
+
+    public function test_burndown_counts_a_ticket_completed_before_the_sprint_started_as_burned_from_day_zero(): void
+    {
+        $this->actingAs(User::factory()->create());
+        $project = $this->project();
+
+        $start = Carbon::parse('2026-03-02');
+        $sprint = Sprint::factory()->create([
+            'project_id' => $project->id,
+            'starts_at' => $start,
+            'ends_at' => $start->copy()->addDays(4),
+        ]);
+
+        $ticket = Ticket::factory()->estimated(5)->create([
+            'project_id' => $project->id, 'sprint_id' => $sprint->id, 'status_id' => $this->todo->id,
+        ]);
+        // Completed a full week before the sprint even started.
+        $this->completeOn($ticket, $start->copy()->subDays(7));
+
+        $data = (new BurndownReport($sprint->fresh()))->data();
+
+        $this->assertEqualsWithDelta(0.0, $data['remaining'][0], 0.01, 'already burned on the very first day');
+        $this->assertEqualsWithDelta(0.0, $data['remaining'][4], 0.01, 'stays burned through the rest of the sprint');
+    }
+
+    public function test_burndown_leaves_an_incomplete_ticket_unburned_through_the_whole_sprint(): void
+    {
+        $this->actingAs(User::factory()->create());
+        $project = $this->project();
+
+        $start = Carbon::parse('2026-03-02');
+        $sprint = Sprint::factory()->create([
+            'project_id' => $project->id,
+            'starts_at' => $start,
+            'ends_at' => $start->copy()->addDays(4),
+        ]);
+
+        Ticket::factory()->estimated(7)->create([
+            'project_id' => $project->id, 'sprint_id' => $sprint->id, 'status_id' => $this->todo->id,
+        ]);
+
+        $data = (new BurndownReport($sprint->fresh()))->data();
+
+        $this->assertEqualsWithDelta(7.0, $data['remaining'][0], 0.01);
+        $this->assertEqualsWithDelta(7.0, $data['remaining'][4], 0.01, 'never completed, so never burns off');
+    }
+
     public function test_burndown_uses_one_query_for_all_tickets_activity_history(): void
     {
         $this->actingAs(User::factory()->create());
