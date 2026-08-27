@@ -33,11 +33,22 @@ class TicketResource extends Resource
      * unfiltered base query, not through the table's filtered query - with
      * the scope still active a trashed row could never be found to restore
      * it. TrashedFilter still controls what the *listing* shows by default.
+     *
+     * Also the access boundary itself, not just this page's listing: a ticket
+     * is only reachable through the panel (list, view, edit, row/bulk
+     * actions, route binding) when its owner/responsible is the current user
+     * or its project is accessible to them - matching TicketPolicy::isInvolved().
+     * Living here instead of only on ListTickets::getTableQuery() means any
+     * other page or action built on this resource inherits the same scope by
+     * default, rather than needing to repeat it.
      */
     public static function getEloquentQuery(): \Illuminate\Database\Eloquent\Builder
     {
         return parent::getEloquentQuery()
             ->withoutGlobalScopes([SoftDeletingScope::class])
+            ->where(fn ($query) => $query->where('owner_id', auth()->user()->id)
+                ->orWhere('responsible_id', auth()->user()->id)
+                ->orWhereHas('project', fn ($query) => $query->accessibleBy(auth()->user())))
             ->with([
                 'project',
                 'owner' => fn ($query) => $query->withTicketsAndProjectsCounts(),

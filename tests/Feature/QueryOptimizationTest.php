@@ -114,6 +114,11 @@ class QueryOptimizationTest extends TestCase
         $owner = User::factory()->create();
         Project::factory()->count(5)->create(['owner_id' => $owner->id]);
 
+        // ProjectResource::getEloquentQuery() scopes to the acting user's
+        // accessible projects (L-8) - own every project here so all 5 stay
+        // in scope and the query count still reflects 5 rows.
+        $this->actingAs($owner);
+
         DB::connection()->enableQueryLog();
 
         $projects = ProjectResource::getEloquentQuery()->get();
@@ -262,6 +267,11 @@ class QueryOptimizationTest extends TestCase
         $project = Project::factory()->create();
         Ticket::factory()->count(5)->create(['project_id' => $project->id, 'owner_id' => $owner->id]);
 
+        // TicketResource::getEloquentQuery() scopes to the acting user's
+        // accessible tickets (L-8) - own every ticket here so all 5 stay in
+        // scope and the query count still reflects 5 rows.
+        $this->actingAs($owner);
+
         DB::connection()->flushQueryLog();
         DB::connection()->enableQueryLog();
 
@@ -281,6 +291,11 @@ class QueryOptimizationTest extends TestCase
     {
         $project = Project::factory()->create();
         Ticket::factory()->count(5)->create(['project_id' => $project->id]);
+
+        // TicketResource::getEloquentQuery() scopes to the acting user's
+        // accessible tickets (L-8) - act as the project's owner so all 5
+        // stay in scope regardless of each ticket's own owner/responsible.
+        $this->actingAs($project->owner);
 
         DB::connection()->enableQueryLog();
 

@@ -40,11 +40,20 @@ class ProjectResource extends Resource
      * through the table's filtered query - with the scope still active a
      * trashed row could never be found to restore it. TrashedFilter still
      * controls what the *listing* shows by default.
+     *
+     * Also the access boundary itself, not just this page's listing: a
+     * project is only reachable through the panel (list, view, edit,
+     * row/bulk actions, route binding, relation managers) when the current
+     * user owns it or is a member - matching Project::isAccessibleBy(). Living
+     * here instead of only on ListProjects::getTableQuery() means any other
+     * page or action built on this resource inherits the same scope by
+     * default, rather than needing to repeat it.
      */
     public static function getEloquentQuery(): \Illuminate\Database\Eloquent\Builder
     {
         return parent::getEloquentQuery()
             ->withoutGlobalScopes([SoftDeletingScope::class])
+            ->accessibleBy(auth()->user())
             ->with(['owner', 'status', 'users', 'media']);
     }
 
