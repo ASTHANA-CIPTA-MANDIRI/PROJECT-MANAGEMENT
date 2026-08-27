@@ -7,7 +7,6 @@ use Filament\Resources\Form;
 use Filament\Resources\RelationManagers\RelationManager;
 use Filament\Resources\Table;
 use Filament\Tables;
-use Illuminate\Database\Eloquent\Model;
 
 class UsersRelationManager extends RelationManager
 {
@@ -43,7 +42,6 @@ class UsersRelationManager extends RelationManager
                 //
             ])
             ->headerActions([
-                Tables\Actions\CreateAction::make(),
                 Tables\Actions\AttachAction::make()
                     ->preloadRecordSelect()
                     ->form(fn (Tables\Actions\AttachAction $action): array => [
@@ -66,27 +64,10 @@ class UsersRelationManager extends RelationManager
                             ->options(fn () => config('system.projects.affectations.roles.list'))
                             ->required(),
                     ]),
-                Tables\Actions\DeleteAction::make(),
                 Tables\Actions\DetachAction::make(),
             ])
             ->bulkActions([
-                Tables\Actions\DeleteBulkAction::make(),
                 Tables\Actions\DetachBulkAction::make(),
             ]);
-    }
-
-    protected function canCreate(): bool
-    {
-        return false;
-    }
-
-    protected function canDelete(Model $record): bool
-    {
-        return false;
-    }
-
-    protected function canDeleteAny(): bool
-    {
-        return false;
     }
 }
