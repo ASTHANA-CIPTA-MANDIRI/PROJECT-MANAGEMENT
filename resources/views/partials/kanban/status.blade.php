@@ -1,4 +1,4 @@
-<div class="kanban-statuses">
+<div class="kanban-statuses" wire:key="status-{{ $status['id'] }}">
     <div class="status-header"
          style="border-color: {{ \App\Support\Colors::safe($status['color']) }}66;">
         <span>{{ $status['title'] }}</span>

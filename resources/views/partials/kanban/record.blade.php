@@ -1,4 +1,4 @@
-<div class="kanban-record" data-id="{{ $record['id'] }}">
+<div class="kanban-record" data-id="{{ $record['id'] }}" wire:key="record-{{ $record['id'] }}">
     <button type="button" class="handle">
         <x-heroicon-o-arrows-expand class="w-5 h-5" />
     </button>
