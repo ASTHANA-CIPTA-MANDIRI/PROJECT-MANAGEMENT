@@ -53,9 +53,18 @@ return [
     | with your search indexes after every open database transaction has
     | been committed, thus preventing any discarded data from syncing.
     |
+    | Several create/import paths (CreateTicket, ImportJiraTicketsJob, the
+    | project/ticket/sprint API controllers, ...) wrap their writes in
+    | DB::transaction(). Without this, a Searchable model's index update
+    | dispatches mid-transaction and would stick even if the transaction then
+    | rolls back. Safe for every engine here: the "collection" driver used in
+    | dev/testing (phpunit.xml) queries the database directly and its
+    | update()/delete() are no-ops regardless of this setting, so this only
+    | changes timing for a real external engine (e.g. Meilisearch).
+    |
     */
 
-    'after_commit' => false,
+    'after_commit' => true,
 
     /*
     |--------------------------------------------------------------------------

@@ -142,6 +142,29 @@ class TransactionTest extends TestCase
         Notification::assertSentTo($ticket->owner, TicketCreated::class);
     }
 
+    // -------------------------------------------------- scout search index
+
+    /**
+     * Ticket/Project/TicketComment all use Scout's Searchable trait, and
+     * several of the paths above (Jira import, sprint start, the API
+     * controllers) wrap their writes in DB::transaction(). Scout's own
+     * ModelObserver has no after_commit branching of its own - it is
+     * Laravel's event Dispatcher that defers a listener until commit, and
+     * only for a listener exposing a truthy $afterCommit property (see
+     * Illuminate\Events\Dispatcher::afterCommit()). config/scout.php sets
+     * that property via ModelObserver's constructor, so this asserts the
+     * property Laravel actually reads rather than just the config value -
+     * same reasoning as test_notifications_defer_until_after_commit() above,
+     * which for the same reason (a test's wrapping transaction never truly
+     * commits under RefreshDatabase) cannot observe the deferred dispatch
+     * itself either.
+     */
+    public function test_search_indexing_defers_until_the_transaction_commits(): void
+    {
+        $this->assertTrue(config('scout.after_commit'));
+        $this->assertTrue((new \Laravel\Scout\ModelObserver)->afterCommit);
+    }
+
     // ------------------------------------------------------ sprint start
 
     public function test_starting_a_sprint_atomically_closes_the_running_one(): void
