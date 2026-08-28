@@ -99,13 +99,16 @@ jobs:
             junit.xml
 
   security-audit:
-    name: Dependency audit (advisory)
+    name: Dependency audit (known vs new advisories)
     runs-on: ubuntu-latest
-    # Advisory only: surfaces known vulnerabilities in the CI log without
-    # blocking merges. It stays non-blocking while the app is on Laravel 9
-    # (EOL, so it carries framework advisories); make it required once the
-    # framework upgrade lands.
-    continue-on-error: true
+    # Gate, not advisory: known/accepted advisories (documented with a risk
+    # assessment in docs/security-advisories.md, listed by ID in
+    # docs/accepted-security-advisories.json) are logged but do not fail the
+    # job. Anything NOT in that accepted list — a genuinely new advisory —
+    # fails CI. No blanket continue-on-error on the job: that would hide a
+    # new vulnerability behind the same "advisory only" label as the already
+    # -reviewed Laravel 9 / Vite 3 findings. Only the purely informational
+    # log steps below are individually allowed to fail.
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
 
@@ -118,16 +121,78 @@ jobs:
       - name: Install PHP dependencies
         run: composer install --prefer-dist --no-interaction --no-progress
 
-      - name: Composer audit
-        # Report abandoned packages (currently transitive deps of Filament 2,
-        # unavoidable until the Filament 3 upgrade) but only fail on actual
-        # security advisories, so a real vulnerability stands out.
+      - name: Composer audit (human-readable log, incl. abandoned packages)
+        # Informational only: lists abandoned transitive packages (currently
+        # pulled in by Filament 2, unavoidable until the Filament 3 upgrade)
+        # alongside any advisories. The gate step below makes the actual
+        # pass/fail decision, so this step is allowed to exit non-zero.
+        continue-on-error: true
         run: composer audit --abandoned=report
+
+      - name: Composer audit gate (fail on new/unaccepted advisories)
+        run: |
+          php -r '
+            $accepted = json_decode(file_get_contents("docs/accepted-security-advisories.json"), true)["composer"];
+            $result = json_decode(shell_exec("composer audit --format=json --no-interaction 2>/dev/null"), true);
+            $new = [];
+            foreach ($result["advisories"] ?? [] as $package => $advisories) {
+                foreach ($advisories as $advisory) {
+                    $id = $advisory["advisoryId"] ?? $advisory["cve"] ?? $advisory["title"];
+                    if (in_array($id, $accepted, true)) {
+                        echo "ACCEPTED (see docs/security-advisories.md): $package $id\n";
+                    } else {
+                        $new[] = "$package: $id ({$advisory["title"]})";
+                    }
+                }
+            }
+            if ($new) {
+                echo "NEW/UNACCEPTED composer advisories found:\n" . implode("\n", $new) . "\n";
+                echo "Add a risk assessment to docs/security-advisories.md and its ID to docs/accepted-security-advisories.json only if this is genuinely accepted risk; otherwise fix it.\n";
+                exit(1);
+            }
+            echo "No new/unaccepted composer advisories.\n";
+          '
 
       - name: Setup Node
         uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with:
           node-version: '20'
 
-      - name: npm audit (fail only on critical)
-        run: npm audit --audit-level=critical
+      - name: npm audit (human-readable log)
+        # Informational only, same reasoning as the composer log step above.
+        continue-on-error: true
+        run: npm audit
+
+      - name: npm audit gate (fail on new/unaccepted advisories)
+        run: |
+          node -e '
+            const fs = require("fs");
+            const { execSync } = require("child_process");
+            const accepted = new Set(JSON.parse(fs.readFileSync("docs/accepted-security-advisories.json")).npm);
+            let data;
+            try {
+              data = JSON.parse(execSync("npm audit --json", { maxBuffer: 1024 * 1024 * 20 }));
+            } catch (e) {
+              data = JSON.parse(e.stdout);
+            }
+            const unaccepted = [];
+            for (const [name, vuln] of Object.entries(data.vulnerabilities || {})) {
+              for (const via of vuln.via) {
+                if (typeof via !== "object" || !via.url) continue;
+                const m = via.url.match(/advisories\/(GHSA-[a-z0-9-]+)/i);
+                const id = m ? m[1] : via.url;
+                if (accepted.has(id)) {
+                  console.log(`ACCEPTED (see docs/security-advisories.md): ${name} ${id}`);
+                } else {
+                  unaccepted.push(`${name}: ${id} - ${via.title}`);
+                }
+              }
+            }
+            if (unaccepted.length) {
+              console.log("NEW/UNACCEPTED npm advisories found:");
+              console.log(unaccepted.join("\n"));
+              console.log("Add a risk assessment to docs/security-advisories.md and its ID to docs/accepted-security-advisories.json only if this is genuinely accepted risk; otherwise fix it.");
+              process.exit(1);
+            }
+            console.log("No new/unaccepted npm advisories.");
+          '

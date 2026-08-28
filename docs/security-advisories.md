@@ -3,16 +3,47 @@
 This project runs on Laravel 9 + Filament 2. A small set of advisories cannot
 be resolved on that stack without breaking the build, so they are **formally
 accepted and tracked here** with their risk assessment and the release that
-clears them. The CI `security-audit` job surfaces them on every run.
+clears them. The CI `security-audit` job enforces this list on every run: an
+advisory ID here does not block CI, anything not here does — see
+[CI handling](#ci-handling) below.
 
-Reviewed: 2026-07-28.
+Reviewed: 2026-08-28.
 
-## 1. npm — esbuild / Vite / laravel-vite-plugin (3 advisories, dev-only)
+## 0. Framework EOL status
+
+| | Status |
+|---|---|
+| Laravel 9.52 | **EOL since 2024-02-08.** No more upstream security patches. |
+| Filament 2.17 | **Past its security-support window since ~2025-03.** No more upstream security patches. |
+
+**Not upgraded in this pass, deliberately.** Upgrading to Laravel 11+ /
+Filament 3 is a separate, tracked piece of work (it changes the Vite manifest
+path, among other breaking changes — see Advisory 1) and is out of scope for
+a security-hardening pass that must stay behavior-preserving.
+
+**Consequence of staying on an EOL stack:** if a new vulnerability is
+disclosed in Laravel 9 or Filament 2 core itself (not in a dependency we
+control), there will be no official patch — only the framework upgrade fixes
+it. `composer audit` currently reports **0 advisories**, including 0 against
+`laravel/framework` and `filament/filament` themselves, so this is a
+forward-looking risk, not a currently-exploitable one. It is re-checked by
+the CI gate on every push, so a new framework-level advisory shows up as a
+CI failure the day it is published, not silently.
+
+**This does not excuse application-level vulnerabilities.** EOL status is a
+reason a *framework* bug can't be patched upstream; it is not a reason to
+leave an *application-code* bug (authorization, injection, IDOR, etc.)
+unfixed — those remain entirely within this repo's control regardless of
+framework version, and are audited and fixed independently (see the ongoing
+audit rounds referenced in this repo's commit history on branch `jarne`).
+
+## 1. npm — esbuild / Vite / laravel-vite-plugin (dev-only)
 
 | | |
 |---|---|
-| Packages | `esbuild` (≤0.24.2), `vite`, `laravel-vite-plugin` (transitive) |
-| Severity | 2 moderate, 1 high |
+| Packages | `esbuild` (≤0.24.2), `vite` (3.2.11, transitive of `laravel-vite-plugin`) |
+| `npm audit` severity | 2 moderate, 1 high (one severity per affected package) |
+| Advisory IDs | 14 GHSA records against the `vite@3.2.11` / `esbuild` range — full list in `docs/accepted-security-advisories.json` (`npm` key). Historical CVEs keep getting filed against old, already-released version ranges, so this list grows over time even though the installed version does not change; each new one is checked against the same risk assessment below before being added. |
 | Example | GHSA-67mh-4wv8-2f99 — esbuild dev server can be reached by any origin |
 
 **Risk: effectively none in production.**
@@ -34,6 +65,20 @@ read — it would break asset loading. So it is coupled to the framework upgrade
 
 **Interim mitigation:** never expose the Vite dev server publicly (bind to
 localhost, as it is by default).
+
+**Dev server config audit (2026-08-28):** `vite.config.js` sets no `server`
+block at all — no `host`, `port`, `cors`, or `hmr` override. Vite 3's default
+for `server.host` is `false`, i.e. the dev server only listens on
+`localhost`/`127.0.0.1`, not `0.0.0.0` or the LAN. So `npm run dev` is not
+reachable from another machine on the network out of the box, which is the
+condition the esbuild/Vite advisories above actually require to be
+exploitable. No config change was made — the file already reads correctly as
+"use Vite's safest default," and adding an explicit `host: 'localhost'` would
+only restate the existing default, not change behavior. If a future change
+ever adds a `server.host` override (e.g. to test from a phone on the same
+Wi-Fi), scope it to a local-only override (`.env`-driven or a personal,
+gitignored `vite.config.local.js`), never commit a `0.0.0.0`/LAN-facing
+default.
 
 ## 2. composer — abandoned transitive packages (not vulnerable)
 
@@ -102,9 +147,26 @@ already reworks the frontend build tooling.
 
 ## CI handling
 
-- `composer audit --abandoned=report` — reports abandoned packages but only
-  fails on real security advisories (currently none).
-- `npm audit --audit-level=critical` — the dev-only moderate/high advisories
-  above do not fail the build; a genuine critical would.
-- The `security-audit` job is advisory (non-blocking) until the framework
-  upgrade lands, after which it should be made a required check.
+The `security-audit` job in `.github/workflows/tests.yml` is a **hard gate**,
+not an advisory-only job — it has no job-level `continue-on-error`. It runs
+`composer audit --format=json` and `npm audit --json`, and compares every
+advisory ID found against `docs/accepted-security-advisories.json`:
+
+- **Known/accepted** (listed in that file, with a risk assessment on this
+  page) → logged as `ACCEPTED`, does **not** fail the job.
+- **New/unaccepted** (anything not in that file — a fresh advisory in
+  `laravel/framework`, `filament/filament`, a new npm package, or a new GHSA
+  ID against an existing one) → fails the job.
+
+Two purely informational steps (`composer audit --abandoned=report` for
+human-readable abandoned-package reporting, and `npm audit` for a
+human-readable log) carry a step-level `continue-on-error: true` so their own
+exit code — which does not distinguish accepted from new — never masks the
+gate step that runs right after them and makes the real pass/fail call.
+
+**When `composer audit` or `npm audit` reports something new:** don't add it
+to `docs/accepted-security-advisories.json` to make CI pass. Fix it if a
+compatible patch/minor exists (see the PATCH NOW / SAFE FOLLOW-UP triage
+elsewhere in this repo's audit history); only add it to the accepted list —
+alongside a risk assessment on this page, same as Advisories 1–3 above — if a
+maintainer has actually decided it's accepted risk.

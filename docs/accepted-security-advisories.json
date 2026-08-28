@@ -1,0 +1,21 @@
+{
+    "_comment": "Machine-readable companion to docs/security-advisories.md. Consumed by the security-audit job in .github/workflows/tests.yml to tell known/accepted advisories apart from new ones. An advisory ID listed here does not fail CI (see security-advisories.md for its risk assessment); anything not listed here fails CI. Do not add an ID here without a matching write-up in security-advisories.md.",
+    "reviewed": "2026-08-28",
+    "composer": [],
+    "npm": [
+        "GHSA-67mh-4wv8-2f99",
+        "GHSA-vg6x-rcgg-rjx6",
+        "GHSA-x574-m823-4x7w",
+        "GHSA-356w-63v5-8wf4",
+        "GHSA-859w-5945-r5v3",
+        "GHSA-xcj6-pq6g-qj4x",
+        "GHSA-g4jq-h2w9-997c",
+        "GHSA-jqfw-vq24-v9c3",
+        "GHSA-93m4-6634-74q7",
+        "GHSA-4r4m-qw57-chr8",
+        "GHSA-4w7w-66w2-5vf9",
+        "GHSA-c27g-q93r-2cwf",
+        "GHSA-v6wh-96g9-6wx3",
+        "GHSA-fx2h-pf6j-xcff"
+    ]
+}
