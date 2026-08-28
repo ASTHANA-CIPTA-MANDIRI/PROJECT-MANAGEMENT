@@ -4,6 +4,7 @@ namespace Tests\Feature\Filament;
 
 use App\Filament\Resources\RoleResource\Pages\EditRole;
 use App\Filament\Resources\UserResource\Pages\EditUser;
+use App\Filament\Resources\UserResource\Pages\ListUsers;
 use App\Models\Permission;
 use App\Models\Role;
 use App\Models\User;
@@ -120,12 +121,31 @@ class PrivilegeEscalationTest extends TestCase
         $this->assertTrue($promoted->fresh()->isSuperAdmin());
     }
 
-    public function test_a_user_manager_can_still_save_a_super_admin_whose_role_is_left_alone(): void
+    /**
+     * L-4: UserPolicy::update() used to only check the generic "Update user"
+     * permission, so a plain user manager could reach this page and rename
+     * (or otherwise edit) a Super Admin - even leaving the role field alone,
+     * i.e. without touching the privilege-escalation guard on that field at
+     * all. The policy must now refuse to open the page in the first place.
+     */
+    public function test_a_user_manager_cannot_open_a_super_admin_for_editing(): void
     {
         $admin = $this->superAdmin();
-        $this->superAdmin(); // a second one, so the guard against the last admin doesn't fire
+        $this->superAdmin(); // a second one, so the guard against the last admin isn't what's under test
         $manager = $this->userWithPermissions(['List users', 'View user', 'Update user'], 'Manager');
         $this->actingAs($manager);
+
+        Livewire::test(EditUser::class, ['record' => $admin->id])
+            ->assertForbidden();
+
+        $this->assertSame($admin->email, $admin->fresh()->email, 'the Super Admin account must be untouched');
+    }
+
+    public function test_a_super_admin_can_still_edit_another_super_admin(): void
+    {
+        $admin = $this->superAdmin();
+        $editor = $this->superAdmin();
+        $this->actingAs($editor);
 
         Livewire::test(EditUser::class, ['record' => $admin->id])
             ->fillForm(['name' => 'Renamed', 'roles' => [$this->superAdminRole->id]])
@@ -259,5 +279,54 @@ class PrivilegeEscalationTest extends TestCase
 
         Livewire::test(EditRole::class, ['record' => $this->superAdminRole->getRouteKey()])
             ->assertSuccessful();
+    }
+
+    // -------------------------------------------------------------- deleting a Super Admin (L-4)
+
+    /**
+     * DeleteBulkAction is auto-wired (AppServiceProvider) to filter each
+     * selected record through the model's policy, so this also proves the
+     * new UserPolicy::delete() guard reaches the bulk-delete path, not just
+     * the single-record one.
+     */
+    public function test_a_user_manager_cannot_bulk_delete_a_super_admin(): void
+    {
+        $admin = $this->superAdmin();
+        $this->superAdmin(); // a second one, so the "last admin" guard isn't what's under test
+        $manager = $this->userWithPermissions(['List users', 'View user', 'Delete user'], 'Manager');
+        $this->actingAs($manager);
+
+        Livewire::test(ListUsers::class)
+            ->callTableBulkAction('delete', [$admin]);
+
+        $this->assertNotNull(User::find($admin->id), 'a Super Admin must survive a bulk delete by a non-Super-Admin');
+    }
+
+    public function test_a_super_admin_can_bulk_delete_another_super_admin(): void
+    {
+        Permission::firstOrCreate(['name' => 'Delete user']);
+        $this->superAdminRole->givePermissionTo('Delete user');
+        app(PermissionRegistrar::class)->forgetCachedPermissions();
+
+        $admin = $this->superAdmin();
+        $deleter = $this->superAdmin();
+        $this->actingAs($deleter);
+
+        Livewire::test(ListUsers::class)
+            ->callTableBulkAction('delete', [$admin]);
+
+        $this->assertNull(User::find($admin->id));
+    }
+
+    public function test_a_user_manager_can_still_bulk_delete_a_regular_user(): void
+    {
+        $target = User::factory()->create();
+        $manager = $this->userWithPermissions(['List users', 'View user', 'Delete user'], 'Manager');
+        $this->actingAs($manager);
+
+        Livewire::test(ListUsers::class)
+            ->callTableBulkAction('delete', [$target]);
+
+        $this->assertNull(User::find($target->id));
     }
 }

@@ -160,28 +160,54 @@ class SuperAdminRoleTest extends TestCase
         $this->assertNull(Role::find($role->id));
     }
 
-    public function test_cannot_remove_the_super_admin_role_from_the_last_super_admin(): void
+    /**
+     * L-4: UserPolicy::update() now refuses a non-Super-Admin any access to a
+     * Super Admin's edit page at all, so a plain "Manager" can no longer
+     * reach this form to test the roles-field guard against - the page 403s
+     * before the form is even rendered. That leaves self-editing as the only
+     * remaining path to this guard: the lone Super Admin themselves must
+     * still be refused if they try to strip their own Super Admin role.
+     */
+    public function test_a_lone_super_admin_cannot_remove_their_own_super_admin_role(): void
     {
         $superAdminRole = Role::create(['name' => 'Super Admin']);
         $otherRole = Role::create(['name' => 'Viewer']);
 
-        $lastAdmin = User::factory()->create();
-        $lastAdmin->syncRoles([$superAdminRole]);
-
-        // An editor who can manage users but is not the Super Admin.
         foreach (['List users', 'View user', 'Update user'] as $name) {
             Permission::firstOrCreate(['name' => $name]);
         }
-        $editorRole = Role::create(['name' => 'Manager']);
-        $editorRole->syncPermissions(['List users', 'View user', 'Update user']);
-        $editor = User::factory()->create();
-        $editor->syncRoles([$editorRole]);
+        $superAdminRole->syncPermissions(['List users', 'View user', 'Update user']);
+
+        $lastAdmin = User::factory()->create();
+        $lastAdmin->syncRoles([$superAdminRole]);
         app(PermissionRegistrar::class)->forgetCachedPermissions();
-        $this->actingAs($editor->fresh());
+        $this->actingAs($lastAdmin->fresh());
 
         Livewire::test(EditUser::class, ['record' => $lastAdmin->id])
             ->fillForm(['roles' => [$otherRole->id]]) // drop the Super Admin role
             ->call('save')
             ->assertHasFormErrors(['roles']);
+    }
+
+    public function test_a_manager_cannot_open_the_last_super_admin_for_editing(): void
+    {
+        $superAdminRole = Role::create(['name' => 'Super Admin']);
+
+        $lastAdmin = User::factory()->create();
+        $lastAdmin->syncRoles([$superAdminRole]);
+
+        // A manager who can update users but is not the Super Admin.
+        foreach (['List users', 'View user', 'Update user'] as $name) {
+            Permission::firstOrCreate(['name' => $name]);
+        }
+        $managerRole = Role::create(['name' => 'Manager']);
+        $managerRole->syncPermissions(['List users', 'View user', 'Update user']);
+        $manager = User::factory()->create();
+        $manager->syncRoles([$managerRole]);
+        app(PermissionRegistrar::class)->forgetCachedPermissions();
+        $this->actingAs($manager->fresh());
+
+        Livewire::test(EditUser::class, ['record' => $lastAdmin->id])
+            ->assertForbidden();
     }
 }

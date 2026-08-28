@@ -46,6 +46,14 @@ class UserPolicy
      */
     public function update(User $user, User $model)
     {
+        // A Super Admin account is the platform's master key: only another
+        // Super Admin may touch it (any field, not just roles), mirroring
+        // RolePolicy::update()'s guard on the Super Admin role. Otherwise
+        // the generic "Update user" permission would be a back door to it.
+        if ($model->isSuperAdmin() && ! $user->isSuperAdmin()) {
+            return false;
+        }
+
         return $user->can('Update user');
     }
 
@@ -56,6 +64,10 @@ class UserPolicy
      */
     public function delete(User $user, User $model)
     {
+        if ($model->isSuperAdmin() && ! $user->isSuperAdmin()) {
+            return false;
+        }
+
         return $user->can('Delete user');
     }
 
