@@ -142,6 +142,32 @@ class ApiTokenTest extends TestCase
     }
 
     /**
+     * The stamped `expires_at` is only a claim until something enforces it.
+     * Sanctum's guard (vendor/laravel/sanctum Guard::supportsTokens()) checks
+     * it on every request; this proves a token issued through this app's own
+     * flow actually stops authenticating once that moment passes, not just
+     * that the column holds the right date.
+     */
+    public function test_an_expired_token_cannot_be_used(): void
+    {
+        config(['sanctum.expiration' => 1]);
+        $user = User::factory()->create();
+
+        $plainText = $this->actingAs($user)
+            ->postJson('/api/v1/tokens', ['name' => 'ci'])
+            ->assertCreated()
+            ->json('plain_text_token');
+
+        $this->travelTo(now()->addMinutes(2));
+
+        // Same guard-caching reason as the self-revoke test below: without
+        // this the assertion would authenticate against a stale resolution
+        // from the request above instead of re-checking expiry.
+        $this->app['auth']->forgetGuards();
+        $this->withToken($plainText)->getJson('/api/v1/tokens')->assertUnauthorized();
+    }
+
+    /**
      * Bounded expiry is what stops a leaked token living forever; a token that
      * can mint successors renews itself indefinitely and hands that back.
      */

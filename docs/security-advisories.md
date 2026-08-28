@@ -145,6 +145,26 @@ attack surface being left open by staying vendored. Revisit alongside the
 Laravel 11 / Vite 6 upgrade already tracked in Advisory 1, since that pass
 already reworks the frontend build tooling.
 
+## 4. Accepted design: Sanctum token lifetime, no refresh-token
+
+**Status: reviewed 2026-08-28, no bug found — current design accepted.**
+
+| | |
+|---|---|
+| Expiration | `SANCTUM_TOKEN_EXPIRATION`, default 20160 minutes (14 days) — `config/sanctum.php` |
+| Stamping | Every token gets an `expires_at` clamped to that window on issue, even if the caller asks for longer — `app/Support/ApiTokenIssuer.php` |
+| Enforcement | Confirmed against `vendor/laravel/sanctum/src/Guard.php`: a request is only authenticated if **both** the global window (`created_at` vs. now) **and** the stamped `expires_at` are unexpired. Regression test: `test_an_expired_token_cannot_be_used` in `tests/Feature/Api/ApiTokenTest.php` — creates a real token through the app's own issuance endpoint, travels past its expiry with `travelTo()`, and asserts the request is then rejected. |
+| Revocation | `DELETE /api/v1/tokens/{id}` (self-service, panel + API) deletes the row outright — immediate, not a soft flag. A token may revoke itself (the panic button for a leaked credential) but may not mint a new one, so a leaked token cannot renew its own life. |
+| Plaintext exposure | Audited: the plaintext secret is returned once in the issuance response and held in a single Livewire property for one render; nothing logs it, no request-body logging middleware exists in this app, and it is never written to a custom column (only the hash is persisted, per Sanctum's own `personal_access_tokens.token`). |
+| Abilities | Every token gets `['*']`; authorization is enforced by the user's roles/policies, not token scope, so a narrower ability list would not add a real restriction — documented in `ApiTokenIssuer`'s class docblock. |
+| Route protection | Every versioned API route (`routes/api.php`, `v1` group) sits behind `auth:sanctum`; rate limiting (`throttle:api`, 100 req/min) applies to the whole `api` middleware group. |
+
+**Refresh-token: deliberately not built.** A rotation/refresh mechanism adds a
+new endpoint, new storage, rotation logic, replay protection and its own test
+surface — real scope for a project on a 14-day expiration with working manual
+revocation. Refresh-token can be considered for long-lived client integrations
+in a later pass; it is not a gap in the current design.
+
 ## CI handling
 
 The `security-audit` job in `.github/workflows/tests.yml` is a **hard gate**,
