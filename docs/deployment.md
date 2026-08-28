@@ -123,6 +123,41 @@ server {
 }
 ```
 
+### 4. Future production scaling (not enabled by default)
+
+The defaults above (`QUEUE_CONNECTION=database`, `CACHE_DRIVER=file`) are a
+deliberate choice for a single-instance deployment: no extra service to run,
+patch or monitor. They stop being enough once the app runs as more than one
+instance behind a load balancer (the file cache is then per-instance, not
+shared) or the queue needs higher throughput than polling the `jobs` table
+gives.
+
+At that point, switch to Redis for both:
+
+```bash
+QUEUE_CONNECTION=redis
+CACHE_DRIVER=redis
+```
+
+This is **not** turned on by default and requires, before flipping the
+switch:
+
+- a Redis service reachable from every app instance (`REDIS_HOST` /
+  `REDIS_PORT` / `REDIS_PASSWORD` in `.env`);
+- the `predis/predis` or `phpredis` client (`config/database.php` picks
+  `phpredis` if the extension is loaded, `predis` otherwise — either already
+  works with this app's stock config);
+- a queue worker per instance, same as the database driver
+  (`php artisan queue:work`) — Redis changes where jobs are stored, not
+  whether a worker is needed;
+- monitoring for the Redis service itself (memory, eviction, connectivity),
+  since both the cache and the queue would then depend on it being up.
+
+Until multi-instance or high-throughput needs actually arise, the database
+queue and file cache stay the default — see
+[docs/security-advisories.md](security-advisories.md) for the audit that
+confirmed this is a sound architectural choice, not a misconfiguration.
+
 ## Post‑deploy checklist
 
 - [ ] `php artisan migrate --force` ran cleanly

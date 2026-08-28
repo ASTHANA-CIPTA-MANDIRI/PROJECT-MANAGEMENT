@@ -165,6 +165,28 @@ surface — real scope for a project on a 14-day expiration with working manual
 revocation. Refresh-token can be considered for long-lived client integrations
 in a later pass; it is not a gap in the current design.
 
+## 5. Accepted design: queue driver stays `database`
+
+**Status: reviewed 2026-08-28, no bug found — current design accepted.**
+
+`QUEUE_CONNECTION=database` (`config/queue.php`, `.env.example`) is a
+deliberate choice so the app doesn't require a Redis service to run at all.
+Verified as actually working, not just configured:
+
+- `jobs` and `failed_jobs` tables exist (`database/migrations/2022_11_08_150309_create_jobs_table.php`, `2019_08_19_000000_create_failed_jobs_table.php`).
+- The Docker image runs a supervised worker (`docker/supervisord.conf`,
+  `[program:queue]`: `queue:work --tries=3 --sleep=3 --max-time=3600`) and a
+  supervised scheduler (`[program:scheduler]`: `schedule:work`), both guarded
+  by `tests/Unit/DockerImageHardeningTest.php` so a future edit can't silently
+  drop either process.
+- Bare-metal deployment documents the same worker under systemd/Supervisor
+  (`docs/deployment.md`, "Queue worker").
+
+Redis is not added to `docker-compose.yml` or made the default — see
+[Future production scaling](deployment.md#4-future-production-scaling-not-enabled-by-default)
+in `docs/deployment.md` for the documented (not enabled) upgrade path for
+multi-instance or high-throughput deployments.
+
 ## CI handling
 
 The `security-audit` job in `.github/workflows/tests.yml` is a **hard gate**,
