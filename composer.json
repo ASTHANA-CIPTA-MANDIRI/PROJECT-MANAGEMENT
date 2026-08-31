@@ -30,6 +30,8 @@
         "sentry/sentry-laravel": "^4.27",
         "spatie/laravel-permission": "^5.5",
         "stichoza/google-translate-php": "^4.1",
+        "symfony/process": "^6.4.33",
+        "symfony/routing": "^6.4.41",
         "symfony/yaml": "^6.4.40"
     },
     "require-dev": {
