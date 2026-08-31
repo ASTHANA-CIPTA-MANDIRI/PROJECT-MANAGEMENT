@@ -29,7 +29,8 @@
         "pusher/pusher-php-server": "^7.2",
         "sentry/sentry-laravel": "^4.27",
         "spatie/laravel-permission": "^5.5",
-        "stichoza/google-translate-php": "^4.1"
+        "stichoza/google-translate-php": "^4.1",
+        "symfony/yaml": "^6.4.40"
     },
     "require-dev": {
         "fakerphp/faker": "^1.9.1",
