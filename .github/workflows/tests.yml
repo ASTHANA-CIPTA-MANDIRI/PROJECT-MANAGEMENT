@@ -57,6 +57,20 @@ jobs:
       - name: Install dependencies
         run: composer install --prefer-dist --no-interaction --no-progress
 
+      - name: Setup Node
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: '20'
+          cache: npm
+
+      - name: Build frontend assets
+        # Feature tests that render views hitting @vite (e.g. the Filament
+        # dashboard) need public/build/manifest.json, which is gitignored
+        # and otherwise only produced on a developer machine.
+        run: |
+          npm ci
+          npm run build
+
       - name: Prepare environment
         run: |
           cp .env.example .env
