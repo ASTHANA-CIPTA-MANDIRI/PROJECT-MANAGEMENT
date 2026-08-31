@@ -37,9 +37,12 @@ COPY --from=composer:2.8 /usr/bin/composer /usr/bin/composer
 
 COPY . .
 
-# bootstrap/cache is excluded from the build context, but composer's
-# post-autoload-dump hook (`artisan package:discover`) writes into it.
-RUN mkdir -p bootstrap/cache && \
+# bootstrap/cache and storage/framework/views are excluded from the build
+# context, but composer's post-autoload-dump hook (`artisan package:discover`)
+# writes into bootstrap/cache and, while booting providers, resolves the
+# Blade compiler against config('view.compiled') — which realpath()s
+# storage/framework/views and gets `false` if that directory doesn't exist.
+RUN mkdir -p bootstrap/cache storage/framework/views && \
     cp .env.example .env && \
     composer install --no-dev --optimize-autoloader --no-interaction --no-progress
 
