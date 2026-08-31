@@ -225,6 +225,50 @@ tracked as a follow-up independent of the Filament 3 upgrade.
 
 **Resolved by:** upgrading to Filament 3 + `filament/spatie-laravel-media-library-plugin` v5.x, which pulls `spatie/laravel-medialibrary` ^11 (same tracked piece of work as Advisory 0).
 
+## 7. composer — `laravel/framework` core advisories (no in-range fix, same as Advisory 0)
+
+| | |
+|---|---|
+| Installed | v9.52.20 (the latest 9.x release — `composer show -a laravel/framework` confirms 9.52.22 is the newest tag on this line, and its changelog carries no security fix) |
+| Advisory IDs | `PKSA-m5cs-t1y6-qpcs` (medium, Temporary Signed URL Path Confusion, fixed 12.61.1), `PKSA-3r5d-mb8f-1qw9` / `PKSA-mdq4-51ck-6kdq` (**high** — CRLF injection in the default `email` validation rule, CVE-2026-48019, fixed 12.60.0 — these two IDs are the same underlying GitHub advisory `GHSA-5vg9-5847-vvmq`, reported to Packagist twice), `PKSA-8qx3-n5y5-vvnd` (medium, File Validation Bypass, CVE-2025-27515, fixed 10.48.29/11.44.1/12.1.1) |
+
+**Why not fixed now:** every one of these advisories' `affectedVersions` range
+starts unbounded below its fixed version (e.g. `<12.61.1`, with no `>=9.x`
+floor), meaning **no 9.x release ever fixed them** — same EOL situation as
+Advisory 0. There is no patch to pull with a `composer update
+laravel/framework`; clearing them requires the major-version upgrade to
+Laravel 12+ that Advisory 0 already tracks as separate, out-of-scope work.
+
+**Exposure check (2026-08-31):**
+
+- **Signed URL path confusion** — `URL::temporarySignedRoute()` is used in
+  `App\Notifications\CustomVerifyEmail` for the email-verification link. The
+  advisory is about ambiguous path parsing letting a signed URL be replayed
+  against a different route; this app's verification route takes no
+  attacker-influenced path segments beyond the signed user/hash IDs Laravel
+  itself puts there, which narrows (but does not eliminate) the practical
+  attack surface.
+- **CRLF injection in the `email` rule** — the built-in `'email'` validation
+  rule is used in `App\Models\User` and `App\Filament\Resources\UserResource`.
+  The bug lets a crafted string pass email-format validation while containing
+  CRLF, which matters if that value is later dropped into a raw mail header.
+  This app sends mail through Laravel's own `Mail`/`Notification` layer
+  (never hand-building raw SMTP headers from user input), so the realistic
+  path is narrow, but it isn't zero — worth re-checking if a new feature ever
+  writes a validated email address into a header directly.
+- **File Validation Bypass** — grepped `app/` for the `'file'`/`mimes:`/
+  `mimetypes:` validation rules this advisory affects: no hits. File uploads
+  in this app go through Filament's `FileUpload`/`SpatieMediaLibraryFileUpload`
+  components (their own validation path, discussed in Advisory 6), not
+  Laravel's `File` rule directly, so this specific advisory's bypass does not
+  apply to any validation this codebase actually performs.
+
+**Interim mitigation:** none beyond the narrow exposure above — no code
+change made, since the actual gap is upstream in the framework, not in how
+this app calls it.
+
+**Resolved by:** the Laravel 12 upgrade already tracked in Advisory 0.
+
 ## CI handling
 
 The `security-audit` job in `.github/workflows/tests.yml` is a **hard gate**,
