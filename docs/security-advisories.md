@@ -187,6 +187,44 @@ Redis is not added to `docker-compose.yml` or made the default — see
 in `docs/deployment.md` for the documented (not enabled) upgrade path for
 multi-instance or high-throughput deployments.
 
+## 6. composer — `spatie/laravel-medialibrary` locked below its patched version
+
+| | |
+|---|---|
+| Installed | 10.15.0 (the latest 10.x release — confirmed via Packagist, there is no 10.x backport) |
+| Fixed in | 11.23.0 |
+| Advisory IDs | `PKSA-mrgr-9pdf-y591` (CVE-2026-48557, **high** — file upload restriction bypass), `PKSA-88bj-c5ky-3pr6` (CVE-2026-48555, **medium** — SSRF) |
+
+**Why not fixed now:** `filament/spatie-laravel-media-library-plugin` is
+pinned to `^2.16` (the Filament 2 line, same reason as Advisory 0). Every
+`2.x` release of that plugin requires `spatie/laravel-medialibrary: ^9.0|^10.0`
+— confirmed by checking every published `2.x` tag's `composer.json`, none of
+them ever raise that ceiling. The `^11.0` requirement only starts at the
+plugin's `v5.x` line, which is the Filament 3 plugin. So this is coupled to
+the same Filament 3 upgrade as Advisory 0/2, not something `composer update`
+inside this stack can reach.
+
+**Exposure check (2026-08-31):** `spatie/laravel-medialibrary` is used by two
+models, `App\Models\Ticket` and `App\Models\Project` (`InteractsWithMedia`),
+both through Filament's `SpatieMediaLibraryFileUpload` form component behind
+`auth` — no public/anonymous upload path. Neither model overrides
+`registerMediaCollections()` with an explicit MIME allow-list, so the file
+upload restriction bypass advisory is not moot: an authenticated user could
+still upload a file whose real content doesn't match its extension/MIME.
+`addMediaFromUrl()` (the SSRF advisory's vector) is not called anywhere in
+`app/` — grepped for it, no hits — so that vector needs a feature this app
+doesn't use to be reachable.
+
+**Interim mitigation:** uploads are only reachable by authenticated staff
+users (Filament panel), not public visitors, which narrows the file-upload
+advisory to a malicious-insider or compromised-account scenario rather than
+an unauthenticated one. No code change made to add an explicit MIME
+allow-list in this pass — that would be a real behavior change (rejecting
+uploads that work today) outside the scope of a dependency-audit pass, and is
+tracked as a follow-up independent of the Filament 3 upgrade.
+
+**Resolved by:** upgrading to Filament 3 + `filament/spatie-laravel-media-library-plugin` v5.x, which pulls `spatie/laravel-medialibrary` ^11 (same tracked piece of work as Advisory 0).
+
 ## CI handling
 
 The `security-audit` job in `.github/workflows/tests.yml` is a **hard gate**,

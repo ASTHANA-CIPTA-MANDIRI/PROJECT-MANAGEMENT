@@ -1,7 +1,10 @@
 {
     "_comment": "Machine-readable companion to docs/security-advisories.md. Consumed by the security-audit job in .github/workflows/tests.yml to tell known/accepted advisories apart from new ones. An advisory ID listed here does not fail CI (see security-advisories.md for its risk assessment); anything not listed here fails CI. Do not add an ID here without a matching write-up in security-advisories.md.",
-    "reviewed": "2026-08-28",
-    "composer": [],
+    "reviewed": "2026-08-31",
+    "composer": [
+        "PKSA-mrgr-9pdf-y591",
+        "PKSA-88bj-c5ky-3pr6"
+    ],
     "npm": [
         "GHSA-67mh-4wv8-2f99",
         "GHSA-vg6x-rcgg-rjx6",
