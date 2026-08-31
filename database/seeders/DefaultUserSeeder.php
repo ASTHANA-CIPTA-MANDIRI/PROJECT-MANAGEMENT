@@ -28,7 +28,7 @@ class DefaultUserSeeder extends Seeder
     public function run(): void
     {
         $admin = $this->seedUser(
-            env('SEED_ADMIN_EMAIL', 'admin@example.com'),
+            env('SEED_ADMIN_EMAIL') ?: 'admin@example.com',
             'Administrator',
             'SEED_ADMIN_PASSWORD',
             'Super Admin',
@@ -44,7 +44,7 @@ class DefaultUserSeeder extends Seeder
         // picks the role/package deliberately.
         if (! app()->environment('production')) {
             $this->seedUser(
-                env('SEED_USER_EMAIL', 'user@example.com'),
+                env('SEED_USER_EMAIL') ?: 'user@example.com',
                 'User Biasa',
                 'SEED_USER_PASSWORD',
                 'Employee',
