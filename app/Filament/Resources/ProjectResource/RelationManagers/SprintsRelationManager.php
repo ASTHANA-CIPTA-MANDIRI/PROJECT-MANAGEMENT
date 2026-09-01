@@ -110,6 +110,13 @@ class SprintsRelationManager extends RelationManager
                     ->button()
                     ->icon('heroicon-o-play')
                     ->action(function ($record) {
+                        // Defense in depth, mirroring the row-level EditAction:
+                        // reaching this relation manager already requires
+                        // ProjectPolicy::update on the parent project, but that
+                        // alone does not imply SprintPolicy::update on this
+                        // specific sprint (a stricter, per-record check).
+                        abort_unless(auth()->user()->can('update', $record), 403);
+
                         $now = now();
                         // Atomic: close any running sprint and start this one
                         // together, so the project is never left with zero or
@@ -152,6 +159,8 @@ class SprintsRelationManager extends RelationManager
                     ->button()
                     ->icon('heroicon-o-pause')
                     ->action(function ($record) {
+                        abort_unless(auth()->user()->can('update', $record), 403);
+
                         $now = now();
                         $record->ended_at = $now;
                         $record->save();
@@ -218,6 +227,8 @@ class SprintsRelationManager extends RelationManager
                             ),
                     ])
                     ->action(function (Sprint $record, array $data): void {
+                        abort_unless(auth()->user()->can('update', $record), 403);
+
                         $tickets = $data['tickets'];
                         // Atomic batch: detach the sprint's current tickets and
                         // attach the newly chosen set as one unit.

@@ -188,6 +188,73 @@ class RelationManagersTest extends TestCase
         );
     }
 
+    /**
+     * F-05: start/stop/tickets are custom table actions, not the standard
+     * EditAction/DeleteAction Filament auto-wires to the policy. Reaching this
+     * relation manager only proves ProjectPolicy::update (via EditProject) —
+     * that does not imply SprintPolicy::update on a specific sprint, so each
+     * action re-checks it inline, same as EditAction already does implicitly.
+     * A project owner who lacks "Update sprint" is exactly this gap: allowed
+     * onto the page, but should not be allowed to mutate the sprint from here.
+     */
+    private function projectOwnerWithoutUpdateSprintPermission(): User
+    {
+        foreach (['List projects', 'View project', 'Update project'] as $name) {
+            Permission::firstOrCreate(['name' => $name]);
+        }
+        $role = Role::firstOrCreate(['name' => 'Project Manager Without Sprint Rights']);
+        $role->syncPermissions(['List projects', 'View project', 'Update project']);
+
+        $manager = User::factory()->create();
+        $manager->syncRoles([$role]);
+        app(PermissionRegistrar::class)->forgetCachedPermissions();
+
+        return $manager->fresh();
+    }
+
+    public function test_starting_a_sprint_is_blocked_without_the_update_sprint_permission(): void
+    {
+        $manager = $this->projectOwnerWithoutUpdateSprintPermission();
+        $project = Project::factory()->scrum()->create(['owner_id' => $manager->id]);
+        $sprint = Sprint::factory()->create(['project_id' => $project->id]);
+        $this->actingAs($manager);
+
+        $this->renderManager(SprintsRelationManager::class, $project)
+            ->callTableAction('start', $sprint)
+            ->assertForbidden();
+
+        $this->assertNull($sprint->fresh()->started_at);
+    }
+
+    public function test_stopping_a_sprint_is_blocked_without_the_update_sprint_permission(): void
+    {
+        $manager = $this->projectOwnerWithoutUpdateSprintPermission();
+        $project = Project::factory()->scrum()->create(['owner_id' => $manager->id]);
+        $sprint = Sprint::factory()->started()->create(['project_id' => $project->id]);
+        $this->actingAs($manager);
+
+        $this->renderManager(SprintsRelationManager::class, $project)
+            ->callTableAction('stop', $sprint)
+            ->assertForbidden();
+
+        $this->assertNull($sprint->fresh()->ended_at);
+    }
+
+    public function test_reassigning_a_sprints_tickets_is_blocked_without_the_update_sprint_permission(): void
+    {
+        $manager = $this->projectOwnerWithoutUpdateSprintPermission();
+        $project = Project::factory()->scrum()->create(['owner_id' => $manager->id]);
+        $sprint = Sprint::factory()->create(['project_id' => $project->id]);
+        $ticket = Ticket::factory()->create(['project_id' => $project->id, 'owner_id' => $manager->id]);
+        $this->actingAs($manager);
+
+        $this->renderManager(SprintsRelationManager::class, $project)
+            ->callTableAction('tickets', $sprint, data: ['tickets' => [$ticket->id]])
+            ->assertForbidden();
+
+        $this->assertNull($ticket->fresh()->sprint_id);
+    }
+
     // --------------------------------------------------------------- members
 
     public function test_the_users_relation_manager_renders(): void
