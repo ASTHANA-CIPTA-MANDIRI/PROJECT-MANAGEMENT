@@ -19,7 +19,11 @@ class TicketController extends ApiController
      */
     public function index(Request $request, Project $project)
     {
-        abort_unless($request->user()->can('View ticket'), 403, 'This action is unauthorized.');
+        // "List tickets" (viewAny), not "View ticket": this mirrors
+        // ProjectController::index()/SprintController::index(), both gated by
+        // authorize('viewAny', ...) against their own model's "List *"
+        // permission. Project access is still enforced separately below.
+        $this->authorize('viewAny', Ticket::class);
         $this->assertProjectAccess($project, $request->user());
 
         $query = Ticket::query()

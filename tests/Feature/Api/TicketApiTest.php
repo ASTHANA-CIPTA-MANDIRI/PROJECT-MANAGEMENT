@@ -57,7 +57,7 @@ class TicketApiTest extends TestCase
 
     public function test_it_lists_tickets_of_a_project_the_user_owns(): void
     {
-        $user = $this->actingWith(['View ticket']);
+        $user = $this->actingWith(['List tickets']);
         $project = Project::factory()->create(['owner_id' => $user->id]);
         Ticket::factory()->count(3)->create(['project_id' => $project->id]);
 
@@ -67,9 +67,24 @@ class TicketApiTest extends TestCase
             ->assertJsonStructure(['data' => [['id', 'code', 'name', 'project_id']], 'meta']);
     }
 
+    /**
+     * F-03: index() used to check "View ticket" (TicketPolicy::view's
+     * permission), a different string than TicketPolicy::viewAny() ("List
+     * tickets") - the ability Filament and every other index() endpoint
+     * (Project, Sprint) actually use. Now consistent: a user without "List
+     * tickets" is forbidden here even though they hold "View ticket".
+     */
+    public function test_listing_tickets_requires_the_list_tickets_permission(): void
+    {
+        $user = $this->actingWith(['View ticket']); // wrong permission
+        $project = Project::factory()->create(['owner_id' => $user->id]);
+
+        $this->getJson("/api/v1/projects/{$project->id}/tickets")->assertForbidden();
+    }
+
     public function test_it_forbids_listing_tickets_of_an_inaccessible_project(): void
     {
-        $this->actingWith(['View ticket']);
+        $this->actingWith(['List tickets']);
         $project = Project::factory()->create();
 
         $this->getJson("/api/v1/projects/{$project->id}/tickets")->assertForbidden();
@@ -77,7 +92,7 @@ class TicketApiTest extends TestCase
 
     public function test_it_filters_tickets_by_status(): void
     {
-        $user = $this->actingWith(['View ticket']);
+        $user = $this->actingWith(['List tickets']);
         $project = Project::factory()->create(['owner_id' => $user->id]);
         $statusA = TicketStatus::factory()->create();
         $statusB = TicketStatus::factory()->create();
@@ -92,7 +107,7 @@ class TicketApiTest extends TestCase
 
     public function test_it_only_returns_tickets_of_the_given_project(): void
     {
-        $user = $this->actingWith(['View ticket']);
+        $user = $this->actingWith(['List tickets']);
         $mine = Project::factory()->create(['owner_id' => $user->id]);
         $other = Project::factory()->create(['owner_id' => $user->id]);
         Ticket::factory()->create(['project_id' => $mine->id]);
