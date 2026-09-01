@@ -55,6 +55,12 @@ class AppServiceProvider extends ServiceProvider
         // Configure application
         $this->configureApp();
 
+        // Hide social login buttons for providers missing OAuth credentials,
+        // so a stale "enable_social_login" toggle can't send users into an
+        // OAuth redirect with a blank client_id (Google/GitHub reject that
+        // with "invalid_request: Missing required parameter: client_id").
+        $this->configureSocialiteProviders();
+
         // Enforce a strong password policy on registration/profile/reset
         $this->configurePasswordPolicy();
 
@@ -207,6 +213,16 @@ class AppServiceProvider extends ServiceProvider
         $this->app->booted(function () {
             FilamentBreezy::setPasswordRules([Password::defaults()]);
         });
+    }
+
+    private function configureSocialiteProviders(): void
+    {
+        $configured = collect(config('filament-socialite.providers'))
+            ->filter(fn ($providerConfig, $provider) => filled(config("services.{$provider}.client_id"))
+                && filled(config("services.{$provider}.client_secret")))
+            ->all();
+
+        Config::set('filament-socialite.providers', $configured);
     }
 
     private function configureApp(): void
