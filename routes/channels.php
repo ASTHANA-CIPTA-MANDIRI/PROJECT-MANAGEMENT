@@ -20,9 +20,11 @@ Broadcast::channel('App.Models.User.{id}', function ($user, $id) {
 });
 
 // A user may listen on a project's channel if they own or belong to it.
+// Delegates to Project::isAccessibleBy() (the single source of truth for
+// project access, see ProjectPolicy/TicketPolicy) instead of re-implementing
+// the owner/member check inline, so the two never drift apart.
 Broadcast::channel('project.{project}', function ($user, Project $project) {
-    return $project->owner_id === $user->id
-        || $project->users()->where('users.id', $user->id)->exists();
+    return $project->isAccessibleBy($user);
 });
 
 // A user may listen on a ticket's channel if they can access the ticket:
@@ -30,6 +32,5 @@ Broadcast::channel('project.{project}', function ($user, Project $project) {
 Broadcast::channel('ticket.{ticket}', function ($user, Ticket $ticket) {
     return $ticket->owner_id === $user->id
         || $ticket->responsible_id === $user->id
-        || $ticket->project->owner_id === $user->id
-        || $ticket->project->users()->where('users.id', $user->id)->exists();
+        || $ticket->project->isAccessibleBy($user);
 });

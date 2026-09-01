@@ -151,6 +151,33 @@ class BroadcastingTest extends TestCase
     }
 
     /**
+     * F-02: the project/ticket channel callbacks now delegate to
+     * Project::isAccessibleBy() instead of re-implementing the owner/member
+     * check inline. These lock in the paths the old inline logic covered but
+     * nothing exercised directly: the ticket's responsible user, and a plain
+     * project member (neither the ticket's owner/responsible nor the
+     * project's owner) reaching the ticket channel through project access.
+     */
+    public function test_ticket_channel_authorizes_the_responsible_user(): void
+    {
+        $responsible = User::factory()->create();
+        $ticket = Ticket::factory()->create(['responsible_id' => $responsible->id]);
+
+        $callback = $this->channelCallback('ticket.{ticket}');
+        $this->assertTrue((bool) $callback($responsible, $ticket));
+    }
+
+    public function test_ticket_channel_authorizes_a_project_member_who_is_neither_owner_nor_responsible(): void
+    {
+        $member = User::factory()->create();
+        $ticket = Ticket::factory()->create();
+        $ticket->project->users()->attach($member->id, ['role' => 'employee']);
+
+        $callback = $this->channelCallback('ticket.{ticket}');
+        $this->assertTrue((bool) $callback($member, $ticket));
+    }
+
+    /**
      * Resolve the authorization closure registered for a broadcast channel.
      */
     private function channelCallback(string $channel): \Closure
