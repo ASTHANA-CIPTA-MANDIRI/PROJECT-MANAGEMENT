@@ -10,9 +10,11 @@ use App\Notifications\TicketCommented;
 use App\Notifications\TicketCreated;
 use App\Notifications\TicketStatusUpdated;
 use App\Notifications\UserCreatedNotification;
+use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Notifications\Messages\MailMessage;
 use Illuminate\Support\Facades\Notification;
+use ReflectionClass;
 use Tests\TestCase;
 
 /**
@@ -69,8 +71,7 @@ class NotificationsTest extends TestCase
     }
 
     /**
-     * TicketStatusUpdated reads $ticket->activities->last() into a non-nullable
-     * property, so it can only be built after a status change has recorded one.
+     * A ticket whose status has changed, so an activity has been recorded.
      */
     private function ticketWithStatusChange(): Ticket
     {
@@ -113,6 +114,30 @@ class NotificationsTest extends TestCase
         $this->assertStringContainsString($comment->user->name, $body);
     }
 
+    public function test_the_status_updated_mail_builds_without_an_activity(): void
+    {
+        // A ticket with no recorded status change hands the notification a null
+        // activity; it must still build instead of crashing a queue worker.
+        $ticket = Ticket::factory()->create();
+
+        $mail = (new TicketStatusUpdated($ticket))->toMail($ticket->owner);
+
+        $this->assertInstanceOf(MailMessage::class, $mail);
+        $this->assertNotEmpty($mail->introLines);
+    }
+
+    public function test_the_status_updated_notification_uses_the_activity_passed_to_it(): void
+    {
+        $ticket = $this->ticketWithStatusChange();
+        $activity = $ticket->activities->last();
+
+        $mail = (new TicketStatusUpdated($ticket, $activity))->toMail($ticket->owner);
+        $body = implode(' ', $mail->introLines);
+
+        $this->assertStringContainsString($activity->oldStatus->name, $body);
+        $this->assertStringContainsString($activity->newStatus->name, $body);
+    }
+
     public function test_the_status_updated_mail_names_the_ticket(): void
     {
         $ticket = $this->ticketWithStatusChange();
@@ -121,7 +146,7 @@ class NotificationsTest extends TestCase
         // Guards the :ticket placeholder in the translation files.
         $this->assertStringContainsString(
             $ticket->name,
-            $mail->subject . ' ' . implode(' ', $mail->introLines)
+            $mail->subject.' '.implode(' ', $mail->introLines)
         );
     }
 
@@ -169,7 +194,7 @@ class NotificationsTest extends TestCase
     {
         $user = User::factory()->create();
 
-        $mail = (new CustomVerifyEmail())->toMail($user);
+        $mail = (new CustomVerifyEmail)->toMail($user);
 
         $this->assertInstanceOf(MailMessage::class, $mail);
         $this->assertStringContainsString('signature=', $mail->actionUrl);
@@ -179,9 +204,60 @@ class NotificationsTest extends TestCase
     {
         $user = User::factory()->create(['name' => 'Fajar']);
 
-        $mail = (new CustomVerifyEmail())->toMail($user);
+        $mail = (new CustomVerifyEmail)->toMail($user);
 
         $this->assertStringContainsString('Fajar', $mail->greeting);
+    }
+
+    public function test_the_verify_email_mail_is_translated_to_the_active_locale(): void
+    {
+        $user = User::factory()->create();
+
+        app()->setLocale('id');
+        $indonesian = (new CustomVerifyEmail)->toMail($user);
+
+        app()->setLocale('en');
+        $english = (new CustomVerifyEmail)->toMail($user);
+
+        // Guards against re-introducing hardcoded Indonesian strings: the
+        // subject must actually follow the active locale instead of always
+        // rendering the same text regardless of app locale.
+        $this->assertSame('Verifikasi Alamat Email Anda', $indonesian->subject);
+        $this->assertSame('Verify Your Email Address', $english->subject);
+    }
+
+    public function test_the_verify_email_notification_is_queued(): void
+    {
+        // Registration used to build and hand this mail to the mailer inside
+        // the request, so the response waited on the SMTP round-trip.
+        $this->assertInstanceOf(ShouldQueue::class, new CustomVerifyEmail);
+        $this->assertTrue((new CustomVerifyEmail)->afterCommit);
+    }
+
+    public function test_the_verification_mail_is_dispatched_as_a_queued_notification(): void
+    {
+        $user = User::factory()->unverified()->create();
+
+        $user->sendEmailVerificationNotification();
+
+        Notification::assertSentTo(
+            $user,
+            CustomVerifyEmail::class,
+            fn ($notification) => $notification instanceof ShouldQueue
+        );
+    }
+
+    public function test_every_notification_is_queued(): void
+    {
+        // Keeps a newly added notification from silently blocking a request.
+        foreach (glob(app_path('Notifications/*.php')) as $file) {
+            $class = 'App\\Notifications\\'.basename($file, '.php');
+
+            $this->assertTrue(
+                (new ReflectionClass($class))->implementsInterface(ShouldQueue::class),
+                $class.' must implement ShouldQueue.'
+            );
+        }
     }
 
     public function test_the_user_created_notification_exposes_an_array_representation(): void

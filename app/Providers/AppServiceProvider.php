@@ -4,10 +4,14 @@ namespace App\Providers;
 
 use App\Models\User;
 use App\Settings\GeneralSettings;
+use App\Support\BulkDeleteAuthorizer;
+use App\Support\UserCountsMemo;
 use DutchCodingCompany\FilamentSocialite\FilamentSocialite;
 use Filament\Facades\Filament;
-use Illuminate\Database\QueryException;
-use Laravel\Socialite\Contracts\User as SocialiteUserContract;
+use Filament\Notifications\Notification;
+use Filament\Tables;
+use Illuminate\Database\Eloquent\Collection as EloquentCollection;
+use Illuminate\Database\Eloquent\Model;
 use Illuminate\Foundation\Vite;
 use Illuminate\Support\Facades\Config;
 use Illuminate\Support\Facades\DB;
@@ -15,8 +19,9 @@ use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\URL;
 use Illuminate\Support\HtmlString;
 use Illuminate\Support\ServiceProvider;
-use Illuminate\Auth\Notifications\VerifyEmail;
-use App\Notifications\CustomVerifyEmail;
+use Illuminate\Validation\Rules\Password;
+use JeffGreco13\FilamentBreezy\FilamentBreezy;
+use Laravel\Socialite\Contracts\User as SocialiteUserContract;
 
 class AppServiceProvider extends ServiceProvider
 {
@@ -27,7 +32,16 @@ class AppServiceProvider extends ServiceProvider
      */
     public function register()
     {
-        //
+        // Route actions are resolved through the container, so binding the
+        // packaged socialite controller to our subclass makes the OAuth
+        // callback enforce two-factor authentication without having to
+        // redeclare the package's routes (and depend on registration order).
+        $this->app->bind(
+            \DutchCodingCompany\FilamentSocialite\Http\Controllers\SocialiteLoginController::class,
+            \App\Http\Controllers\Auth\SocialiteLoginController::class,
+        );
+
+        $this->app->singleton(UserCountsMemo::class);
     }
 
     /**
@@ -39,6 +53,9 @@ class AppServiceProvider extends ServiceProvider
     {
         // Configure application
         $this->configureApp();
+
+        // Enforce a strong password policy on registration/profile/reset
+        $this->configurePasswordPolicy();
 
         // Monitor database queries in local development. Writes to a dedicated
         // storage/logs/query.log channel; never active in testing/production.
@@ -58,10 +75,9 @@ class AppServiceProvider extends ServiceProvider
             );
         });
 
-        // Register tippy styles
-        Filament::registerStyles([
-            'https://unpkg.com/tippy.js@6/dist/tippy.css',
-        ]);
+        // Tippy's tooltip styles are compiled into the theme above (from the
+        // local `tippy.js` npm package), so no third-party stylesheet is loaded
+        // at runtime.
 
         // Register scripts
         try {
@@ -76,8 +92,37 @@ class AppServiceProvider extends ServiceProvider
         Filament::pushMeta([
             new HtmlString('<link rel="icon"
                                        type="image/x-icon"
-                                       href="' . config('app.logo') . '">'),
+                                       href="'.config('app.logo').'">'),
         ]);
+
+        // Every bulk delete — in every resource and relation manager, present
+        // and future — is filtered by the model's policy. Configured centrally
+        // because the gap is in Filament's own action, not in any one resource.
+        Tables\Actions\DeleteBulkAction::configureUsing(function (Tables\Actions\DeleteBulkAction $action): void {
+            $action->using(static function (EloquentCollection $records): void {
+                $denied = 0;
+
+                $records->each(function (Model $record) use (&$denied): void {
+                    if (! BulkDeleteAuthorizer::allows($record)) {
+                        $denied++;
+
+                        return;
+                    }
+
+                    $record->delete();
+                });
+
+                if ($denied > 0) {
+                    Notification::make()
+                        ->warning()
+                        ->title(__('Some records were not deleted'))
+                        ->body(__(':count record(s) you are not allowed to delete were skipped.', [
+                            'count' => $denied,
+                        ]))
+                        ->send();
+                }
+            });
+        });
 
         // Register navigation groups
         Filament::registerNavigationGroups([
@@ -88,13 +133,9 @@ class AppServiceProvider extends ServiceProvider
         ]);
 
         // Force HTTPS over HTTP
-        if (env('APP_FORCE_HTTPS') ?? false) {
+        if (config('app.force_https')) {
             URL::forceScheme('https');
         }
-
-        VerifyEmail::toMailUsing(function ($notifiable, $url) {
-            return (new CustomVerifyEmail($url))->toMail($notifiable);
-        });
 
         // Social login (Google/GitHub) creates its own users. Mark them as
         // "social" so the User model does not treat them as admin-created
@@ -113,23 +154,51 @@ class AppServiceProvider extends ServiceProvider
         });
     }
 
+    /**
+     * A single strong password policy for every password entry point
+     * (registration, My Profile, password reset).
+     *
+     * Set here rather than in config because config is cached in production and
+     * cannot hold a Password rule object; the HaveIBeenPwned breach check runs
+     * only in production so tests and offline dev don't depend on the API.
+     */
+    private function configurePasswordPolicy(): void
+    {
+        Password::defaults(function () {
+            $rule = Password::min(8)->mixedCase()->numbers();
+
+            return $this->app->isProduction() ? $rule->uncompromised() : $rule;
+        });
+
+        // Breezy sets its rules from (string) config at boot; override them once
+        // the app is fully booted so all its forms use the policy above.
+        $this->app->booted(function () {
+            FilamentBreezy::setPasswordRules([Password::defaults()]);
+        });
+    }
+
     private function configureApp(): void
     {
         try {
             $settings = app(GeneralSettings::class);
-            Config::set('app.locale', $settings->site_language ?? config('app.fallback_locale'));
-            Config::set('app.name', $settings->site_name ?? env('APP_NAME'));
-            Config::set('filament.brand', $settings->site_name ?? env('APP_NAME'));
+            // setLocale (not Config::set) so the translator's active locale is
+            // updated too, applying the configured site language app-wide.
+            app()->setLocale($settings->site_language ?? config('app.fallback_locale'));
+            Config::set('app.name', $settings->site_name ?? config('app.name'));
+            Config::set('filament.brand', $settings->site_name ?? config('app.name'));
             Config::set(
                 'app.logo',
-                $settings->site_logo ? asset('storage/' . $settings->site_logo) : asset('favicon.ico')
+                $settings->site_logo ? asset('storage/'.$settings->site_logo) : asset('favicon.ico')
             );
             Config::set('filament-breezy.enable_registration', $settings->enable_registration ?? false);
             Config::set('filament-socialite.registration', $settings->enable_registration ?? false);
             Config::set('filament-socialite.enabled', $settings->enable_social_login ?? false);
             Config::set('system.login_form.is_enabled', $settings->enable_login_form ?? false);
-        } catch (QueryException $e) {
-            // Error: No database configured yet
+        } catch (\Throwable $e) {
+            // Settings aren't available yet: no database configured, or a
+            // pending settings migration (e.g. a newly added property). Fall
+            // back to config defaults so the app can still boot — importantly,
+            // so `php artisan migrate` can run to add that very property.
         }
     }
 }

@@ -2,9 +2,9 @@
 
 namespace App\Models;
 
-use App\Notifications\TicketCreated;
-use App\Notifications\TicketStatusUpdated;
+use App\Support\HtmlSanitizer;
 use Carbon\CarbonInterval;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Casts\Attribute;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
@@ -12,70 +12,59 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\SoftDeletes;
+use Laravel\Scout\Searchable;
 use Spatie\MediaLibrary\HasMedia;
 use Spatie\MediaLibrary\InteractsWithMedia;
 
 class Ticket extends Model implements HasMedia
 {
-    use HasFactory, SoftDeletes, InteractsWithMedia;
+    use HasFactory, InteractsWithMedia, Searchable, SoftDeletes;
+
+    /**
+     * The data indexed for full-text search (Laravel Scout).
+     *
+     * @return array<string, mixed>
+     */
+    public function toSearchableArray(): array
+    {
+        return [
+            'id' => $this->id,
+            'code' => $this->code,
+            'name' => $this->name,
+            'content' => strip_tags((string) $this->content),
+            'project_id' => $this->project_id,
+        ];
+    }
 
     protected $fillable = [
         'name', 'content', 'owner_id', 'responsible_id',
         'status_id', 'project_id', 'code', 'order', 'type_id',
-        'priority_id', 'estimation', 'epic_id', 'sprint_id'
+        'priority_id', 'estimation', 'epic_id', 'sprint_id', 'due_date',
     ];
 
-    public static function boot()
+    protected $casts = [
+        'due_date' => 'date',
+    ];
+
+    /**
+     * Sanitize rich-text content on write so stored (and later rendered) HTML
+     * can never carry a script/XSS payload, regardless of the write path.
+     */
+    protected function content(): Attribute
     {
-        parent::boot();
+        return Attribute::set(fn (?string $value) => HtmlSanitizer::clean($value));
+    }
 
-        static::creating(function (Ticket $item) {
-            $project = Project::where('id', $item->project_id)->first();
-            $count = Ticket::where('project_id', $project->id)->count();
-            $order = $project->tickets?->last()?->order ?? -1;
-            $item->code = $project->ticket_prefix . '-' . ($count + 1);
-            $item->order = $order + 1;
-        });
-
-        static::created(function (Ticket $item) {
-            if ($item->sprint_id && $item->sprint->epic_id) {
-                Ticket::where('id', $item->id)->update(['epic_id' => $item->sprint->epic_id]);
-            }
-            foreach ($item->watchers as $user) {
-                $user->notify(new TicketCreated($item));
-            }
-            $item->project?->forgetStatistics();
-        });
-
-        static::deleted(function (Ticket $item) {
-            $item->project?->forgetStatistics();
-        });
-
-        static::updating(function (Ticket $item) {
-            $old = Ticket::where('id', $item->id)->first();
-
-            // Ticket activity based on status
-            $oldStatus = $old->status_id;
-            if ($oldStatus != $item->status_id) {
-                TicketActivity::create([
-                    'ticket_id' => $item->id,
-                    'old_status_id' => $oldStatus,
-                    'new_status_id' => $item->status_id,
-                    'user_id' => auth()->user()->id
-                ]);
-                foreach ($item->watchers as $user) {
-                    $user->notify(new TicketStatusUpdated($item));
-                }
-            }
-
-            // Ticket sprint update
-            $oldSprint = $old->sprint_id;
-            if ($oldSprint && !$item->sprint_id) {
-                Ticket::where('id', $item->id)->update(['epic_id' => null]);
-            } elseif ($item->sprint_id && $item->sprint->epic_id) {
-                Ticket::where('id', $item->id)->update(['epic_id' => $item->sprint->epic_id]);
-            }
-        });
+    /**
+     * Tickets the given user may see: the ones they own or are responsible
+     * for, plus every ticket of a project they own or belong to. Mirrors the
+     * filter the dashboard tables use, so aggregations agree with listings.
+     */
+    public function scopeVisibleTo(Builder $query, User $user): Builder
+    {
+        return $query->where(fn (Builder $query) => $query->where('owner_id', $user->id)
+            ->orWhere('responsible_id', $user->id)
+            ->orWhereHas('project', fn ($query) => $query->accessibleBy($user)));
     }
 
     public function owner(): BelongsTo
@@ -128,6 +117,11 @@ class Ticket extends Model implements HasMedia
         return $this->hasMany(TicketRelation::class, 'ticket_id', 'id');
     }
 
+    public function labels(): BelongsToMany
+    {
+        return $this->belongsToMany(Label::class);
+    }
+
     public function hours(): HasMany
     {
         return $this->hasMany(TicketHour::class, 'ticket_id', 'id');
@@ -143,30 +137,60 @@ class Ticket extends Model implements HasMedia
         return $this->belongsTo(Sprint::class, 'sprint_id', 'id');
     }
 
-    public function sprints(): BelongsTo
-    {
-        return $this->belongsTo(Sprint::class, 'sprint_id', 'id');
-    }
-
     public function watchers(): Attribute
     {
         return new Attribute(
             get: function () {
-                $users = $this->project->users;
+                // ->project->users is Eloquent's cached relation collection,
+                // not a copy: push()ing onto it would leave the owner and
+                // responsible looking like project members to every other
+                // reader of $project->users for the rest of the request.
+                $users = $this->project->users->collect();
                 $users->push($this->owner);
                 if ($this->responsible) {
                     $users->push($this->responsible);
                 }
+
                 return $users->unique('id');
             }
         );
+    }
+
+    /**
+     * True once the due date's day has fully passed. A ticket due "today" is
+     * not yet overdue — only a due date strictly before today counts.
+     */
+    public function isOverdue(): Attribute
+    {
+        return new Attribute(
+            get: fn () => $this->due_date !== null && $this->due_date->lt(now()->startOfDay())
+        );
+    }
+
+    /**
+     * Total hours logged against this ticket.
+     *
+     * Prefers the SQL aggregate when the query asked for it
+     * (->withSum('hours', 'value')): summing in the database is one query for
+     * the whole result set, where reading the relation pulls every hour row of
+     * every ticket into memory to add up a single column. Falls back to the
+     * relation so a plain Ticket instance still answers correctly.
+     */
+    private function loggedHoursValue(): float
+    {
+        if (array_key_exists('hours_sum_value', $this->attributes)) {
+            return (float) $this->attributes['hours_sum_value'];
+        }
+
+        return (float) $this->hours->sum('value');
     }
 
     public function totalLoggedHours(): Attribute
     {
         return new Attribute(
             get: function () {
-                $seconds = $this->hours->sum('value') * 3600;
+                $seconds = $this->loggedHoursValue() * 3600;
+
                 return CarbonInterval::seconds($seconds)->cascade()->forHumans();
             }
         );
@@ -175,18 +199,14 @@ class Ticket extends Model implements HasMedia
     public function totalLoggedSeconds(): Attribute
     {
         return new Attribute(
-            get: function () {
-                return $this->hours->sum('value') * 3600;
-            }
+            get: fn () => $this->loggedHoursValue() * 3600
         );
     }
 
     public function totalLoggedInHours(): Attribute
     {
         return new Attribute(
-            get: function () {
-                return $this->hours->sum('value');
-            }
+            get: fn () => $this->loggedHoursValue()
         );
     }
 
@@ -203,19 +223,33 @@ class Ticket extends Model implements HasMedia
     {
         return new Attribute(
             get: function () {
-                if (!$this->estimation) {
+                if (! $this->estimation) {
                     return null;
                 }
+
                 return $this->estimation * 3600;
             }
         );
     }
 
+    /**
+     * Share of the estimation already spent, in percent — null when the ticket
+     * carries no estimation, because there is nothing to be a share *of*.
+     *
+     * The null case used to fall back to a divisor of 1 *second*, so a ticket
+     * with 200 logged hours and no estimation reported 72,000,000% progress.
+     */
     public function estimationProgress(): Attribute
     {
         return new Attribute(
             get: function () {
-                return (($this->totalLoggedSeconds ?? 0) / ($this->estimationInSeconds ?? 1)) * 100;
+                $estimation = $this->estimationInSeconds;
+
+                if (! $estimation) {
+                    return null;
+                }
+
+                return (($this->totalLoggedSeconds ?? 0) / $estimation) * 100;
             }
         );
     }
@@ -223,7 +257,7 @@ class Ticket extends Model implements HasMedia
     public function completudePercentage(): Attribute
     {
         return new Attribute(
-            get: fn() => $this->estimationProgress
+            get: fn () => $this->estimationProgress
         );
     }
 }

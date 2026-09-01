@@ -13,7 +13,6 @@ class TicketStatusPolicy
     /**
      * Determine whether the user can view any models.
      *
-     * @param  \App\Models\User  $user
      * @return \Illuminate\Auth\Access\Response|bool
      */
     public function viewAny(User $user)
@@ -24,8 +23,6 @@ class TicketStatusPolicy
     /**
      * Determine whether the user can view the model.
      *
-     * @param  \App\Models\User  $user
-     * @param  \App\Models\TicketStatus  $ticketStatus
      * @return \Illuminate\Auth\Access\Response|bool
      */
     public function view(User $user, TicketStatus $ticketStatus)
@@ -36,7 +33,6 @@ class TicketStatusPolicy
     /**
      * Determine whether the user can create models.
      *
-     * @param  \App\Models\User  $user
      * @return \Illuminate\Auth\Access\Response|bool
      */
     public function create(User $user)
@@ -47,8 +43,6 @@ class TicketStatusPolicy
     /**
      * Determine whether the user can update the model.
      *
-     * @param  \App\Models\User  $user
-     * @param  \App\Models\TicketStatus  $ticketStatus
      * @return \Illuminate\Auth\Access\Response|bool
      */
     public function update(User $user, TicketStatus $ticketStatus)
@@ -59,12 +53,54 @@ class TicketStatusPolicy
     /**
      * Determine whether the user can delete the model.
      *
-     * @param  \App\Models\User  $user
-     * @param  \App\Models\TicketStatus  $ticketStatus
      * @return \Illuminate\Auth\Access\Response|bool
      */
     public function delete(User $user, TicketStatus $ticketStatus)
     {
         return $user->can('Delete ticket status');
+    }
+
+    /**
+     * Determine whether the user can bulk delete models.
+     *
+     * @return \Illuminate\Auth\Access\Response|bool
+     */
+    public function deleteAny(User $user)
+    {
+        return $user->can('Delete ticket status');
+    }
+
+    /**
+     * Restoring is the undo of delete, so it is gated the same way.
+     *
+     * @return \Illuminate\Auth\Access\Response|bool
+     */
+    public function restore(User $user, TicketStatus $ticketStatus)
+    {
+        return $this->delete($user, $ticketStatus);
+    }
+
+    /**
+     * Bulk restoring is the undo of bulk delete, so it is gated the same way.
+     *
+     * @return \Illuminate\Auth\Access\Response|bool
+     */
+    public function restoreAny(User $user)
+    {
+        return $this->deleteAny($user);
+    }
+
+    /**
+     * Determine whether the user can reorder the models.
+     *
+     * TicketStatusResource's table is reorderable, and the order it writes drives
+     * the board column order for everyone. That is an edit, so it needs the same
+     * permission as any other edit - not merely the permission to see the list.
+     *
+     * @return \Illuminate\Auth\Access\Response|bool
+     */
+    public function reorder(User $user)
+    {
+        return $user->can('Update ticket status');
     }
 }

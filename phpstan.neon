@@ -1,0 +1,11 @@
+includes:
+    - vendor/nunomaduro/larastan/extension.neon
+    - phpstan-baseline.neon
+
+parameters:
+    level: 5
+    paths:
+        - app
+
+    # Pre-existing issues are captured in phpstan-baseline.neon; CI enforces
+    # that no *new* issues are introduced. Ratchet the level up over time.

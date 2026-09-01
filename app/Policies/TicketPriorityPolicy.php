@@ -13,7 +13,6 @@ class TicketPriorityPolicy
     /**
      * Determine whether the user can view any models.
      *
-     * @param \App\Models\User $user
      * @return \Illuminate\Auth\Access\Response|bool
      */
     public function viewAny(User $user)
@@ -24,8 +23,6 @@ class TicketPriorityPolicy
     /**
      * Determine whether the user can view the model.
      *
-     * @param \App\Models\User $user
-     * @param \App\Models\TicketPriority $ticketPriority
      * @return \Illuminate\Auth\Access\Response|bool
      */
     public function view(User $user, TicketPriority $ticketPriority)
@@ -36,7 +33,6 @@ class TicketPriorityPolicy
     /**
      * Determine whether the user can create models.
      *
-     * @param \App\Models\User $user
      * @return \Illuminate\Auth\Access\Response|bool
      */
     public function create(User $user)
@@ -47,8 +43,6 @@ class TicketPriorityPolicy
     /**
      * Determine whether the user can update the model.
      *
-     * @param \App\Models\User $user
-     * @param \App\Models\TicketPriority $ticketPriority
      * @return \Illuminate\Auth\Access\Response|bool
      */
     public function update(User $user, TicketPriority $ticketPriority)
@@ -59,12 +53,40 @@ class TicketPriorityPolicy
     /**
      * Determine whether the user can delete the model.
      *
-     * @param \App\Models\User $user
-     * @param \App\Models\TicketPriority $ticketPriority
      * @return \Illuminate\Auth\Access\Response|bool
      */
     public function delete(User $user, TicketPriority $ticketPriority)
     {
         return $user->can('Delete ticket priority');
+    }
+
+    /**
+     * Determine whether the user can bulk delete models.
+     *
+     * @return \Illuminate\Auth\Access\Response|bool
+     */
+    public function deleteAny(User $user)
+    {
+        return $user->can('Delete ticket priority');
+    }
+
+    /**
+     * Restoring is the undo of delete, so it is gated the same way.
+     *
+     * @return \Illuminate\Auth\Access\Response|bool
+     */
+    public function restore(User $user, TicketPriority $ticketPriority)
+    {
+        return $this->delete($user, $ticketPriority);
+    }
+
+    /**
+     * Bulk restoring is the undo of bulk delete, so it is gated the same way.
+     *
+     * @return \Illuminate\Auth\Access\Response|bool
+     */
+    public function restoreAny(User $user)
+    {
+        return $this->deleteAny($user);
     }
 }

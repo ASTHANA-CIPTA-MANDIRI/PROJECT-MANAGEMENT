@@ -13,8 +13,13 @@ class DatabaseSeeder extends Seeder
      */
     public function run()
     {
-        $this->call(DefaultUserSeeder::class);
+        // Permissions and roles first: DefaultUserSeeder assigns "Super Admin"
+        // and "Employee" to the accounts it creates, so those roles have to
+        // exist by the time it runs.
         $this->call(PermissionsSeeder::class);
+        $this->call(EmployeeRoleSeeder::class);
+        $this->call(DefaultUserSeeder::class);
+        $this->call(ProjectStatusSeeder::class);
         $this->call(TicketTypeSeeder::class);
         $this->call(TicketPrioritySeeder::class);
         $this->call(TicketStatusSeeder::class);

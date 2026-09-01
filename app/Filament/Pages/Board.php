@@ -3,15 +3,19 @@
 namespace App\Filament\Pages;
 
 use App\Models\Project;
+use Filament\Facades\Filament;
 use Filament\Forms\Components\Card;
 use Filament\Forms\Components\Grid;
 use Filament\Forms\Components\Select;
 use Filament\Forms\Concerns\InteractsWithForms;
 use Filament\Forms\Contracts\HasForms;
-use Filament\Pages\Page;
 use Illuminate\Contracts\Support\Htmlable;
 
-class Board extends Page implements HasForms
+/**
+ * No page permission: the project picker only ever offers projects the user
+ * owns or belongs to (`Project::accessibleBy`).
+ */
+class Board extends AuthorizedPage implements HasForms
 {
     use InteractsWithForms;
 
@@ -58,10 +62,7 @@ class Board extends Page implements HasForms
                                 ->reactive()
                                 ->afterStateUpdated(fn () => $this->search())
                                 ->helperText(__("Choose a project to show it's board"))
-                                ->options(fn() => Project::where('owner_id', auth()->user()->id)
-                                    ->orWhereHas('users', function ($query) {
-                                        return $query->where('users.id', auth()->user()->id);
-                                    })->pluck('name', 'id')->toArray()),
+                                ->options(fn () => Project::accessibleBy(auth()->user())->pluck('name', 'id')->toArray()),
                         ]),
                 ]),
         ];
@@ -70,8 +71,18 @@ class Board extends Page implements HasForms
     public function search(): void
     {
         $data = $this->form->getState();
-        $project = Project::find($data['project']);
-        if ($project->type === "scrum") {
+
+        // The select only offers accessible projects, but the id arrives from
+        // the browser: re-scope it instead of trusting the payload.
+        $project = Project::accessibleBy(auth()->user())->find($data['project']);
+
+        if (! $project) {
+            Filament::notify('danger', __('This project is not available'));
+
+            return;
+        }
+
+        if ($project->type === 'scrum') {
             $this->redirect(route('filament.pages.scrum/{project}', ['project' => $project]));
         } else {
             $this->redirect(route('filament.pages.kanban/{project}', ['project' => $project]));

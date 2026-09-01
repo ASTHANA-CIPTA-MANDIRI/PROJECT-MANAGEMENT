@@ -4,18 +4,21 @@ declare(strict_types=1);
 
 namespace App\Filament\Pages;
 
+use Closure;
 use Filament\Forms\Components\Card;
+use Filament\Forms\Components\DatePicker;
 use Filament\Forms\Components\Grid;
 use Filament\Forms\Concerns\InteractsWithForms;
 use Filament\Forms\Contracts\HasForms;
-use Filament\Pages\Page;
-use Filament\Forms\Components\DatePicker;
 use Maatwebsite\Excel\Facades\Excel;
 use Symfony\Component\HttpFoundation\BinaryFileResponse;
 
-class TimesheetExport extends Page implements HasForms
+class TimesheetExport extends AuthorizedPage implements HasForms
 {
     use InteractsWithForms;
+
+    /** Same permission as the timesheet list this page dumps to CSV. */
+    protected static ?string $permission = 'List timesheet data';
 
     protected static ?string $slug = 'timesheet-export';
 
@@ -47,9 +50,10 @@ class TimesheetExport extends Page implements HasForms
                         DatePicker::make('end_date')
                             ->required()
                             ->reactive()
-                            ->label('End date')
-                    ])
-            ])
+                            ->afterOrEqual(fn (Closure $get) => $get('start_date'))
+                            ->label('End date'),
+                    ]),
+            ]),
         ];
     }
 
@@ -59,7 +63,7 @@ class TimesheetExport extends Page implements HasForms
 
         return Excel::download(
             new \App\Exports\TimesheetExport($data),
-            'time_' . time() . '.csv',
+            'time_'.time().'.csv',
             \Maatwebsite\Excel\Excel::CSV,
             ['Content-Type' => 'text/csv']
         );

@@ -2,12 +2,13 @@
 
 namespace App\Listeners;
 
-use App\Models\Role;
-use App\Settings\GeneralSettings;
+use App\Listeners\Concerns\AssignsDefaultRole;
 use Illuminate\Auth\Events\Registered;
 
 class AssignDefaultRole
 {
+    use AssignsDefaultRole;
+
     /**
      * Handle the event.
      *
@@ -15,7 +16,6 @@ class AssignDefaultRole
      * through the self-registration form. Without a role the user has no
      * permissions and would be blocked by User::canAccessFilament() (403).
      *
-     * @param Registered $event
      * @return void
      */
     public function handle(Registered $event)
@@ -27,9 +27,6 @@ class AssignDefaultRole
             return;
         }
 
-        $defaultRoleSettings = app(GeneralSettings::class)->default_role;
-        if ($defaultRoleSettings && $defaultRole = Role::where('id', $defaultRoleSettings)->first()) {
-            $user->syncRoles([$defaultRole]);
-        }
+        $this->assignDefaultRole($user);
     }
 }

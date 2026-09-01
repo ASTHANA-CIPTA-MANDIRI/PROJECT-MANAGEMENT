@@ -1,15 +1,27 @@
 <?php
 
-use App\Models\User;
-use App\Models\Ticket;
-use Illuminate\Support\Facades\Route;
-use Filament\Http\Middleware\DispatchServingFilamentEvent;
+use App\Http\Controllers\MediaController;
 use App\Http\Controllers\RoadMap\DataController;
+use App\Models\Ticket;
+use App\Models\User;
+use Filament\Http\Middleware\DispatchServingFilamentEvent;
 use Illuminate\Foundation\Auth\EmailVerificationRequest;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\Route;
 
-// Share ticket (public, throttled to 60/min per IP)
-Route::get('/tickets/share/{ticket:code}', function (Ticket $ticket) {
+// Share ticket (public, throttled to 60/min per IP). The ticket is looked up
+// manually rather than through route-model binding: a guest gets the exact
+// same redirect-to-login response whether the code exists or not, so a batch
+// of guesses cannot be scored by response shape (ticket code enumeration).
+// Only a signed-in user - who still needs the ticket policy's blessing to
+// actually view it - sees the 404 for a code that does not exist.
+Route::get('/tickets/share/{code}', function (string $code) {
+    if (! auth()->check()) {
+        return redirect()->guest(route('login'));
+    }
+
+    $ticket = Ticket::where('code', $code)->firstOrFail();
+
     return redirect()->to(route('filament.resources.tickets.view', $ticket));
 })->middleware('throttle:public')->name('filament.resources.tickets.share');
 
@@ -21,7 +33,18 @@ Route::get('/validate-account/{user:creation_token}', function (User $user) {
     ->middleware([
         'web',
         'throttle:public',
-        DispatchServingFilamentEvent::class
+        DispatchServingFilamentEvent::class,
+    ]);
+
+// Second factor for a social login held back by SocialiteLoginController.
+// Public by necessity (nobody is authenticated yet); the parked session entry
+// is what makes it usable, and the component re-verifies it on every action.
+Route::get('/two-factor-challenge', fn () => view('two-factor-challenge'))
+    ->name('two-factor-challenge')
+    ->middleware([
+        'web',
+        'throttle:public',
+        DispatchServingFilamentEvent::class,
     ]);
 
 // Login default redirection
@@ -29,8 +52,15 @@ Route::redirect('/login-redirect', '/login')->name('login');
 
 // Road map JSON data
 Route::get('road-map/data/{project}', [DataController::class, 'data'])
-    ->middleware(['verified', 'auth'])
+    ->middleware(['auth', 'verified'])
     ->name('road-map.data');
+
+// Ticket attachments / project covers - authorization is enforced in the
+// controller (TicketPolicy/ProjectPolicy) since it depends on which model
+// the media belongs to.
+Route::get('/media/{media}', [MediaController::class, 'show'])
+    ->middleware('auth')
+    ->name('media.show');
 
 Route::get('/email/verify/{id}/{hash}', function (EmailVerificationRequest $request) {
     $request->fulfill(); // menandai email sebagai terverifikasi

@@ -1,19 +1,34 @@
 version: "3.3"
 
+# For local development only. Nothing here is hardened for a shared or public
+# host — no TLS termination, no secrets manager, no network policy beyond
+# Compose's own internal DNS.
+
 volumes:
   mysql_data:
+  # Uploaded files (spatie/laravel-medialibrary stores them under
+  # storage/app/media). Without this they live only in the container's writable
+  # layer and are lost the moment it is recreated — including on every
+  # `docker compose up --build`.
+  storage_data:
 
 services:
   sqldb:
-    image: mysql:5.7
+    # 8.0 reaches MySQL's own end-of-life in April 2026 and stops receiving
+    # security patches; 8.4 is the current LTS series and is what Laravel 9 +
+    # PHP 8.2's pdo_mysql already target.
+    image: mysql:8.4
     container_name: helper-mysql
     volumes:
       - mysql_data:/var/lib/mysql
     environment:
+      # No fallback password: a guessable default is exactly what let this
+      # image run unpatched with known credentials before. Same pattern as
+      # APP_KEY above — set these in the .env file next to this one.
       - MYSQL_DATABASE=helper
       - MYSQL_USER=helper
-      - MYSQL_PASSWORD=helper
-      - MYSQL_ROOT_PASSWORD=helper
+      - MYSQL_PASSWORD=${DB_PASSWORD:?set DB_PASSWORD in .env}
+      - MYSQL_ROOT_PASSWORD=${DB_ROOT_PASSWORD:?set DB_ROOT_PASSWORD in .env}
     command: --default-storage-engine innodb
     restart: unless-stopped
     healthcheck:
@@ -23,15 +38,28 @@ services:
       timeout: 10s
       retries: 3
   helper:
-    image: eloufirhatim/helper:latest
+    # Built from this repository's Dockerfile. It used to pull
+    # eloufirhatim/helper:latest, but that is the upstream project's image,
+    # built from a different codebase — and the workflow that published it has
+    # been removed, so nothing publishes an image for this repository.
+    build: .
+    image: helper:local
     container_name: helper-server
     environment:
+      # The image no longer ships an APP_KEY, so every installation supplies
+      # its own — a key baked into a published image would be shared by every
+      # pull of it. Compose reads this from the .env file next to this one (or
+      # from your shell); generate it once and keep it stable, since changing
+      # it invalidates all sessions and encrypted values:
+      #
+      #     docker run --rm helper:local php artisan key:generate --show
+      - APP_KEY=${APP_KEY:?generate one with "php artisan key:generate --show" and put it in .env}
       - DB_CONNECTION=mysql
       - DB_HOST=sqldb
       - DB_PORT=3306
       - DB_DATABASE=helper
       - DB_USERNAME=helper
-      - DB_PASSWORD=helper
+      - DB_PASSWORD=${DB_PASSWORD:?set DB_PASSWORD in .env}
       - MAIL_MAILER=smtp
       - MAIL_HOST=smtp.mailtrap.io
       - MAIL_PORT=2525
@@ -40,8 +68,11 @@ services:
       - MAIL_ENCRYPTION=tls
     depends_on:
       - sqldb
-    restart: "no"
+    # The entrypoint retries the migration while MySQL starts, but the
+    # container should also come back on its own after a crash or a reboot.
+    restart: unless-stopped
     ports:
       - 8000:8000
     volumes:
+      - storage_data:/app/storage/app
       - /etc/localtime:/etc/localtime

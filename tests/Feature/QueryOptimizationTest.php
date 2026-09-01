@@ -2,21 +2,32 @@
 
 namespace Tests\Feature;
 
+use App\Filament\Pages\Kanban;
 use App\Filament\Resources\ProjectResource;
 use App\Filament\Resources\TicketResource;
+use App\Models\Activity;
+use App\Models\Label;
 use App\Models\Project;
+use App\Models\Sprint;
 use App\Models\Ticket;
 use App\Models\TicketHour;
+use App\Models\TicketPriority;
+use App\Models\TicketRelation;
+use App\Models\TicketStatus;
+use App\Models\TicketType;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Notification;
+use Illuminate\Support\Facades\Storage;
+use Livewire\Livewire;
+use Tests\InteractsWithPermissions;
 use Tests\TestCase;
 
 class QueryOptimizationTest extends TestCase
 {
-    use RefreshDatabase;
+    use InteractsWithPermissions, RefreshDatabase;
 
     protected function setUp(): void
     {
@@ -103,6 +114,11 @@ class QueryOptimizationTest extends TestCase
         $owner = User::factory()->create();
         Project::factory()->count(5)->create(['owner_id' => $owner->id]);
 
+        // ProjectResource::getEloquentQuery() scopes to the acting user's
+        // accessible projects (L-8) - own every project here so all 5 stay
+        // in scope and the query count still reflects 5 rows.
+        $this->actingAs($owner);
+
         DB::connection()->enableQueryLog();
 
         $projects = ProjectResource::getEloquentQuery()->get();
@@ -120,10 +136,166 @@ class QueryOptimizationTest extends TestCase
         $this->assertLessThanOrEqual(8, $queryCount, "Expected eager loading, ran {$queryCount} queries");
     }
 
+    /**
+     * user-avatar.blade.php used to read ->ticketsOwned / ->ticketsResponsible /
+     * ->projectsOwning / ->projectsAffected as properties (lazy-loading and
+     * hydrating every row) just to merge/unique/count them in PHP. The
+     * accessors must give the same, deduped answer via a single COUNT query.
+     */
+    public function test_tickets_and_projects_counts_are_correct_and_deduped(): void
+    {
+        $user = User::factory()->create();
+
+        // Owned and responsible on the same ticket must count once, not twice.
+        Ticket::factory()->create(['owner_id' => $user->id, 'responsible_id' => $user->id]);
+        Ticket::factory()->create(['owner_id' => $user->id]);
+        Ticket::factory()->create(['responsible_id' => $user->id]);
+
+        $this->assertSame(3, $user->ticketsCount);
+
+        // Owning a project and also being a pivot member of it must count once.
+        $ownedAndMember = Project::factory()->create(['owner_id' => $user->id]);
+        $ownedAndMember->users()->attach($user->id, ['role' => 'member']);
+        Project::factory()->create(['owner_id' => $user->id]);
+        Project::factory()->create()->users()->attach($user->id, ['role' => 'member']);
+
+        $this->assertSame(3, $user->projectsCount);
+    }
+
+    /**
+     * The old implementation ran SELECT * on every ticket/project the user
+     * touched just to count them - unbounded per-render memory for a user
+     * with thousands of tickets. The accessor must never hydrate those rows.
+     */
+    public function test_tickets_and_projects_counts_never_hydrate_full_rows(): void
+    {
+        $user = User::factory()->create();
+        Ticket::factory()->count(5)->create(['owner_id' => $user->id]);
+        Project::factory()->count(5)->create(['owner_id' => $user->id]);
+
+        DB::connection()->flushQueryLog();
+        DB::connection()->enableQueryLog();
+
+        $user->ticketsCount;
+        $user->projectsCount;
+
+        $queries = collect(DB::connection()->getQueryLog())->pluck('query');
+        DB::connection()->disableQueryLog();
+
+        $this->assertFalse(
+            $queries->contains(fn (string $sql) => str_starts_with($sql, 'select * from "tickets"')
+                || str_starts_with($sql, 'select * from "projects"')),
+            'no query should fetch full ticket/project rows: '.$queries->implode(' | ')
+        );
+        $this->assertTrue(
+            $queries->every(fn (string $sql) => str_contains($sql, 'count(')),
+            'every query should be an aggregate count: '.$queries->implode(' | ')
+        );
+    }
+
+    /**
+     * TicketObserver::updating() used to re-fetch the ticket it was already
+     * handed (Ticket::where('id', $ticket->id)->first()) just to read the
+     * pre-update status/sprint. Eloquent already carries those as-loaded
+     * values via getOriginal(); no extra SELECT should run.
+     */
+    public function test_updating_a_ticket_does_not_re_query_its_original_row(): void
+    {
+        $ticket = Ticket::factory()->create();
+        $newStatus = TicketStatus::factory()->create();
+
+        DB::connection()->flushQueryLog();
+        DB::connection()->enableQueryLog();
+
+        $ticket->update(['status_id' => $newStatus->id]);
+
+        $queries = collect(DB::connection()->getQueryLog())->pluck('query');
+        DB::connection()->disableQueryLog();
+
+        $this->assertFalse(
+            $queries->contains(fn (string $sql) => str_starts_with($sql, 'select * from "tickets" where "id"')),
+            'updating a ticket should not re-select its own row: '.$queries->implode(' | ')
+        );
+    }
+
+    /**
+     * TicketObserver::updating() used to write epic_id via a separate query
+     * builder update fired mid-event, before the ticket's own save() had run
+     * its UPDATE - it only worked because save() happened to write just its
+     * dirty attributes afterwards, an implicit contract nobody guaranteed.
+     * Moved to updated(), the epic sync must now run strictly after the
+     * ticket's own UPDATE has completed.
+     */
+    public function test_epic_sync_runs_after_the_tickets_own_update_completes(): void
+    {
+        $project = Project::factory()->create();
+        $sprint = Sprint::factory()->create(['project_id' => $project->id]);
+        $ticket = Ticket::factory()->create(['project_id' => $project->id]);
+
+        DB::connection()->flushQueryLog();
+        DB::connection()->enableQueryLog();
+
+        $ticket->update(['sprint_id' => $sprint->id]);
+
+        $queries = collect(DB::connection()->getQueryLog())->pluck('query');
+        DB::connection()->disableQueryLog();
+
+        $ticketUpdateIndex = $queries->search(
+            fn (string $sql) => str_starts_with($sql, 'update "tickets" set') && str_contains($sql, '"sprint_id"')
+        );
+        $epicUpdateIndex = $queries->search(
+            fn (string $sql) => str_starts_with($sql, 'update "tickets" set')
+                && str_contains($sql, '"epic_id"') && ! str_contains($sql, '"sprint_id"')
+        );
+
+        $this->assertNotFalse($ticketUpdateIndex, 'expected the ticket\'s own update: '.$queries->implode(' | '));
+        $this->assertNotFalse($epicUpdateIndex, 'expected the epic sync update: '.$queries->implode(' | '));
+        $this->assertGreaterThan(
+            $ticketUpdateIndex, $epicUpdateIndex,
+            'epic sync should run only after the ticket\'s own save completes: '.$queries->implode(' | ')
+        );
+    }
+
+    /**
+     * TicketResource::getEloquentQuery() renders an avatar (with ticket/project
+     * counts) for the owner and responsible of every row. Without eager-loaded
+     * counts that's 4 extra queries per unique user; this must stay constant.
+     */
+    public function test_ticket_listing_query_eager_loads_avatar_counts(): void
+    {
+        $owner = User::factory()->create();
+        $project = Project::factory()->create();
+        Ticket::factory()->count(5)->create(['project_id' => $project->id, 'owner_id' => $owner->id]);
+
+        // TicketResource::getEloquentQuery() scopes to the acting user's
+        // accessible tickets (L-8) - own every ticket here so all 5 stay in
+        // scope and the query count still reflects 5 rows.
+        $this->actingAs($owner);
+
+        DB::connection()->flushQueryLog();
+        DB::connection()->enableQueryLog();
+
+        $tickets = TicketResource::getEloquentQuery()->get();
+        foreach ($tickets as $ticket) {
+            $ticket->owner->ticketsCount;
+            $ticket->owner->projectsCount;
+        }
+
+        $queryCount = count(DB::connection()->getQueryLog());
+        DB::connection()->disableQueryLog();
+
+        $this->assertLessThanOrEqual(10, $queryCount, "Expected eager-loaded counts, ran {$queryCount} queries");
+    }
+
     public function test_ticket_listing_query_eager_loads_relations(): void
     {
         $project = Project::factory()->create();
         Ticket::factory()->count(5)->create(['project_id' => $project->id]);
+
+        // TicketResource::getEloquentQuery() scopes to the acting user's
+        // accessible tickets (L-8) - act as the project's owner so all 5
+        // stay in scope regardless of each ticket's own owner/responsible.
+        $this->actingAs($project->owner);
 
         DB::connection()->enableQueryLog();
 
@@ -141,6 +313,90 @@ class QueryOptimizationTest extends TestCase
 
         // 1 tickets + 5 eager-loaded relations = ~6, not 1 + 5*5 = 26.
         $this->assertLessThanOrEqual(10, $queryCount, "Expected eager loading, ran {$queryCount} queries");
+    }
+
+    /**
+     * TicketObserver::creating() read $project->tickets as a property, i.e.
+     * SELECT * FROM tickets WHERE project_id = ? — every row of the project
+     * hydrated into a model — only to read one column. On a busy project that
+     * ran on every single insert, inside the import/API transaction.
+     */
+    public function test_creating_a_ticket_does_not_load_every_ticket_of_the_project(): void
+    {
+        $project = Project::factory()->create();
+        Ticket::factory()->count(10)->create(['project_id' => $project->id]);
+
+        DB::connection()->enableQueryLog();
+
+        Ticket::factory()->create(['project_id' => $project->id]);
+
+        $queries = collect(DB::connection()->getQueryLog())->pluck('query');
+        DB::connection()->disableQueryLog();
+
+        $this->assertTrue(
+            $queries->contains(fn (string $sql) => str_contains($sql, 'max(') && str_contains($sql, 'tickets')),
+            'the next order should come from an aggregate'
+        );
+        $this->assertFalse(
+            $queries->contains(fn (string $sql) => str_starts_with($sql, 'select * from "tickets"')),
+            'no query should fetch every ticket row: '.$queries->implode(' | ')
+        );
+    }
+
+    /**
+     * The type/priority/activity/label dropdowns (ticket filters and forms)
+     * used to read Model::all()->pluck('name', 'id') - hydrating every column
+     * of every row just to keep two of them. They must select only what the
+     * dropdown needs.
+     */
+    public function test_reference_dropdowns_select_only_name_and_id(): void
+    {
+        TicketType::factory()->count(3)->create();
+        TicketPriority::factory()->count(3)->create();
+        Activity::factory()->count(3)->create();
+        Label::factory()->count(3)->create();
+
+        DB::connection()->flushQueryLog();
+        DB::connection()->enableQueryLog();
+
+        TicketType::query()->pluck('name', 'id');
+        TicketPriority::query()->pluck('name', 'id');
+        Activity::query()->pluck('name', 'id');
+        Label::query()->pluck('name', 'id');
+
+        $queries = collect(DB::connection()->getQueryLog())->pluck('query');
+        DB::connection()->disableQueryLog();
+
+        $this->assertFalse(
+            $queries->contains(fn (string $sql) => str_starts_with($sql, 'select * from')),
+            'reference dropdowns should not hydrate full rows: '.$queries->implode(' | ')
+        );
+    }
+
+    public function test_latest_projects_widget_eager_loads_cover_media(): void
+    {
+        Storage::fake('media');
+        $owner = User::factory()->create();
+        $projects = Project::factory()->count(5)->create(['owner_id' => $owner->id]);
+        // Give a couple of them a real cover so the media-present path runs too.
+        foreach ($projects->take(2) as $project) {
+            $project->addMediaFromString('img')->usingFileName('cover.png')->toMediaCollection();
+        }
+
+        DB::connection()->enableQueryLog();
+
+        // Mirrors LatestProjects::getTableQuery's eager-load set.
+        $rows = Project::query()->with(['owner', 'status', 'media'])->limit(5)->get();
+        foreach ($rows as $project) {
+            $project->cover; // reads the media collection
+        }
+
+        $queryCount = count(DB::connection()->getQueryLog());
+        DB::connection()->disableQueryLog();
+
+        // Constant regardless of row count: without eager-loaded media each
+        // cover access would add a query per project.
+        $this->assertLessThanOrEqual(4, $queryCount, "Expected eager-loaded media, ran {$queryCount} queries");
     }
 
     public function test_time_logged_widget_avoids_per_row_hour_queries(): void
@@ -163,5 +419,289 @@ class QueryOptimizationTest extends TestCase
 
         // One query total: the SUM is computed in SQL, not per ticket.
         $this->assertSame(1, $queryCount, "Expected a single aggregate query, ran {$queryCount}");
+    }
+
+    public function test_timesheet_time_logged_table_eager_loads_relations(): void
+    {
+        $ticket = Ticket::factory()->create();
+        TicketHour::factory()->count(5)->create(['ticket_id' => $ticket->id]);
+
+        DB::connection()->enableQueryLog();
+
+        // Mirrors Livewire\Timesheet\TimeLogged::getTableQuery's eager-load set.
+        $hours = $ticket->hours()->with(['user', 'activity', 'ticket'])->getQuery()->get();
+        foreach ($hours as $hour) {
+            $hour->user;
+            $hour->activity;
+            $hour->ticket;
+        }
+
+        $queryCount = count(DB::connection()->getQueryLog());
+        DB::connection()->disableQueryLog();
+
+        // 1 hours query + 3 eager-loaded relations = 4, not 1 + 5*3 = 16.
+        $this->assertLessThanOrEqual(4, $queryCount, "Expected eager loading, ran {$queryCount} queries");
+    }
+
+    // ------------------------------------------------------ cached accessors
+
+    /**
+     * Eloquent caches object attribute values by default, so this was already
+     * a single query while a sprint was running. null is not an object
+     * though, so a project between sprints re-ran the lookup on every read -
+     * and the scrum page reads it about six times per render.
+     */
+    public function test_reading_the_current_sprint_of_a_project_between_sprints_runs_one_query(): void
+    {
+        $project = Project::factory()->scrum()->create();
+        Sprint::factory()->ended()->create(['project_id' => $project->id]);
+
+        DB::connection()->flushQueryLog();
+        DB::connection()->enableQueryLog();
+
+        for ($i = 0; $i < 6; $i++) {
+            $project->currentSprint;
+            $project->nextSprint;
+        }
+
+        $queryCount = count(DB::connection()->getQueryLog());
+        DB::connection()->disableQueryLog();
+
+        $this->assertNull($project->currentSprint);
+        $this->assertSame(1, $queryCount, "Expected the accessors to cache, ran {$queryCount} queries");
+    }
+
+    public function test_the_running_sprint_is_still_found_and_cached(): void
+    {
+        $project = Project::factory()->scrum()->create();
+        $running = Sprint::factory()->started()->create(['project_id' => $project->id]);
+
+        DB::connection()->flushQueryLog();
+        DB::connection()->enableQueryLog();
+
+        for ($i = 0; $i < 6; $i++) {
+            $project->currentSprint;
+        }
+
+        $queryCount = count(DB::connection()->getQueryLog());
+        DB::connection()->disableQueryLog();
+
+        $this->assertSame($running->id, $project->currentSprint->id);
+        $this->assertSame(1, $queryCount, "Expected the accessor to cache, ran {$queryCount} queries");
+    }
+
+    /**
+     * The cache lives on the model instance, so re-reading the project picks
+     * up a sprint that started or ended in the meantime.
+     */
+    public function test_a_freshly_fetched_project_sees_the_new_current_sprint(): void
+    {
+        $project = Project::factory()->scrum()->create();
+        $running = Sprint::factory()->started()->create(['project_id' => $project->id]);
+
+        $this->assertSame($running->id, $project->currentSprint->id);
+
+        $running->update(['ended_at' => now()]);
+        $next = Sprint::factory()->started()->create(['project_id' => $project->id]);
+
+        $this->assertSame($next->id, $project->fresh()->currentSprint->id);
+    }
+
+    // ------------------------------------------------ kanban / scrum board
+
+    /**
+     * Build a board's worth of cards, each with logged hours and a relation
+     * to another ticket - the two things the card template reads.
+     */
+    private function boardWithCards(User $owner, int $cards): Project
+    {
+        $project = Project::factory()->create(['owner_id' => $owner->id]);
+        $status = TicketStatus::factory()->default()->create(['project_id' => null]);
+
+        for ($i = 0; $i < $cards; $i++) {
+            $ticket = Ticket::factory()->create([
+                'project_id' => $project->id,
+                'owner_id' => $owner->id,
+                'status_id' => $status->id,
+            ]);
+            TicketHour::factory()->count(2)->create(['ticket_id' => $ticket->id]);
+            TicketRelation::create([
+                'ticket_id' => $ticket->id,
+                'relation_id' => Ticket::factory()->create(['project_id' => $project->id])->id,
+                'type' => config('system.tickets.relations.default'),
+            ]);
+        }
+
+        return $project;
+    }
+
+    /**
+     * Queries run by one board render. The page is mounted first and outside
+     * the measurement: booting a Filament page runs its own fixed set of
+     * permission/settings queries, which would drown out the per-card cost
+     * this is here to catch.
+     */
+    private function boardQueryCount(Project $project): int
+    {
+        $board = Livewire::test(Kanban::class, ['project' => $project])->instance();
+
+        DB::connection()->flushQueryLog();
+        DB::connection()->enableQueryLog();
+
+        // Touch what the card template reads, so a missing eager load shows up
+        // as the extra query it would be at render time.
+        foreach ($board->getRecords() as $record) {
+            $record['totalLoggedHours'];
+            foreach ($record['relations'] as $relation) {
+                $relation->relation->code;
+            }
+        }
+
+        $count = count(DB::connection()->getQueryLog());
+        DB::connection()->disableQueryLog();
+
+        return $count;
+    }
+
+    /**
+     * getRecords() eager-loaded `relations` but not `relations.relation`, and
+     * never loaded the hours the card footer reads - so every card cost one
+     * query for its logged time plus one per relation. The board re-renders on
+     * every Livewire interaction and every broadcast, so that multiplied fast.
+     */
+    public function test_the_board_does_not_run_extra_queries_per_card(): void
+    {
+        $user = $this->userWithPermissions(['List tickets', 'View ticket']);
+        $this->actingAs($user);
+
+        $small = $this->boardWithCards($user, 2);
+        $large = $this->boardWithCards($user, 8);
+
+        $smallCount = $this->boardQueryCount($small);
+        $largeCount = $this->boardQueryCount($large);
+
+        // Four times the cards must cost the same number of queries: without
+        // the eager loads this was 2 extra per card (hours + relation).
+        $this->assertSame(
+            $smallCount,
+            $largeCount,
+            "Board queries scale with card count: {$smallCount} for 2 cards, {$largeCount} for 8"
+        );
+    }
+
+    /**
+     * Card avatars (x-user-avatar) read responsible->ticketsCount/projectsCount.
+     * Without eager-loaded counts on the `responsible` relation, that cost two
+     * extra COUNT queries per card even for the same user on every card.
+     */
+    public function test_the_board_does_not_run_extra_avatar_count_queries_per_card(): void
+    {
+        $user = $this->userWithPermissions(['List tickets', 'View ticket']);
+        $this->actingAs($user);
+
+        $project = $this->boardWithCards($user, 5);
+        Ticket::where('project_id', $project->id)->update(['responsible_id' => $user->id]);
+
+        $board = Livewire::test(Kanban::class, ['project' => $project])->instance();
+        $records = $board->getRecords();
+
+        DB::connection()->flushQueryLog();
+        DB::connection()->enableQueryLog();
+
+        foreach ($records as $record) {
+            $record['responsible']->ticketsCount;
+            $record['responsible']->projectsCount;
+        }
+
+        $queries = collect(DB::connection()->getQueryLog())->pluck('query');
+        DB::connection()->disableQueryLog();
+
+        $this->assertTrue(
+            $queries->isEmpty(),
+            'expected ticketsCount/projectsCount to already be eager-loaded onto responsible: '.$queries->implode(' | ')
+        );
+    }
+
+    // --------------------------------------------- user avatar counts (M-2)
+
+    /**
+     * ticketsCount/projectsCount used to re-run their COUNT query on every
+     * access. The same user is often rendered as an avatar many times on one
+     * page (e.g. a comment author appearing repeatedly), so a second User
+     * instance of the same row must reuse the first instance's answer for
+     * the rest of the request instead of querying again.
+     */
+    public function test_tickets_and_projects_counts_are_memoized_per_user_per_request(): void
+    {
+        $user = User::factory()->create();
+        Ticket::factory()->create(['owner_id' => $user->id]);
+        Project::factory()->create(['owner_id' => $user->id]);
+
+        DB::connection()->flushQueryLog();
+        DB::connection()->enableQueryLog();
+
+        // Two separate model instances of the same row, as happens when the
+        // same user is loaded via two different relations (e.g. a comment
+        // author and an activity author) rather than being the same object.
+        $first = User::find($user->id);
+        $second = User::find($user->id);
+
+        $first->ticketsCount;
+        $first->projectsCount;
+        $second->ticketsCount;
+        $second->projectsCount;
+
+        $countQueries = collect(DB::connection()->getQueryLog())
+            ->pluck('query')
+            ->filter(fn (string $sql) => str_contains($sql, 'count('));
+        DB::connection()->disableQueryLog();
+
+        $this->assertCount(
+            2, $countQueries,
+            'expected exactly one tickets-count query and one projects-count query for both instances combined: '
+                .$countQueries->implode(' | ')
+        );
+    }
+
+    /**
+     * The dashboard's "latest comments" widget renders one avatar per row;
+     * when several of the latest comments share the same author, the
+     * ticketsCount/projectsCount subqueries must be eager-loaded once on the
+     * `user` relation rather than costing two queries per row.
+     */
+    public function test_the_latest_comments_widget_eager_loads_avatar_counts(): void
+    {
+        $author = $this->userWithPermissions(['List tickets']);
+        $this->actingAs($author);
+
+        $project = Project::factory()->create(['owner_id' => $author->id]);
+        $tickets = Ticket::factory()->count(3)->create([
+            'project_id' => $project->id,
+            'owner_id' => $author->id,
+        ]);
+        foreach ($tickets as $ticket) {
+            \App\Models\TicketComment::factory()->create([
+                'ticket_id' => $ticket->id,
+                'user_id' => $author->id,
+            ]);
+        }
+
+        $comments = (fn () => $this->getTableQuery())->call(new \App\Filament\Widgets\LatestComments)->get();
+
+        DB::connection()->flushQueryLog();
+        DB::connection()->enableQueryLog();
+
+        foreach ($comments as $comment) {
+            $comment->user->ticketsCount;
+            $comment->user->projectsCount;
+        }
+
+        $queries = collect(DB::connection()->getQueryLog())->pluck('query');
+        DB::connection()->disableQueryLog();
+
+        $this->assertTrue(
+            $queries->isEmpty(),
+            'expected ticketsCount/projectsCount to already be eager-loaded onto comment.user: '.$queries->implode(' | ')
+        );
     }
 }

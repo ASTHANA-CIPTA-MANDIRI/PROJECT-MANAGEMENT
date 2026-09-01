@@ -8,11 +8,11 @@ use App\Models\Activity;
 use App\Models\TicketComment;
 use App\Models\TicketHour;
 use App\Models\TicketSubscriber;
+use App\Support\Mentions;
 use Filament\Forms\Components\RichEditor;
 use Filament\Forms\Components\Select;
 use Filament\Forms\Components\Textarea;
 use Filament\Forms\Components\TextInput;
-use Filament\Forms\Components\TimePicker;
 use Filament\Forms\Concerns\InteractsWithForms;
 use Filament\Forms\Contracts\HasForms;
 use Filament\Notifications\Actions\Action;
@@ -47,12 +47,12 @@ class ViewTicket extends ViewRecord implements HasForms
         return [
             Actions\Action::make('toggleSubscribe')
                 ->label(
-                    fn() => $this->record->subscribers()->where('users.id', auth()->user()->id)->count() ?
+                    fn () => $this->record->subscribers()->where('users.id', auth()->user()->id)->count() ?
                         __('Unsubscribe')
                         : __('Subscribe')
                 )
                 ->color(
-                    fn() => $this->record->subscribers()->where('users.id', auth()->user()->id)->count() ?
+                    fn () => $this->record->subscribers()->where('users.id', auth()->user()->id)->count() ?
                         'danger'
                         : 'success'
                 )
@@ -67,10 +67,17 @@ class ViewTicket extends ViewRecord implements HasForms
                         $sub->delete();
                         $this->notify('success', __('You unsubscribed from the ticket'));
                     } else {
-                        TicketSubscriber::create([
-                            'user_id' => auth()->user()->id,
-                            'ticket_id' => $this->record->id
-                        ]);
+                        try {
+                            TicketSubscriber::create([
+                                'user_id' => auth()->user()->id,
+                                'ticket_id' => $this->record->id,
+                            ]);
+                        } catch (\Illuminate\Database\QueryException $e) {
+                            // Already subscribed via an overlapping request; nothing to do.
+                            if ($e->getCode() !== '23000') {
+                                throw $e;
+                            }
+                        }
                         $this->notify('success', __('You subscribed to the ticket'));
                     }
                     $this->record->refresh();
@@ -80,8 +87,8 @@ class ViewTicket extends ViewRecord implements HasForms
                 ->color('secondary')
                 ->button()
                 ->icon('heroicon-o-share')
-                ->action(fn() => $this->dispatchBrowserEvent('shareTicket', [
-                    'url' => route('filament.resources.tickets.share', $this->record->code)
+                ->action(fn () => $this->dispatchBrowserEvent('shareTicket', [
+                    'url' => route('filament.resources.tickets.share', $this->record->code),
                 ])),
             Actions\EditAction::make(),
             Actions\Action::make('logHours')
@@ -92,10 +99,7 @@ class ViewTicket extends ViewRecord implements HasForms
                 ->modalHeading(__('Log worked time'))
                 ->modalSubheading(__('Use the following form to add your worked time in this ticket.'))
                 ->modalButton(__('Log'))
-                ->visible(fn() => in_array(
-                    auth()->user()->id,
-                    [$this->record->owner_id, $this->record->responsible_id]
-                ))
+                ->visible(fn () => $this->canLogHours())
                 ->form([
                     TextInput::make('time')
                         ->label(__('Time to log'))
@@ -106,13 +110,15 @@ class ViewTicket extends ViewRecord implements HasForms
                         ->searchable()
                         ->reactive()
                         ->options(function ($get, $set) {
-                            return Activity::all()->pluck('name', 'id')->toArray();
+                            return Activity::query()->pluck('name', 'id')->toArray();
                         }),
                     Textarea::make('comment')
                         ->label(__('Comment'))
                         ->rows(3),
                 ])
                 ->action(function (Collection $records, array $data): void {
+                    abort_unless($this->canLogHours(), 403);
+
                     $value = $data['time'];
                     $comment = $data['comment'];
                     TicketHour::create([
@@ -120,7 +126,7 @@ class ViewTicket extends ViewRecord implements HasForms
                         'activity_id' => $data['activity_id'],
                         'user_id' => auth()->user()->id,
                         'value' => $value,
-                        'comment' => $comment
+                        'comment' => $comment,
                     ]);
                     $this->record->refresh();
                     $this->notify('success', __('Time logged into ticket'));
@@ -130,24 +136,19 @@ class ViewTicket extends ViewRecord implements HasForms
                     ->label(__('Export time logged'))
                     ->icon('heroicon-o-document-download')
                     ->color('warning')
-                    ->visible(
-                        fn() => $this->record->watchers->where('id', auth()->user()->id)->count()
-                            && $this->record->hours()->count()
-                    )
-                    ->action(fn() => Excel::download(
-                        new TicketHoursExport($this->record),
-                        'time_' . str_replace('-', '_', $this->record->code) . '.csv',
-                        \Maatwebsite\Excel\Excel::CSV,
-                        ['Content-Type' => 'text/csv']
-                    )),
+                    ->visible(fn () => $this->canExportLogHours())
+                    ->action(function () {
+                        abort_unless($this->canExportLogHours(), 403);
+
+                        return Excel::download(
+                            new TicketHoursExport($this->record),
+                            'time_'.str_replace('-', '_', $this->record->code).'.csv',
+                            \Maatwebsite\Excel\Excel::CSV,
+                            ['Content-Type' => 'text/csv']
+                        );
+                    }),
             ])
-                ->visible(fn() => (in_array(
-                        auth()->user()->id,
-                        [$this->record->owner_id, $this->record->responsible_id]
-                    )) || (
-                        $this->record->watchers->where('id', auth()->user()->id)->count()
-                        && $this->record->hours()->count()
-                    ))
+                ->visible(fn () => $this->canExportLogHours())
                 ->color('secondary'),
         ];
     }
@@ -163,23 +164,56 @@ class ViewTicket extends ViewRecord implements HasForms
             RichEditor::make('comment')
                 ->disableLabel()
                 ->placeholder(__('Type a new comment'))
-                ->required()
+                ->helperText(__('Type @ to mention a project member.'))
+                ->required(),
         ];
+    }
+
+    /**
+     * Resolve a comment the current user is really allowed to edit or delete.
+     *
+     * Both $commentId and $selectedCommentId arrive from the client, so the
+     * lookup is scoped to the ticket being viewed and then matched against the
+     * same rule the view uses to show the Edit/Delete buttons.
+     */
+    protected function authorizedComment(?int $commentId): ?TicketComment
+    {
+        if (! $commentId) {
+            return null;
+        }
+
+        $comment = $this->record->comments()->whereKey($commentId)->first();
+
+        if (! $comment) {
+            return null;
+        }
+
+        return $comment->user_id === auth()->user()->id || $this->isAdministrator()
+            ? $comment
+            : null;
     }
 
     public function submitComment(): void
     {
         $data = $this->form->getState();
         if ($this->selectedCommentId) {
-            TicketComment::where('id', $this->selectedCommentId)
-                ->update([
-                    'content' => $data['comment']
-                ]);
+            if (! $comment = $this->authorizedComment($this->selectedCommentId)) {
+                $this->cancelEditComment();
+                $this->notify('danger', __('You are not allowed to edit this comment'));
+
+                return;
+            }
+
+            // Saved on the model instance (not the query builder) so the
+            // content mutator - and with it HtmlSanitizer - still runs.
+            $comment->update([
+                'content' => $data['comment'],
+            ]);
         } else {
             TicketComment::create([
                 'user_id' => auth()->user()->id,
                 'ticket_id' => $this->record->id,
-                'content' => $data['comment']
+                'content' => $data['comment'],
             ]);
         }
         $this->record->refresh();
@@ -187,20 +221,53 @@ class ViewTicket extends ViewRecord implements HasForms
         $this->notify('success', __('Comment saved'));
     }
 
+    /**
+     * Gate for the "Log time" action: authenticated ticket owner/responsible
+     * AND allowed by TicketHourPolicy. Filament already refuses to mount or
+     * call an action whose visible() is false (Actions\Concerns\CanBeDisabled
+     * ::isDisabled() counts hidden as disabled), but that is an indirect
+     * guarantee buried in the framework, so action() states its own
+     * condition rather than inheriting one - see Attachments::perform() for
+     * the same reasoning.
+     */
+    protected function canLogHours(): bool
+    {
+        return auth()->user()->can('create', TicketHour::class)
+            && in_array(auth()->user()->id, [$this->record->owner_id, $this->record->responsible_id]);
+    }
+
+    /**
+     * Gate for "Export time logged": owner/responsible, or a watcher on a
+     * ticket that already has hours logged. Used for both the group's and
+     * the action's visible() and re-checked inside action() itself - see
+     * canLogHours() above for why the framework's "hidden means disabled"
+     * behaviour is not relied on alone.
+     */
+    protected function canExportLogHours(): bool
+    {
+        return in_array(auth()->user()->id, [$this->record->owner_id, $this->record->responsible_id])
+            || ($this->record->watchers->where('id', auth()->user()->id)->count() && $this->record->hours()->count());
+    }
+
     public function isAdministrator(): bool
     {
-        return $this->record
-                ->project
-                ->users()
-                ->where('users.id', auth()->user()->id)
-                ->where('role', 'administrator')
-                ->count() != 0;
+        return $this->record->project->isManageableBy(auth()->user());
     }
 
     public function editComment(int $commentId): void
     {
+        if (! $comment = $this->authorizedComment($commentId)) {
+            $this->notify('danger', __('You are not allowed to edit this comment'));
+
+            return;
+        }
+
+        $content = $comment->content;
+
         $this->form->fill([
-            'comment' => $this->record->comments->where('id', $commentId)->first()?->content
+            // Drop the hidden "#id" mention marker so it never shows up as
+            // visible, editable text in the comment box.
+            'comment' => $content ? Mentions::stripIds($content) : $content,
         ]);
         $this->selectedCommentId = $commentId;
     }
@@ -220,7 +287,7 @@ class ViewTicket extends ViewRecord implements HasForms
                     ->emit('doDeleteComment', compact('commentId')),
                 Action::make('cancel')
                     ->label(__('Cancel'))
-                    ->close()
+                    ->close(),
             ])
             ->persistent()
             ->send();
@@ -228,7 +295,13 @@ class ViewTicket extends ViewRecord implements HasForms
 
     public function doDeleteComment(int $commentId): void
     {
-        TicketComment::where('id', $commentId)->delete();
+        if (! $comment = $this->authorizedComment($commentId)) {
+            $this->notify('danger', __('You are not allowed to delete this comment'));
+
+            return;
+        }
+
+        $comment->delete();
         $this->record->refresh();
         $this->notify('success', __('Comment deleted'));
     }

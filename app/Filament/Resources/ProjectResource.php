@@ -3,19 +3,24 @@
 namespace App\Filament\Resources;
 
 use App\Exports\ProjectHoursExport;
+use App\Filament\Resources\ProjectResource\Forms\ProjectForm;
 use App\Filament\Resources\ProjectResource\Pages;
 use App\Filament\Resources\ProjectResource\RelationManagers;
 use App\Models\Project;
 use App\Models\ProjectFavorite;
 use App\Models\ProjectStatus;
-use App\Models\Ticket;
-use App\Models\User;
+use App\Support\BulkDeleteAuthorizer;
+use App\Support\UserOptions;
 use Filament\Facades\Filament;
-use Filament\Forms;
+use Filament\Notifications\Notification;
 use Filament\Resources\Form;
 use Filament\Resources\Resource;
 use Filament\Resources\Table;
 use Filament\Tables;
+use Illuminate\Database\Eloquent\Collection as EloquentCollection;
+use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\SoftDeletingScope;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\HtmlString;
 use Illuminate\Support\Str;
 use Maatwebsite\Excel\Facades\Excel;
@@ -29,11 +34,29 @@ class ProjectResource extends Resource
     /**
      * Eager load the relations the table columns read (owner, status, members
      * and the cover media) so the listing runs a fixed number of queries
-     * instead of one per row.
+     * instead of one per row. The SoftDeletingScope is dropped here (not just
+     * left to TrashedFilter) because row/bulk actions like RestoreAction
+     * resolve their target record through this unfiltered base query, not
+     * through the table's filtered query - with the scope still active a
+     * trashed row could never be found to restore it. TrashedFilter still
+     * controls what the *listing* shows by default.
+     *
+     * Also the access boundary itself, not just this page's listing: a
+     * project is only reachable through the panel (list, view, edit,
+     * row/bulk actions, route binding, relation managers) when the current
+     * user owns it or is a member - matching Project::isAccessibleBy(). Living
+     * here instead of only on ListProjects::getTableQuery() means any other
+     * page or action built on this resource inherits the same scope by
+     * default, rather than needing to repeat it.
      */
     public static function getEloquentQuery(): \Illuminate\Database\Eloquent\Builder
     {
-        return parent::getEloquentQuery()->with(['owner', 'status', 'users', 'media']);
+        /** @var \Illuminate\Database\Eloquent\Builder<\App\Models\Project> $query */
+        $query = parent::getEloquentQuery()->withoutGlobalScopes([SoftDeletingScope::class]);
+
+        return $query
+            ->accessibleBy(auth()->user())
+            ->with(['owner', 'status', 'users', 'media']);
     }
 
     protected static ?int $navigationSort = 1;
@@ -55,99 +78,7 @@ class ProjectResource extends Resource
 
     public static function form(Form $form): Form
     {
-        return $form
-            ->schema([
-                Forms\Components\Card::make()
-                    ->schema([
-                        Forms\Components\Grid::make()
-                            ->columns(3)
-                            ->schema([
-                                Forms\Components\SpatieMediaLibraryFileUpload::make('cover')
-                                    ->label(__('Cover image'))
-                                    ->image()
-                                    ->helperText(
-                                        __('If not selected, an image will be generated based on the project name')
-                                    )
-                                    ->columnSpan(1),
-
-                                Forms\Components\Grid::make()
-                                    ->columnSpan(2)
-                                    ->schema([
-                                        Forms\Components\Grid::make()
-                                            ->columnSpan(2)
-                                            ->columns(12)
-                                            ->schema([
-                                                Forms\Components\TextInput::make('name')
-                                                    ->label(__('Project name'))
-                                                    ->required()
-                                                    ->columnSpan(10)
-                                                    ->maxLength(255),
-
-                                                Forms\Components\TextInput::make('ticket_prefix')
-                                                    ->label(__('Ticket prefix'))
-                                                    ->maxLength(3)
-                                                    ->columnSpan(2)
-                                                    ->unique(Project::class, column: 'ticket_prefix', ignoreRecord: true)
-                                                    ->disabled(
-                                                        fn($record) => $record && $record->tickets()->count() != 0
-                                                    )
-                                                    ->required()
-                                            ]),
-
-                                        Forms\Components\Select::make('owner_id')
-                                            ->label(__('Project owner'))
-                                            ->searchable()
-                                            ->options(fn() => User::all()->pluck('name', 'id')->toArray())
-                                            ->default(fn() => auth()->user()->id)
-                                            ->required(),
-
-                                        Forms\Components\Select::make('status_id')
-                                            ->label(__('Project status'))
-                                            ->searchable()
-                                            ->options(fn() => ProjectStatus::all()->pluck('name', 'id')->toArray())
-                                            ->default(fn() => ProjectStatus::where('is_default', true)->first()?->id)
-                                            ->required(),
-                                    ]),
-
-                                Forms\Components\RichEditor::make('description')
-                                    ->label(__('Project description'))
-                                    ->columnSpan(3),
-
-                                Forms\Components\Select::make('type')
-                                    ->label(__('Project type'))
-                                    ->searchable()
-                                    ->options([
-                                        'kanban' => __('Kanban'),
-                                        'scrum' => __('Scrum')
-                                    ])
-                                    ->reactive()
-                                    ->default(fn() => 'kanban')
-                                    ->helperText(function ($state) {
-                                        if ($state === 'kanban') {
-                                            return __('Display and move your project forward with issues on a powerful board.');
-                                        } elseif ($state === 'scrum') {
-                                            return __('Achieve your project goals with a board, backlog, and roadmap.');
-                                        }
-                                        return '';
-                                    })
-                                    ->required(),
-
-                                Forms\Components\Select::make('status_type')
-                                    ->label(__('Statuses configuration'))
-                                    ->helperText(
-                                        __('If custom type selected, you need to configure project specific statuses')
-                                    )
-                                    ->searchable()
-                                    ->options([
-                                        'default' => __('Default'),
-                                        'custom' => __('Custom configuration')
-                                    ])
-                                    ->default(fn() => 'default')
-                                    ->disabled(fn($record) => $record && $record->tickets()->count())
-                                    ->required(),
-                            ]),
-                    ]),
-            ]);
+        return $form->schema(ProjectForm::schema());
     }
 
     public static function table(Table $table): Table
@@ -156,8 +87,8 @@ class ProjectResource extends Resource
             ->columns([
                 Tables\Columns\TextColumn::make('cover')
                     ->label(__('Cover image'))
-                    ->formatStateUsing(fn($state) => new HtmlString('
-                            <div style=\'background-image: url("' . $state . '")\'
+                    ->formatStateUsing(fn ($state) => new HtmlString('
+                            <div style=\'background-image: url("'.e($state).'")\'
                                  class="w-8 h-8 bg-cover bg-center bg-no-repeat"></div>
                         ')),
 
@@ -173,13 +104,10 @@ class ProjectResource extends Resource
 
                 Tables\Columns\TextColumn::make('status.name')
                     ->label(__('Project status'))
-                    ->formatStateUsing(fn($record) => new HtmlString('
-                            <div class="flex items-center gap-2">
-                                <span class="filament-tables-color-column relative flex h-6 w-6 rounded-md"
-                                    style="background-color: ' . $record->status->color . '"></span>
-                                <span>' . $record->status->name . '</span>
-                            </div>
-                        '))
+                    ->formatStateUsing(fn ($record) => view('components.color-badge', [
+                        'color' => $record->status->color,
+                        'label' => $record->status->name,
+                    ]))
                     ->sortable()
                     ->searchable(),
 
@@ -190,7 +118,7 @@ class ProjectResource extends Resource
                 Tables\Columns\BadgeColumn::make('type')
                     ->enum([
                         'kanban' => __('Kanban'),
-                        'scrum' => __('Scrum')
+                        'scrum' => __('Scrum'),
                     ])
                     ->colors([
                         'secondary' => 'kanban',
@@ -207,19 +135,21 @@ class ProjectResource extends Resource
                 Tables\Filters\SelectFilter::make('owner_id')
                     ->label(__('Owner'))
                     ->multiple()
-                    ->options(fn() => User::all()->pluck('name', 'id')->toArray()),
+                    ->options(fn () => UserOptions::visible()),
 
                 Tables\Filters\SelectFilter::make('status_id')
                     ->label(__('Status'))
                     ->multiple()
-                    ->options(fn() => ProjectStatus::all()->pluck('name', 'id')->toArray()),
+                    ->options(fn () => ProjectStatus::all()->pluck('name', 'id')->toArray()),
+
+                Tables\Filters\TrashedFilter::make(),
             ])
             ->actions([
 
                 Tables\Actions\Action::make('favorite')
                     ->label('')
                     ->icon('heroicon-o-star')
-                    ->color(fn($record) => auth()->user()->favoriteProjects()
+                    ->color(fn ($record) => auth()->user()->favoriteProjects()
                         ->where('projects.id', $record->id)->count() ? 'success' : 'default')
                     ->action(function ($record) {
                         $projectId = $record->id;
@@ -229,33 +159,40 @@ class ProjectResource extends Resource
                         if ($projectFavorite) {
                             $projectFavorite->delete();
                         } else {
-                            ProjectFavorite::create([
-                                'project_id' => $projectId,
-                                'user_id' => auth()->user()->id
-                            ]);
+                            try {
+                                ProjectFavorite::create([
+                                    'project_id' => $projectId,
+                                    'user_id' => auth()->user()->id,
+                                ]);
+                            } catch (\Illuminate\Database\QueryException $e) {
+                                // Already favorited by an overlapping request; nothing to do.
+                                if ($e->getCode() !== '23000') {
+                                    throw $e;
+                                }
+                            }
                         }
                         Filament::notify('success', __('Project updated'));
                     }),
 
                 Tables\Actions\ViewAction::make(),
                 Tables\Actions\EditAction::make(),
+                Tables\Actions\RestoreAction::make(),
 
                 Tables\Actions\ActionGroup::make([
                     Tables\Actions\Action::make('exportLogHours')
                         ->label(__('Export hours'))
                         ->icon('heroicon-o-document-download')
                         ->color('secondary')
-                        ->action(fn($record) => Excel::download(
+                        ->action(fn ($record) => Excel::download(
                             new ProjectHoursExport($record),
-                            'time_' . Str::slug($record->name) . '.csv',
+                            'time_'.Str::slug($record->name).'.csv',
                             \Maatwebsite\Excel\Excel::CSV,
                             ['Content-Type' => 'text/csv']
                         )),
 
                     Tables\Actions\Action::make('kanban')
                         ->label(
-                            fn ($record)
-                                => ($record->type === 'scrum' ? __('Scrum board') : __('Kanban board'))
+                            fn ($record) => ($record->type === 'scrum' ? __('Scrum board') : __('Kanban board'))
                         )
                         ->icon('heroicon-o-view-boards')
                         ->color('secondary')
@@ -269,7 +206,37 @@ class ProjectResource extends Resource
                 ])->color('secondary'),
             ])
             ->bulkActions([
-                Tables\Actions\DeleteBulkAction::make(),
+                // The shared DeleteBulkAction default (AppServiceProvider) does
+                // not wrap each record's delete() in a transaction. That is a
+                // no-op for most resources, but Project's cascade (tickets,
+                // sprints, epics - see ProjectObserver) needs it to be atomic
+                // with the project's own row, the same as the single-record
+                // delete action and the API's destroy() already are.
+                Tables\Actions\DeleteBulkAction::make()
+                    ->using(static function (EloquentCollection $records): void {
+                        $denied = 0;
+
+                        $records->each(function (Model $record) use (&$denied): void {
+                            if (! BulkDeleteAuthorizer::allows($record)) {
+                                $denied++;
+
+                                return;
+                            }
+
+                            DB::transaction(fn () => $record->delete());
+                        });
+
+                        if ($denied > 0) {
+                            Notification::make()
+                                ->warning()
+                                ->title(__('Some records were not deleted'))
+                                ->body(__(':count record(s) you are not allowed to delete were skipped.', [
+                                    'count' => $denied,
+                                ]))
+                                ->send();
+                        }
+                    }),
+                Tables\Actions\RestoreBulkAction::make(),
             ]);
     }
 

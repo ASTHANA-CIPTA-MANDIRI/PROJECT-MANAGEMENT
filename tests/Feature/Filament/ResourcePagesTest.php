@@ -45,14 +45,14 @@ class ResourcePagesTest extends TestCase
         $modules = [
             'permission', 'project', 'project status', 'role', 'ticket',
             'ticket priority', 'ticket status', 'ticket type', 'user',
-            'activity', 'sprint',
+            'activity', 'sprint', 'label',
         ];
 
         $names = [];
         foreach ($modules as $module) {
-            $names[] = 'List ' . \Illuminate\Support\Str::plural($module);
+            $names[] = 'List '.\Illuminate\Support\Str::plural($module);
             foreach (['View', 'Create', 'Update', 'Delete'] as $action) {
-                $names[] = $action . ' ' . $module;
+                $names[] = $action.' '.$module;
             }
         }
         $names = array_merge($names, [
@@ -157,6 +157,28 @@ class ResourcePagesTest extends TestCase
             ->assertSuccessful();
     }
 
+    public function test_the_user_list_query_eager_loads_roles_and_socials_to_avoid_n_plus_one(): void
+    {
+        $eagerLoads = array_keys(
+            \App\Filament\Resources\UserResource::getEloquentQuery()->getEagerLoads()
+        );
+
+        $this->assertContains('roles', $eagerLoads);
+        $this->assertContains('socials', $eagerLoads);
+    }
+
+    public function test_pending_approval_filter_shows_only_users_without_a_role(): void
+    {
+        // The admin ($this->admin) holds a role; a fresh registrant has none.
+        $pending = User::factory()->create();
+
+        Livewire::test(\App\Filament\Resources\UserResource\Pages\ListUsers::class)
+            ->assertCanSeeTableRecords([$pending, $this->admin])
+            ->filterTable('pending_approval')
+            ->assertCanSeeTableRecords([$pending])
+            ->assertCanNotSeeTableRecords([$this->admin]);
+    }
+
     public function test_the_user_create_page_renders(): void
     {
         Livewire::test(\App\Filament\Resources\UserResource\Pages\CreateUser::class)
@@ -173,12 +195,42 @@ class ResourcePagesTest extends TestCase
         )->assertSuccessful();
     }
 
+    // -------------------------------------------------------------- Timesheet
+
+    public function test_the_timesheet_list_page_renders(): void
+    {
+        \App\Models\TicketHour::factory()->count(3)->create(['user_id' => $this->admin->id]);
+
+        Livewire::test(\App\Filament\Resources\TimesheetResource\Pages\ListTimesheet::class)
+            ->assertSuccessful();
+    }
+
+    public function test_the_timesheet_list_query_eager_loads_user_activity_and_ticket(): void
+    {
+        $eagerLoads = array_keys(
+            \App\Filament\Resources\TimesheetResource::getEloquentQuery()->getEagerLoads()
+        );
+
+        $this->assertContains('user', $eagerLoads);
+        $this->assertContains('activity', $eagerLoads);
+        $this->assertContains('ticket', $eagerLoads);
+    }
+
     // ------------------------------------------------------------------ Roles
 
     public function test_the_role_list_page_renders(): void
     {
         Livewire::test(\App\Filament\Resources\RoleResource\Pages\ListRoles::class)
             ->assertSuccessful();
+    }
+
+    public function test_the_role_list_query_eager_loads_permissions_to_avoid_n_plus_one(): void
+    {
+        $eagerLoads = array_keys(
+            \App\Filament\Resources\RoleResource::getEloquentQuery()->getEagerLoads()
+        );
+
+        $this->assertContains('permissions', $eagerLoads);
     }
 
     public function test_the_role_create_page_renders(): void
@@ -338,6 +390,32 @@ class ResourcePagesTest extends TestCase
         Livewire::test(
             \App\Filament\Resources\TicketPriorityResource\Pages\EditTicketPriority::class,
             ['record' => $priority->getRouteKey()]
+        )->assertSuccessful();
+    }
+
+    // -------------------------------------------------------------- Labels
+
+    public function test_the_label_list_page_renders(): void
+    {
+        \App\Models\Label::factory()->count(3)->create();
+
+        Livewire::test(\App\Filament\Resources\LabelResource\Pages\ListLabels::class)
+            ->assertSuccessful();
+    }
+
+    public function test_the_label_create_page_renders(): void
+    {
+        Livewire::test(\App\Filament\Resources\LabelResource\Pages\CreateLabel::class)
+            ->assertSuccessful();
+    }
+
+    public function test_the_label_edit_page_renders(): void
+    {
+        $label = \App\Models\Label::factory()->create();
+
+        Livewire::test(
+            \App\Filament\Resources\LabelResource\Pages\EditLabel::class,
+            ['record' => $label->getRouteKey()]
         )->assertSuccessful();
     }
 }

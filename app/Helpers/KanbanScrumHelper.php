@@ -2,84 +2,82 @@
 
 namespace App\Helpers;
 
+use App\Filament\Pages\Forms\BoardFilterForm;
 use App\Models\Project;
 use App\Models\Ticket;
-use App\Models\TicketPriority;
 use App\Models\TicketStatus;
-use App\Models\TicketType;
-use App\Models\User;
 use Filament\Facades\Filament;
-use Illuminate\Support\Facades\DB;
-use Filament\Forms\Components\Grid;
-use Filament\Forms\Components\Placeholder;
-use Filament\Forms\Components\Select;
-use Filament\Forms\Components\Toggle;
 use Illuminate\Contracts\Support\Htmlable;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Support\Collection;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\HtmlString;
 
 trait KanbanScrumHelper
 {
-
     public bool $sortable = true;
 
-    public Project|null $project = null;
+    public ?Project $project = null;
 
     public $users = [];
+
     public $types = [];
+
     public $priorities = [];
+
+    public $labels = [];
+
     public $includeNotAffectedTickets = false;
 
     public bool $ticket = false;
 
-    protected function formSchema(): array
+    /**
+     * Livewire listeners. Besides the board's own events, subscribe to the
+     * project's private broadcast channel so the board updates live when a
+     * ticket's status changes or a comment is posted from anywhere.
+     *
+     * The echo-* listeners bind only when Laravel Echo is available in the
+     * browser; with real-time disabled (empty Pusher key) window.Echo is never
+     * created, so they simply never fire and the board behaves as before.
+     *
+     * @return array<int|string, string>
+     */
+    public function getListeners(): array
     {
-        return [
-            Grid::make([
-                'default' => 2,
-                'md' => 6
-            ])
-                ->schema([
-                    Select::make('users')
-                        ->label(__('Owners / Responsibles'))
-                        ->multiple()
-                        ->options(User::all()->pluck('name', 'id')),
-
-                    Select::make('types')
-                        ->label(__('Ticket types'))
-                        ->multiple()
-                        ->options(TicketType::all()->pluck('name', 'id')),
-
-                    Select::make('priorities')
-                        ->label(__('Ticket priorities'))
-                        ->multiple()
-                        ->options(TicketPriority::all()->pluck('name', 'id')),
-
-                    Toggle::make('includeNotAffectedTickets')
-                        ->label(__('Show only not affected tickets'))
-                        ->columnSpan(2),
-
-                    Placeholder::make('search')
-                        ->label(new HtmlString('&nbsp;'))
-                        ->content(new HtmlString('
-                            <button type="button"
-                                    wire:click="filter" wire:loading.attr="disabled"
-                                    class="bg-primary-500 px-3 py-2 text-white rounded hover:bg-primary-600
-                                    disabled:bg-primary-300">
-                                ' . __('Filter') . '
-                            </button>
-                            <button type="button"
-                                    wire:click="resetFilters" wire:loading.attr="disabled"
-                                    class="ml-2 bg-gray-800 px-3 py-2 text-white rounded hover:bg-gray-900
-                                    disabled:bg-gray-300">
-                                ' . __('Reset filters') . '
-                            </button>
-                        ')),
-                ]),
+        $listeners = [
+            'recordUpdated',
+            'closeTicketDialog',
         ];
+
+        if ($this->project) {
+            $channel = "echo-private:project.{$this->project->id}";
+            $listeners["{$channel},.ticket.status.changed"] = 'refreshBoard';
+            $listeners["{$channel},.ticket.comment.posted"] = 'refreshBoard';
+        }
+
+        return $listeners;
     }
 
-    public function getStatuses(): Collection
+    /**
+     * Handle a live broadcast. The board re-queries via getRecords() on every
+     * Livewire re-render, so simply handling the event refreshes the columns.
+     */
+    public function refreshBoard(): void
+    {
+        //
+    }
+
+    protected function formSchema(): array
+    {
+        return BoardFilterForm::schema($this->project);
+    }
+
+    /**
+     * The statuses that make up the columns of the board being viewed: the
+     * project's own set when it configures custom statuses, the shared global
+     * set otherwise.
+     */
+    protected function statusesQuery(): Builder
     {
         $query = TicketStatus::query();
         if ($this->project && $this->project->status_type === 'custom') {
@@ -87,43 +85,92 @@ trait KanbanScrumHelper
         } else {
             $query->whereNull('project_id');
         }
-        return $query->orderBy('order')
-            ->get()
-            ->map(function ($item) {
-                $query = Ticket::query();
-                if ($this->project) {
-                    $query->where('project_id', $this->project->id);
-                }
-                $query->where('status_id', $item->id);
-                return [
-                    'id' => $item->id,
-                    'title' => $item->name,
-                    'color' => $item->color,
-                    'size' => $query->count(),
-                    'add_ticket' => $item->is_default && auth()->user()->can('Create ticket')
-                ];
-            });
+
+        return $query;
     }
 
-    public function getRecords(): Collection
+    public function getStatuses(): Collection
+    {
+        $statuses = $this->statusesQuery()->orderBy('order')->get();
+
+        // One grouped COUNT instead of one query per status - built from the
+        // same query as the cards themselves, so the header count never
+        // drifts from what recordsQuery() actually shows (filter bar and
+        // visibility included).
+        $ticketCounts = $this->recordsQuery()
+            ->whereIn('status_id', $statuses->pluck('id'))
+            ->groupBy('status_id')
+            ->selectRaw('status_id, count(*) as aggregate')
+            ->pluck('aggregate', 'status_id');
+
+        return $statuses->map(fn ($item) => [
+            'id' => $item->id,
+            'title' => $item->name,
+            'color' => $item->color,
+            'size' => (int) ($ticketCounts[$item->id] ?? 0),
+            'add_ticket' => $item->is_default && auth()->user()->can('Create ticket'),
+        ]);
+    }
+
+    /**
+     * The cards this board is made of, before the filter bar narrows them
+     * down: the project's tickets, and on a scrum board only those of the
+     * current sprint. Renumbering after a drag works on this set, so cards
+     * hidden by a filter keep their place instead of being shuffled away.
+     *
+     * Without a project - or, on a scrum board, without a running sprint -
+     * there is no board, so the query matches nothing. Left to the query
+     * builder, where('sprint_id', null) becomes "sprint_id is null" and a
+     * project between sprints would show its whole backlog instead of an
+     * empty board, and let those tickets be dragged (authorizedBoardTicket()
+     * scopes to this same query).
+     *
+     * @return Builder<Ticket>
+     */
+    protected function boardTicketsQuery(): Builder
     {
         $query = Ticket::query();
-        if ($this->project->type === 'scrum') {
-            $query->where('sprint_id', $this->project->currentSprint->id);
+
+        if (! $this->project) {
+            return $query->whereRaw('1 = 0');
         }
-        $query->with(['project', 'owner', 'responsible', 'status', 'type', 'priority', 'epic']);
+
         $query->where('project_id', $this->project->id);
-        if (sizeof($this->users)) {
+
+        if ($this->project->type === 'scrum') {
+            $sprintId = $this->project->currentSprint?->id;
+
+            return $sprintId === null
+                ? $query->whereRaw('1 = 0')
+                : $query->where('sprint_id', $sprintId);
+        }
+
+        return $query;
+    }
+
+    /**
+     * The cards actually shown: the board's tickets, narrowed by the filter
+     * bar and by what the viewer is allowed to see.
+     *
+     * @return Builder<Ticket>
+     */
+    protected function recordsQuery(): Builder
+    {
+        $query = $this->boardTicketsQuery();
+        if (count($this->users)) {
             $query->where(function ($query) {
                 return $query->whereIn('owner_id', $this->users)
                     ->orWhereIn('responsible_id', $this->users);
             });
         }
-        if (sizeof($this->types)) {
+        if (count($this->types)) {
             $query->whereIn('type_id', $this->types);
         }
-        if (sizeof($this->priorities)) {
+        if (count($this->priorities)) {
             $query->whereIn('priority_id', $this->priorities);
+        }
+        if (count($this->labels)) {
+            $query->whereHas('labels', fn ($q) => $q->whereIn('labels.id', $this->labels));
         }
         if ($this->includeNotAffectedTickets) {
             $query->whereNull('responsible_id');
@@ -131,15 +178,35 @@ trait KanbanScrumHelper
         $query->where(function ($query) {
             return $query->where('owner_id', auth()->user()->id)
                 ->orWhere('responsible_id', auth()->user()->id)
-                ->orWhereHas('project', function ($query) {
-                    return $query->where('owner_id', auth()->user()->id)
-                        ->orWhereHas('users', function ($query) {
-                            return $query->where('users.id', auth()->user()->id);
-                        });
-                });
+                ->orWhereHas('project', fn ($query) => $query->accessibleBy(auth()->user()));
         });
+
+        return $query;
+    }
+
+    public function getRecords(): Collection
+    {
+        $query = $this->recordsQuery()
+            // relations.relation because the card links to the related
+            // ticket's code, and the logged hours are summed in SQL rather
+            // than by pulling every hour row of every card into memory. This
+            // runs again on every Livewire interaction and every broadcast,
+            // so a query per card is a query per card per keystroke.
+            ->with([
+                'project', 'owner', 'status', 'type', 'priority', 'epic', 'labels',
+                'relations', 'relations.relation:id,code',
+                // Card avatar shows ticket/project counts (x-user-avatar); load
+                // them as subqueries so they don't re-query per card per user.
+                'responsible' => fn ($query) => $query->withTicketsAndProjectsCounts(),
+            ])
+            ->withSum('hours', 'value');
+
+        // The board is a sorted board: without this the dragged order was
+        // written to the database and then never read back.
+        $this->applyBoardOrder($query);
+
         return $query->get()
-            ->map(fn(Ticket $item) => [
+            ->map(fn (Ticket $item) => [
                 'id' => $item->id,
                 'code' => $item->code,
                 'title' => $item->name,
@@ -151,23 +218,111 @@ trait KanbanScrumHelper
                 'priority' => $item->priority,
                 'epic' => $item->epic,
                 'relations' => $item->relations,
-                'totalLoggedHours' => $item->totalLoggedSeconds ? $item->totalLoggedHours : null
+                'labels' => $item->labels,
+                'due_date' => $item->due_date,
+                'is_overdue' => $item->isOverdue,
+                'totalLoggedHours' => $item->totalLoggedSeconds ? $item->totalLoggedHours : null,
             ]);
+    }
+
+    /**
+     * Resolve a ticket the current user is really allowed to drag on this
+     * board.
+     *
+     * $record comes straight from the browser, so the lookup is scoped to the
+     * cards this board actually shows - the project's tickets, and on a scrum
+     * board only those in the current sprint (see getRecords()) - before the
+     * ticket policy has the final say.
+     */
+    protected function authorizedBoardTicket(int $record): ?Ticket
+    {
+        if (! $this->project) {
+            return null;
+        }
+
+        $ticket = $this->boardTicketsQuery()->whereKey($record)->first();
+
+        return $ticket && auth()->user()->can('update', $ticket) ? $ticket : null;
+    }
+
+    /**
+     * Cards are laid out by their order column, oldest first on a tie — the
+     * same sort the renumbering below produces.
+     */
+    protected function applyBoardOrder(Builder $query): Builder
+    {
+        return $query->orderBy('order')->orderBy('id');
+    }
+
+    /**
+     * Renumber one status column 0..n so a drag survives a page reload.
+     *
+     * The browser reports the position among the cards it shows, so the card
+     * being displaced is used as the anchor: the moved ticket is slotted in
+     * front of it in the full column, leaving tickets hidden by the filter bar
+     * where they were. Renumbering goes through the query builder on purpose —
+     * it is bookkeeping, not a ticket change worth an activity or a
+     * notification.
+     */
+    protected function reindexStatusColumn(int $statusId, ?int $movedId = null, int $movedIndex = 0): void
+    {
+        $current = $this->applyBoardOrder(
+            $this->boardTicketsQuery()
+                ->where('status_id', $statusId)
+                ->when($movedId, fn (Builder $query) => $query->whereKeyNot($movedId))
+        )->pluck('order', 'id')->all();
+
+        $ids = array_keys($current);
+
+        if ($movedId) {
+            $anchorId = $this->applyBoardOrder(
+                $this->recordsQuery()
+                    ->where('status_id', $statusId)
+                    ->whereKeyNot($movedId)
+            )->pluck('id')->get($movedIndex);
+
+            $anchorPosition = $anchorId === null ? false : array_search($anchorId, $ids, true);
+            array_splice($ids, $anchorPosition === false ? count($ids) : $anchorPosition, 0, [$movedId]);
+        }
+
+        foreach ($ids as $position => $id) {
+            // Only the cards whose position actually moved are written; a drag
+            // near the bottom of a long column then costs a couple of updates
+            // rather than one per card.
+            if (($current[$id] ?? null) !== $position) {
+                Ticket::whereKey($id)->update(['order' => $position]);
+            }
+        }
     }
 
     public function recordUpdated(int $record, int $newIndex, int $newStatus): void
     {
-        $ticket = Ticket::find($record);
-        if ($ticket) {
-            // Atomic: the ticket update and the status-change activity it
-            // triggers (Ticket::updating) commit together.
-            DB::transaction(function () use ($ticket, $newIndex, $newStatus) {
-                $ticket->order = $newIndex;
-                $ticket->status_id = $newStatus;
-                $ticket->save();
-            });
-            Filament::notify('success', __('Ticket updated'));
+        $ticket = $this->authorizedBoardTicket($record);
+
+        // The target column has to be one of this board's own statuses too,
+        // otherwise a tampered event could park a ticket on a status it can
+        // never be shown in again.
+        if (! $ticket || ! $this->statusesQuery()->whereKey($newStatus)->exists()) {
+            Filament::notify('danger', __('You are not allowed to move this ticket'));
+
+            return;
         }
+
+        // Atomic: the ticket update, the status-change activity it triggers
+        // (Ticket::updating) and the renumbering of the columns it leaves and
+        // joins all commit together.
+        DB::transaction(function () use ($ticket, $newIndex, $newStatus) {
+            $oldStatus = (int) $ticket->status_id;
+
+            $ticket->status_id = $newStatus;
+            $ticket->save();
+
+            $this->reindexStatusColumn($newStatus, $ticket->id, $newIndex);
+            if ($oldStatus !== $newStatus) {
+                $this->reindexStatusColumn($oldStatus);
+            }
+        });
+        Filament::notify('success', __('Ticket updated'));
     }
 
     public function isMultiProject(): bool
@@ -201,76 +356,39 @@ trait KanbanScrumHelper
 
     protected function kanbanHeading(): string|Htmlable
     {
-        $heading = '<div class="w-full flex flex-col gap-1">';
-        $heading .= '<a href="' . route('filament.pages.board') . '"
-                            class="text-primary-500 text-xs font-medium hover:underline">';
-        $heading .= __('Back to board');
-        $heading .= '</a>';
-        $heading .= '<div class="flex flex-col gap-1">';
-        $heading .= '<span>' . __('Kanban');
-        if ($this->project) {
-            $heading .= ' - ' . $this->project->name . '</span>';
-        } else {
-            $heading .= '</span><span class="text-xs text-gray-400">'
-                . __('Only default statuses are listed when no projects selected')
-                . '</span>';
-        }
-        $heading .= '</div>';
-        $heading .= '</div>';
-        return new HtmlString($heading);
+        return $this->boardHeading(__('Kanban'));
     }
 
     protected function scrumHeading(): string|Htmlable
     {
-        $heading = '<div class="w-full flex flex-col gap-1">';
-        $heading .= '<a href="' . route('filament.pages.board') . '"
-                            class="text-primary-500 text-xs font-medium hover:underline">';
-        $heading .= __('Back to board');
-        $heading .= '</a>';
-        $heading .= '<div class="flex flex-col gap-1">';
-        $heading .= '<span>' . __('Scrum');
-        if ($this->project) {
-            $heading .= ' - ' . $this->project->name . '</span>';
-        } else {
-            $heading .= '</span><span class="text-xs text-gray-400">'
-                . __('Only default statuses are listed when no projects selected')
-                . '</span>';
-        }
-        $heading .= '</div>';
-        $heading .= '</div>';
-        return new HtmlString($heading);
+        return $this->boardHeading(__('Scrum'));
+    }
+
+    /**
+     * Rendered through Blade so the project name — free-form user input — is
+     * escaped by default instead of being concatenated into raw HTML.
+     */
+    private function boardHeading(string $title): Htmlable
+    {
+        return new HtmlString(
+            view('components.board-heading', [
+                'title' => $title,
+                'projectName' => $this->project?->name,
+            ])->render()
+        );
     }
 
     protected function scrumSubHeading(): string|Htmlable|null
     {
-        if ($this->project?->currentSprint) {
-            return new HtmlString(
-                '<div class="w-full flex flex-col gap-1">'
-                . '<div class="w-full flex items-center gap-2">'
-                . '<span class="bg-danger-500 px-2 py-1 rounded text-white text-sm">'
-                . $this->project->currentSprint->name
-                . '</span>'
-                . '<span class="text-xs text-gray-400">'
-                . __('Started at:') . ' ' . $this->project->currentSprint->started_at->format(__('Y-m-d')) . ' - '
-                . __('Ends at:') . ' ' . $this->project->currentSprint->ends_at->format(__('Y-m-d')) . ' - '
-                . ($this->project->currentSprint->remaining ?
-                    (
-                        __('Remaining:') . ' ' . $this->project->currentSprint->remaining . ' ' . __('days'))
-                    : ''
-                )
-                . '</span>'
-                . '</div>'
-                . ($this->project->nextSprint ? '<span class="text-xs text-primary-500 font-medium">'
-                    . __('Next sprint:') . ' ' . $this->project->nextSprint->name . ' - '
-                    . __('Starts at:') . ' ' . $this->project->nextSprint->starts_at->format(__('Y-m-d'))
-                    . ' (' . __('in') . ' ' . $this->project->nextSprint->starts_at->diffForHumans() . ')'
-                    . '</span>'
-                    . '</span>' : '')
-                . '</div>'
-            );
-        } else {
+        if (! $this->project?->currentSprint) {
             return null;
         }
-    }
 
+        return new HtmlString(
+            view('components.board-subheading', [
+                'sprint' => $this->project->currentSprint,
+                'nextSprint' => $this->project->nextSprint,
+            ])->render()
+        );
+    }
 }

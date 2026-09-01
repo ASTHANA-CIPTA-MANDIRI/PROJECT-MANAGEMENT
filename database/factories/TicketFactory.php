@@ -39,6 +39,6 @@ class TicketFactory extends Factory
 
     public function estimated(float $hours): static
     {
-        return $this->state(fn() => ['estimation' => $hours]);
+        return $this->state(fn () => ['estimation' => $hours]);
     }
 }

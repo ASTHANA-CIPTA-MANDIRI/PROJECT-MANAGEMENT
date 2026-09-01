@@ -10,7 +10,7 @@ use Tests\TestCase;
 
 class TicketPolicyTest extends TestCase
 {
-    use RefreshDatabase, InteractsWithPermissions;
+    use InteractsWithPermissions, RefreshDatabase;
 
     // ------------------------------------------------------------- viewAny
 
@@ -135,17 +135,79 @@ class TicketPolicyTest extends TestCase
 
     // -------------------------------------------------------------- delete
 
-    public function test_deleting_requires_the_delete_permission(): void
+    public function test_the_ticket_owner_can_delete_it(): void
     {
         $user = $this->userWithPermissions(['Delete ticket']);
-        $ticket = Ticket::factory()->create();
+        $ticket = Ticket::factory()->create(['owner_id' => $user->id]);
+
+        $this->actingAs($user);
 
         $this->assertTrue($user->can('delete', $ticket));
     }
 
+    public function test_the_responsible_user_can_delete_it(): void
+    {
+        $user = $this->userWithPermissions(['Delete ticket']);
+        $ticket = Ticket::factory()->create(['responsible_id' => $user->id]);
+
+        $this->actingAs($user);
+
+        $this->assertTrue($user->can('delete', $ticket));
+    }
+
+    public function test_the_project_owner_can_delete_the_ticket(): void
+    {
+        $user = $this->userWithPermissions(['Delete ticket']);
+        $project = Project::factory()->create(['owner_id' => $user->id]);
+        $ticket = Ticket::factory()->create(['project_id' => $project->id]);
+
+        $this->actingAs($user);
+
+        $this->assertTrue($user->can('delete', $ticket));
+    }
+
+    public function test_a_project_member_can_delete_the_ticket(): void
+    {
+        $user = $this->userWithPermissions(['Delete ticket']);
+        $project = Project::factory()->create();
+        $project->users()->attach($user->id, ['role' => 'employee']);
+        $ticket = Ticket::factory()->create(['project_id' => $project->id]);
+
+        $this->actingAs($user);
+
+        $this->assertTrue($user->can('delete', $ticket));
+    }
+
+    public function test_an_unrelated_user_cannot_delete_the_ticket(): void
+    {
+        $user = $this->userWithPermissions(['Delete ticket']);
+        $ticket = Ticket::factory()->create();
+
+        $this->actingAs($user);
+
+        $this->assertFalse($user->can('delete', $ticket));
+    }
+
     public function test_deleting_is_denied_without_the_permission(): void
     {
-        $this->assertFalse($this->userWithoutPermissions()->can('delete', Ticket::factory()->create()));
+        $user = $this->userWithoutPermissions();
+        $ticket = Ticket::factory()->create(['owner_id' => $user->id]);
+
+        $this->actingAs($user);
+
+        $this->assertFalse($user->can('delete', $ticket));
+    }
+
+    // ----------------------------------------------------------- deleteAny
+
+    public function test_bulk_deleting_requires_the_delete_permission(): void
+    {
+        $this->assertTrue($this->userWithPermissions(['Delete ticket'])->can('deleteAny', Ticket::class));
+    }
+
+    public function test_bulk_deleting_is_denied_without_the_permission(): void
+    {
+        $this->assertFalse($this->userWithoutPermissions()->can('deleteAny', Ticket::class));
     }
 
     // ------------------------------------------- regression: guest context

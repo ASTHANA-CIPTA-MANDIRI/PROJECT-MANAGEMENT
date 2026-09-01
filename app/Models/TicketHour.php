@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Support\WidgetDataCache;
 use Carbon\CarbonInterval;
 use Illuminate\Database\Eloquent\Casts\Attribute;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
@@ -13,15 +14,19 @@ class TicketHour extends Model
     use HasFactory;
 
     protected $fillable = [
-        'user_id', 'ticket_id', 'value', 'comment', 'activity_id'
+        'user_id', 'ticket_id', 'value', 'comment', 'activity_id',
     ];
 
     public static function boot()
     {
         parent::boot();
 
-        // Logged hours feed into Project::statistics(); keep that cache fresh.
-        $forget = fn (TicketHour $item) => $item->ticket?->project?->forgetStatistics();
+        // Logged hours feed into Project::statistics() and the TimeLogged
+        // dashboard widgets; keep both caches fresh.
+        $forget = function (TicketHour $item) {
+            $item->ticket?->project?->forgetStatistics();
+            WidgetDataCache::invalidate();
+        };
         static::created($forget);
         static::updated($forget);
         static::deleted($forget);
@@ -47,6 +52,7 @@ class TicketHour extends Model
         return new Attribute(
             get: function () {
                 $seconds = $this->value * 3600;
+
                 return CarbonInterval::seconds($seconds)->cascade()->forHumans();
             }
         );

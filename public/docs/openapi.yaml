@@ -16,12 +16,141 @@ security:
   - bearerAuth: []
 
 tags:
+  - name: Tokens
   - name: Projects
   - name: Tickets
   - name: Comments
   - name: Sprints
 
 paths:
+  /api/v1/tokens:
+    get:
+      tags: [Tokens]
+      summary: List your API tokens
+      description: >
+        The tokens belonging to the authenticated user. Secrets are stored
+        hashed and are never returned here — this says which tokens exist, not
+        what they are.
+      parameters:
+        - $ref: '#/components/parameters/Page'
+        - $ref: '#/components/parameters/PerPage'
+        - name: sort
+          in: query
+          description: "Allowed: name, created_at, last_used_at, expires_at."
+          schema: { type: string, example: -created_at }
+      responses:
+        '200':
+          description: A paginated list of the caller's tokens.
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/Pagination'
+                  - type: object
+                    properties:
+                      data:
+                        type: array
+                        items: { $ref: '#/components/schemas/ApiToken' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+    post:
+      tags: [Tokens]
+      summary: Issue an API token
+      description: >
+        Returns the plain text secret once, in `plain_text_token`; it is not
+        recoverable afterwards. Requires a first-party session (the panel) —
+        a request authenticated with a bearer token answers 403, so a leaked
+        token cannot renew itself past its expiry. The first token is created
+        from the panel's **API tokens** page.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/ApiTokenInput' }
+      responses:
+        '201':
+          description: Token created; the secret is in `plain_text_token`.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data: { $ref: '#/components/schemas/ApiToken' }
+                  plain_text_token:
+                    type: string
+                    example: "12|IkE0f9UZzXvQ0m2p7sQ0eR1t2y3u4i5o6p7a8s9d"
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403':
+          description: The request is authenticated with an API token, which may not issue another.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+        '422': { $ref: '#/components/responses/ValidationError' }
+
+  /api/v1/tokens/{token}:
+    delete:
+      tags: [Tokens]
+      summary: Revoke one of your API tokens
+      description: >
+        Works with either a session or a bearer token — including the token
+        making the request, which is the way to burn a leaked credential.
+        An id belonging to another user answers 404.
+      parameters:
+        - name: token
+          in: path
+          required: true
+          schema: { type: integer }
+      responses:
+        '204': { $ref: '#/components/responses/Deleted' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  /api/v1/search:
+    get:
+      tags: [Search]
+      summary: Full-text search
+      description: >
+        Full-text search (Laravel Scout) across the projects, tickets and
+        comments the authenticated user can access.
+      parameters:
+        - name: q
+          in: query
+          required: true
+          description: The search term.
+          schema: { type: string, minLength: 1, maxLength: 255, example: "login bug" }
+        - name: limit
+          in: query
+          description: Max results per group (1–50).
+          schema: { type: integer, minimum: 1, maximum: 50, default: 10 }
+      responses:
+        '200':
+          description: Grouped search results.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  query: { type: string }
+                  data:
+                    type: object
+                    properties:
+                      projects:
+                        type: array
+                        items: { $ref: '#/components/schemas/Project' }
+                      tickets:
+                        type: array
+                        items: { $ref: '#/components/schemas/Ticket' }
+                      comments:
+                        type: array
+                        items: { $ref: '#/components/schemas/Comment' }
+                  meta:
+                    type: object
+                    properties:
+                      projects_count: { type: integer }
+                      tickets_count: { type: integer }
+                      comments_count: { type: integer }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '422': { $ref: '#/components/responses/ValidationError' }
+
   /api/v1/projects:
     get:
       tags: [Projects]
@@ -91,6 +220,66 @@ paths:
                 type: object
                 properties:
                   data: { $ref: '#/components/schemas/Project' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+    put:
+      tags: [Projects]
+      summary: Replace a project
+      description: >
+        Restricted to the project's owner and its administrators. Ownership may
+        only be handed to someone already on the project.
+      parameters:
+        - $ref: '#/components/parameters/ProjectId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/ProjectInput' }
+      responses:
+        '200':
+          description: The updated project.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data: { $ref: '#/components/schemas/Project' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '422': { $ref: '#/components/responses/ValidationError' }
+    patch:
+      tags: [Projects]
+      summary: Update part of a project
+      description: Only the fields present in the body are changed.
+      parameters:
+        - $ref: '#/components/parameters/ProjectId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/ProjectFields' }
+      responses:
+        '200':
+          description: The updated project.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data: { $ref: '#/components/schemas/Project' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '422': { $ref: '#/components/responses/ValidationError' }
+    delete:
+      tags: [Projects]
+      summary: Delete a project
+      description: >
+        Soft delete. The project's tickets, sprints and epics are taken down
+        with it. Restricted to the owner and the project's administrators.
+      parameters:
+        - $ref: '#/components/parameters/ProjectId'
+      responses:
+        '204': { $ref: '#/components/responses/Deleted' }
         '403': { $ref: '#/components/responses/Forbidden' }
         '404': { $ref: '#/components/responses/NotFound' }
 
@@ -175,6 +364,68 @@ paths:
                   data: { $ref: '#/components/schemas/Ticket' }
         '403': { $ref: '#/components/responses/Forbidden' }
         '404': { $ref: '#/components/responses/NotFound' }
+    put:
+      tags: [Tickets]
+      summary: Replace a ticket
+      description: >
+        The ticket keeps its project, code and order. A status change is
+        journalled and notifies the ticket's watchers, exactly as it does from
+        the board.
+      parameters:
+        - $ref: '#/components/parameters/TicketId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/TicketInput' }
+      responses:
+        '200':
+          description: The updated ticket.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data: { $ref: '#/components/schemas/Ticket' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '422': { $ref: '#/components/responses/ValidationError' }
+    patch:
+      tags: [Tickets]
+      summary: Update part of a ticket
+      description: >
+        Only the fields present in the body are changed — the usual way to
+        move a ticket to another status.
+      parameters:
+        - $ref: '#/components/parameters/TicketId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/TicketFields' }
+      responses:
+        '200':
+          description: The updated ticket.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data: { $ref: '#/components/schemas/Ticket' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '422': { $ref: '#/components/responses/ValidationError' }
+    delete:
+      tags: [Tickets]
+      summary: Delete a ticket
+      description: >
+        Soft delete. The ticket's number is never handed out again.
+      parameters:
+        - $ref: '#/components/parameters/TicketId'
+      responses:
+        '204': { $ref: '#/components/responses/Deleted' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
 
   /api/v1/tickets/{ticket}/comments:
     get:
@@ -233,6 +484,76 @@ paths:
         '403': { $ref: '#/components/responses/Forbidden' }
         '422': { $ref: '#/components/responses/ValidationError' }
 
+  /api/v1/comments/{comment}:
+    put:
+      tags: [Comments]
+      summary: Edit a comment
+      description: >
+        Only `content` is editable, and only by the comment's author or an
+        administrator of the project it was posted in. The author and the
+        parent ticket are never rewritten. PATCH behaves identically.
+      parameters:
+        - $ref: '#/components/parameters/CommentId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [content]
+              properties:
+                content: { type: string, example: "Edited: looks good to me." }
+      responses:
+        '200':
+          description: The updated comment.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data: { $ref: '#/components/schemas/Comment' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '422': { $ref: '#/components/responses/ValidationError' }
+    patch:
+      tags: [Comments]
+      summary: Edit a comment
+      description: Identical to PUT; `content` is the only editable field.
+      parameters:
+        - $ref: '#/components/parameters/CommentId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [content]
+              properties:
+                content: { type: string }
+      responses:
+        '200':
+          description: The updated comment.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data: { $ref: '#/components/schemas/Comment' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '422': { $ref: '#/components/responses/ValidationError' }
+    delete:
+      tags: [Comments]
+      summary: Delete a comment
+      description: >
+        Soft delete, limited to the author and the project's administrators.
+      parameters:
+        - $ref: '#/components/parameters/CommentId'
+      responses:
+        '204': { $ref: '#/components/responses/Deleted' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+
   /api/v1/sprints:
     get:
       tags: [Sprints]
@@ -288,10 +609,7 @@ paths:
       tags: [Sprints]
       summary: Get a single sprint
       parameters:
-        - name: sprint
-          in: path
-          required: true
-          schema: { type: integer }
+        - $ref: '#/components/parameters/SprintId'
       responses:
         '200':
           description: The sprint.
@@ -301,6 +619,64 @@ paths:
                 type: object
                 properties:
                   data: { $ref: '#/components/schemas/Sprint' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+    put:
+      tags: [Sprints]
+      summary: Replace a sprint
+      description: >
+        Restricted to the owner and the administrators of the sprint's project.
+      parameters:
+        - $ref: '#/components/parameters/SprintId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/SprintInput' }
+      responses:
+        '200':
+          description: The updated sprint.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data: { $ref: '#/components/schemas/Sprint' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '422': { $ref: '#/components/responses/ValidationError' }
+    patch:
+      tags: [Sprints]
+      summary: Update part of a sprint
+      description: Only the fields present in the body are changed.
+      parameters:
+        - $ref: '#/components/parameters/SprintId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/SprintFields' }
+      responses:
+        '200':
+          description: The updated sprint.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data: { $ref: '#/components/schemas/Sprint' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '422': { $ref: '#/components/responses/ValidationError' }
+    delete:
+      tags: [Sprints]
+      summary: Delete a sprint
+      description: >
+        Soft delete. The tickets planned in the sprint stay where they are.
+      parameters:
+        - $ref: '#/components/parameters/SprintId'
+      responses:
+        '204': { $ref: '#/components/responses/Deleted' }
         '403': { $ref: '#/components/responses/Forbidden' }
         '404': { $ref: '#/components/responses/NotFound' }
 
@@ -335,8 +711,20 @@ components:
       in: path
       required: true
       schema: { type: integer }
+    CommentId:
+      name: comment
+      in: path
+      required: true
+      schema: { type: integer }
+    SprintId:
+      name: sprint
+      in: path
+      required: true
+      schema: { type: integer }
 
   responses:
+    Deleted:
+      description: Deleted; no body.
     Unauthorized:
       description: Missing or invalid token.
       content:
@@ -362,6 +750,42 @@ components:
           schema: { $ref: '#/components/schemas/ValidationError' }
 
   schemas:
+    ApiToken:
+      type: object
+      properties:
+        id: { type: integer }
+        name: { type: string, example: "ci-pipeline" }
+        abilities:
+          type: array
+          items: { type: string }
+          description: >
+            Always `["*"]`. Authorization runs off the user's roles and the
+            policies, so a narrower list would look like a restriction without
+            being one.
+        last_used_at: { type: string, format: date-time, nullable: true }
+        expires_at:
+          type: string
+          format: date-time
+          nullable: true
+          description: >
+            When the token stops working. Stamped on creation and capped by
+            `SANCTUM_TOKEN_EXPIRATION` (14 days by default).
+        created_at: { type: string, format: date-time }
+    ApiTokenInput:
+      type: object
+      required: [name]
+      properties:
+        name:
+          type: string
+          maxLength: 255
+          description: A label to recognise the token by.
+        expires_at:
+          type: string
+          format: date-time
+          nullable: true
+          description: >
+            Optional, must be in the future. Only shortens the life of the
+            token: a date beyond the configured window is clamped to it.
     Project:
       type: object
       properties:
@@ -376,9 +800,11 @@ components:
         tickets_count: { type: integer }
         created_at: { type: string, format: date-time }
         updated_at: { type: string, format: date-time }
-    ProjectInput:
+    ProjectFields:
       type: object
-      required: [name, ticket_prefix, status_id, type, status_type]
+      description: >
+        The writable fields of a project. Sent whole on create and on PUT;
+        PATCH carries only the fields that change.
       properties:
         name: { type: string, maxLength: 255 }
         description: { type: string, nullable: true }
@@ -388,7 +814,15 @@ components:
         status_id: { type: integer }
         owner_id:
           type: integer
-          description: Optional; defaults to the authenticated user.
+          description: >
+            On create: ignored, the owner is the authenticated user. On update:
+            optional (the current owner is kept) and limited to the project's
+            owner or one of its members.
+    ProjectInput:
+      allOf:
+        - $ref: '#/components/schemas/ProjectFields'
+        - type: object
+          required: [name, ticket_prefix, status_id, type, status_type]
     Ticket:
       type: object
       properties:
@@ -405,19 +839,32 @@ components:
         type_id: { type: integer }
         priority_id: { type: integer }
         comments_count: { type: integer }
-    TicketInput:
+    TicketFields:
       type: object
-      required: [name, content, status_id, type_id, priority_id]
+      description: >
+        The writable fields of a ticket. Sent whole on create and on PUT;
+        PATCH carries only the fields that change. `project_id` is not among
+        them: a ticket stays in the project it was created in.
       properties:
         name: { type: string, maxLength: 255 }
         content: { type: string }
         status_id: { type: integer }
         type_id: { type: integer }
         priority_id: { type: integer }
+        owner_id:
+          type: integer
+          description: >
+            Optional. Defaults to the authenticated user on create and to the
+            ticket's current owner on update; must be on the project either way.
         responsible_id: { type: integer, nullable: true }
         estimation: { type: number, minimum: 0, nullable: true }
         sprint_id: { type: integer, nullable: true }
         epic_id: { type: integer, nullable: true }
+    TicketInput:
+      allOf:
+        - $ref: '#/components/schemas/TicketFields'
+        - type: object
+          required: [name, content, status_id, type_id, priority_id]
     Comment:
       type: object
       properties:
@@ -436,15 +883,24 @@ components:
         starts_at: { type: string, format: date }
         ends_at: { type: string, format: date }
         is_active: { type: boolean }
-    SprintInput:
+    SprintFields:
       type: object
-      required: [name, project_id, starts_at, ends_at]
+      description: >
+        The writable fields of a sprint. Sent whole on create and on PUT;
+        PATCH carries only the fields that change, and a date sent alone is
+        still checked against the sprint's stored counterpart. On update
+        `project_id` is ignored: a sprint stays in its own project.
       properties:
         name: { type: string, maxLength: 255 }
         description: { type: string, nullable: true }
         project_id: { type: integer }
         starts_at: { type: string, format: date, example: "2026-02-01" }
         ends_at: { type: string, format: date, example: "2026-02-14" }
+    SprintInput:
+      allOf:
+        - $ref: '#/components/schemas/SprintFields'
+        - type: object
+          required: [name, project_id, starts_at, ends_at]
     Pagination:
       type: object
       properties:

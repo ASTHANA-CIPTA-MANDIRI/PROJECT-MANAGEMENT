@@ -13,7 +13,6 @@ class ProjectPolicy
     /**
      * Determine whether the user can view any models.
      *
-     * @param \App\Models\User $user
      * @return \Illuminate\Auth\Access\Response|bool
      */
     public function viewAny(User $user)
@@ -24,24 +23,16 @@ class ProjectPolicy
     /**
      * Determine whether the user can view the model.
      *
-     * @param \App\Models\User $user
-     * @param \App\Models\Project $project
      * @return \Illuminate\Auth\Access\Response|bool
      */
     public function view(User $user, Project $project)
     {
-        return $user->can('View project')
-            && (
-                $project->owner_id === $user->id
-                ||
-                $project->users()->where('users.id', $user->id)->count()
-            );
+        return $user->can('View project') && $project->isAccessibleBy($user);
     }
 
     /**
      * Determine whether the user can create models.
      *
-     * @param \App\Models\User $user
      * @return \Illuminate\Auth\Access\Response|bool
      */
     public function create(User $user)
@@ -52,31 +43,50 @@ class ProjectPolicy
     /**
      * Determine whether the user can update the model.
      *
-     * @param \App\Models\User $user
-     * @param \App\Models\Project $project
      * @return \Illuminate\Auth\Access\Response|bool
      */
     public function update(User $user, Project $project)
     {
-        return $user->can('Update project')
-            && (
-                $project->owner_id === $user->id
-                ||
-                $project->users()->where('users.id', $user->id)
-                    ->where('role', config('system.projects.affectations.roles.can_manage'))
-                    ->count()
-            );
+        return $user->can('Update project') && $project->isManageableBy($user);
     }
 
     /**
      * Determine whether the user can delete the model.
      *
-     * @param \App\Models\User $user
-     * @param \App\Models\Project $project
      * @return \Illuminate\Auth\Access\Response|bool
      */
     public function delete(User $user, Project $project)
     {
+        return $user->can('Delete project') && $project->isManageableBy($user);
+    }
+
+    /**
+     * Determine whether the user can bulk delete models.
+     *
+     * @return \Illuminate\Auth\Access\Response|bool
+     */
+    public function deleteAny(User $user)
+    {
         return $user->can('Delete project');
+    }
+
+    /**
+     * Restoring is the undo of delete, so it is gated the same way.
+     *
+     * @return \Illuminate\Auth\Access\Response|bool
+     */
+    public function restore(User $user, Project $project)
+    {
+        return $this->delete($user, $project);
+    }
+
+    /**
+     * Bulk restoring is the undo of bulk delete, so it is gated the same way.
+     *
+     * @return \Illuminate\Auth\Access\Response|bool
+     */
+    public function restoreAny(User $user)
+    {
+        return $this->deleteAny($user);
     }
 }

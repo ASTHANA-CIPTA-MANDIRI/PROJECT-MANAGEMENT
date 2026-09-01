@@ -1,0 +1,86 @@
+name: Rollback (production)
+
+# Manually roll production back to a previous release. Optionally restore the
+# database from the pre-deploy snapshot taken by the production deploy.
+on:
+  workflow_dispatch:
+    inputs:
+      ref:
+        description: 'Ref to roll back to (blank = last recorded PREVIOUS_RELEASE)'
+        required: false
+        default: ''
+      restore_db:
+        description: 'Restore DB from the most recent pre-deploy backup?'
+        type: boolean
+        default: false
+
+concurrency:
+  group: deploy-production
+  cancel-in-progress: false
+
+jobs:
+  rollback:
+    name: Roll back production
+    runs-on: ubuntu-latest
+    environment:
+      name: production
+      url: ${{ vars.APP_URL }}
+
+    steps:
+      - name: Roll back over SSH
+        uses: appleboy/ssh-action@v1.0.3
+        env:
+          ROLLBACK_REF: ${{ github.event.inputs.ref }}
+          RESTORE_DB: ${{ github.event.inputs.restore_db }}
+        with:
+          host: ${{ secrets.SSH_HOST }}
+          username: ${{ secrets.SSH_USER }}
+          key: ${{ secrets.SSH_KEY }}
+          port: ${{ secrets.SSH_PORT || 22 }}
+          envs: ROLLBACK_REF,RESTORE_DB
+          # This is the emergency path, so it must never be the thing that keeps
+          # the site down: the ref is resolved before maintenance mode is
+          # entered, and an EXIT trap runs `artisan up` however the script ends.
+          # There is nothing to fall back to from here, so a failure is reported
+          # loudly and left for a human rather than retried automatically.
+          script: |
+            set -e
+            cd "${{ secrets.DEPLOY_PATH }}"
+
+            REF="$ROLLBACK_REF"
+            if [ -z "$REF" ]; then
+              if [ ! -f storage/app/PREVIOUS_RELEASE ]; then
+                echo "::error::storage/app/PREVIOUS_RELEASE tidak ada — sebutkan ref secara eksplisit pada input workflow."
+                exit 1
+              fi
+              REF="$(cat storage/app/PREVIOUS_RELEASE)"
+            fi
+            echo "Rolling back to $REF"
+
+            trap 'php artisan up || true' EXIT
+
+            php artisan down --retry=15 || true
+
+            set +e
+            (
+              set -e
+              git fetch --all --tags --prune
+              git checkout --force "$REF"
+              composer install --no-dev --optimize-autoloader --no-interaction
+              npm ci
+              npm run build
+              if [ "$RESTORE_DB" = "true" ]; then
+                bash scripts/db-restore.sh
+              fi
+              php artisan config:cache
+              php artisan route:cache
+              php artisan view:cache
+              php artisan queue:restart
+            )
+            ROLLBACK_STATUS=$?
+
+            if [ "$ROLLBACK_STATUS" -ne 0 ]; then
+              echo "::error::Rollback ke $REF gagal (exit $ROLLBACK_STATUS). Maintenance mode sudah dicabut, tetapi server perlu ditangani manual."
+              exit 1
+            fi
+            echo "Rollback ke $REF selesai."

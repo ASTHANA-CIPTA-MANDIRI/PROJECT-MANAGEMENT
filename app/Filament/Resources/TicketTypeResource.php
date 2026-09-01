@@ -3,8 +3,8 @@
 namespace App\Filament\Resources;
 
 use App\Filament\Resources\TicketTypeResource\Pages;
-use App\Filament\Resources\TicketTypeResource\RelationManagers;
 use App\Models\TicketType;
+use App\Support\Colors;
 use Filament\Forms;
 use Filament\Resources\Form;
 use Filament\Resources\Resource;
@@ -12,10 +12,25 @@ use Filament\Resources\Table;
 use Filament\Tables;
 use Guava\FilamentIconPicker\Forms\IconPicker;
 use Guava\FilamentIconPicker\Tables\IconColumn;
+use Illuminate\Database\Eloquent\Builder;
+use Illuminate\Database\Eloquent\SoftDeletingScope;
 
 class TicketTypeResource extends Resource
 {
     protected static ?string $model = TicketType::class;
+
+    /**
+     * The SoftDeletingScope is dropped here (not just left to TrashedFilter)
+     * because row/bulk actions like RestoreAction resolve their target
+     * record through this unfiltered base query, not through the table's
+     * filtered query - with the scope still active a trashed row could never
+     * be found to restore it. TrashedFilter still controls what the
+     * *listing* shows by default.
+     */
+    public static function getEloquentQuery(): Builder
+    {
+        return parent::getEloquentQuery()->withoutGlobalScopes([SoftDeletingScope::class]);
+    }
 
     protected static ?string $navigationIcon = 'heroicon-o-clipboard-check';
 
@@ -51,7 +66,8 @@ class TicketTypeResource extends Resource
 
                                 Forms\Components\ColorPicker::make('color')
                                     ->label(__('Type color'))
-                                    ->required(),
+                                    ->required()
+                                    ->regex(Colors::HEX_PATTERN),
 
                                 IconPicker::make('icon')
                                     ->label(__('Type icon'))
@@ -62,8 +78,8 @@ class TicketTypeResource extends Resource
                                     ->helperText(
                                         __('If checked, this type will be automatically affected to new tickets')
                                     ),
-                            ])
-                    ])
+                            ]),
+                    ]),
             ]);
     }
 
@@ -98,14 +114,16 @@ class TicketTypeResource extends Resource
                     ->searchable(),
             ])
             ->filters([
-                //
+                Tables\Filters\TrashedFilter::make(),
             ])
             ->actions([
                 Tables\Actions\ViewAction::make(),
                 Tables\Actions\EditAction::make(),
+                Tables\Actions\RestoreAction::make(),
             ])
             ->bulkActions([
                 Tables\Actions\DeleteBulkAction::make(),
+                Tables\Actions\RestoreBulkAction::make(),
             ]);
     }
 

@@ -7,7 +7,20 @@
     <meta http-equiv="X-UA-Compatible" content="IE=edge,chrome=1" />
     <meta name="description" content="Description">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, minimum-scale=1.0">
-    <link rel="stylesheet" href="//cdn.jsdelivr.net/npm/docsify@4/lib/themes/vue.css">
+    <!--
+        Every third-party asset below is pinned to an exact version and carries
+        a Subresource Integrity hash, so a compromised CDN (or a hijacked npm
+        release) cannot silently swap the file out. Keep it that way: when you
+        bump a version, recompute the hash with
+
+            curl -s <url> | openssl dgst -sha384 -binary | openssl base64 -A
+
+        A floating range (docsify@4) or a missing integrity attribute means the
+        whole documentation site executes whatever the CDN happens to serve.
+    -->
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/docsify@4.13.1/lib/themes/vue.css"
+          integrity="sha384-jCK82M2ExfkqAO/MYBKMjP1qC4AvZ4/Duf2gVWOy3RPn26uz+KW5I+9S39za1Fqv"
+          crossorigin="anonymous">
 </head>
 
 <body>
@@ -19,16 +32,37 @@
             repo: 'devaslanphp/project-management',
             themeColor: '#4889ef',
             autoHeader: true,
+            mermaidConfig: { querySelector: '.mermaid' },
         }
 
     </script>
+    <!-- Mermaid (for C4 & ER diagrams) -->
+    <script src="https://cdn.jsdelivr.net/npm/mermaid@11.17.0/dist/mermaid.min.js"
+            integrity="sha384-1XxYRbOYiiyu+pmHSGPcd+f1+ISteo+dnLpgQKUB07vPr9ddelj3zjO+TAbBqFXY"
+            crossorigin="anonymous"></script>
+    <script>mermaid.initialize({ startOnLoad: false });</script>
     <!-- Docsify v4 -->
-    <script src="//cdn.jsdelivr.net/npm/docsify@4"></script>
-    <script src="//cdn.jsdelivr.net/npm/docsify/lib/plugins/zoom-image.min.js"></script>
-    <script src="//cdn.jsdelivr.net/npm/docsify-copy-code/dist/docsify-copy-code.min.js"></script>
-    <script src="//cdn.jsdelivr.net/npm/docsify-pagination/dist/docsify-pagination.min.js"></script>
-    <script src="//cdn.jsdelivr.net/npm/prismjs@1.22/components/prism-bash.min.js"></script>
-    <script src="//cdn.jsdelivr.net/npm/prismjs@1.22/components/prism-php.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/docsify@4.13.1/lib/docsify.min.js"
+            integrity="sha384-KaHhgnx/OTLoJ4J33SSJsF4x1pk4I7q3s5ZOfIDHJYl6IG7Oyn2vNDsHiWJe46fD"
+            crossorigin="anonymous"></script>
+    <script src="https://cdn.jsdelivr.net/npm/docsify-mermaid@2.0.1/dist/docsify-mermaid.js"
+            integrity="sha384-U2Wy2Wa3grc0soLXlky3iZWvD6N5p3o+Udi8RpPWlbscpUEfi7RuQHzMmSstkHou"
+            crossorigin="anonymous"></script>
+    <script src="https://cdn.jsdelivr.net/npm/docsify@4.13.1/lib/plugins/zoom-image.min.js"
+            integrity="sha384-fYBaBAsdPMjWt1AuA+txMoztHnl+zLgObSvwddIabbfUp+36gf/vNOKx88f37zix"
+            crossorigin="anonymous"></script>
+    <script src="https://cdn.jsdelivr.net/npm/docsify-copy-code@3.0.2/dist/docsify-copy-code.min.js"
+            integrity="sha384-xvU4Qmx14Fe/3hDKuOUUQ8eOzoa7OVTL0vp3amTSv2KY8lCjlrga7DoqecFFOT7j"
+            crossorigin="anonymous"></script>
+    <script src="https://cdn.jsdelivr.net/npm/docsify-pagination@2.10.1/dist/docsify-pagination.min.js"
+            integrity="sha384-uFEp18/1vv2dYlO64J2lOcnbhirAQZPtruqAZZ7PZYoXenm5c+tIs3AqSMjVMRe8"
+            crossorigin="anonymous"></script>
+    <script src="https://cdn.jsdelivr.net/npm/prismjs@1.22.0/components/prism-bash.min.js"
+            integrity="sha384-WCNZvrJdlVJyxCZWVIgqqsVjvLiCfdrNdkTHZXCE3mb5jpRstagIkD2rKsMYpth+"
+            crossorigin="anonymous"></script>
+    <script src="https://cdn.jsdelivr.net/npm/prismjs@1.22.0/components/prism-php.min.js"
+            integrity="sha384-mKbjjQmSBRK8fXyxHr+zu9WKXLGYhA2Z4JBDSA1+kRjqvn5ELz3un9tEvJOzvm2G"
+            crossorigin="anonymous"></script>
 </body>
 
 </html>

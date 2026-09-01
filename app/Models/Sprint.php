@@ -2,7 +2,6 @@
 
 namespace App\Models;
 
-use Carbon\Carbon;
 use Illuminate\Database\Eloquent\Casts\Attribute;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
@@ -16,7 +15,7 @@ class Sprint extends Model
 
     protected $fillable = [
         'name', 'starts_at', 'ends_at', 'description',
-        'project_id', 'started_at', 'ended_at'
+        'project_id', 'started_at', 'ended_at',
     ];
 
     protected $casts = [
@@ -25,22 +24,6 @@ class Sprint extends Model
         'started_at' => 'datetime',
         'ended_at' => 'datetime',
     ];
-
-    public static function boot()
-    {
-        parent::boot();
-
-        static::created(function (Sprint $item) {
-            $epic = Epic::create([
-                'name' => $item->name,
-                'starts_at' => $item->starts_at,
-                'ends_at' => $item->ends_at,
-                'project_id' => $item->project_id
-            ]);
-            $item->epic_id = $epic->id;
-            $item->save();
-        });
-    }
 
     public function project(): BelongsTo
     {
@@ -57,13 +40,24 @@ class Sprint extends Model
         return $this->belongsTo(Epic::class, 'epic_id', 'id');
     }
 
+    /**
+     * Whole days left in a running sprint, counting today as one of them:
+     * 1 on the closing day, 0 the day after, negative once overdue. Null when
+     * the sprint has not started or has already been closed.
+     *
+     * Counted from the start of today rather than from `now()`, so the number
+     * does not tick over halfway through the day, and signed — diffInDays()
+     * is absolute by default, which used to make an overdue sprint report a
+     * growing number of days *remaining*.
+     */
     public function remaining(): Attribute
     {
         return new Attribute(
             get: function () {
-                if ($this->starts_at && $this->ends_at && $this->started_at && !$this->ended_at) {
-                    return $this->ends_at->diffInDays(now()) + 1;
+                if ($this->starts_at && $this->ends_at && $this->started_at && ! $this->ended_at) {
+                    return now()->startOfDay()->diffInDays($this->ends_at, false) + 1;
                 }
+
                 return null;
             }
         );

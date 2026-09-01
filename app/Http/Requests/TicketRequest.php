@@ -2,8 +2,12 @@
 
 namespace App\Http\Requests;
 
+use App\Http\Requests\Concerns\ValidatesPartialUpdates;
+use App\Models\Project;
+use App\Models\Ticket;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Validation\Rule;
+use Illuminate\Validation\Rules\Exists;
 
 /**
  * Validation rules for creating and updating a Ticket.
@@ -11,43 +15,93 @@ use Illuminate\Validation\Rule;
  * Mirrors the Filament TicketResource form and the `tickets` table schema.
  * Note: `code` and `order` are generated automatically in the Ticket model's
  * boot lifecycle, so they are intentionally not validated as user input.
+ *
+ * Every relation a ticket points at has to belong to the same project as the
+ * ticket itself: "the id exists somewhere in the table" would let a caller
+ * hang their ticket off another project's sprint, epic or status. The rules
+ * therefore read project_id from the payload — callers outside the HTTP
+ * lifecycle must build them through rulesFor().
  */
 class TicketRequest extends FormRequest
 {
+    use ValidatesPartialUpdates;
+
     /**
      * Determine if the user is authorized to make this request.
      */
     public function authorize(): bool
     {
         $user = $this->user();
-        if (!$user) {
+        if (! $user) {
             return false;
         }
 
-        return $this->isMethod('POST')
-            ? $user->can('Create ticket')
+        if ($this->isMethod('POST')) {
+            return $user->can('Create ticket');
+        }
+
+        // An update is judged against the ticket itself, here rather than in
+        // the controller alone: authorization runs before validation, so a
+        // caller with no business touching this ticket is turned away instead
+        // of being told, field by field, who is on the project.
+        return ($ticket = $this->routeTicket())
+            ? $user->can('update', $ticket)
             : $user->can('Update ticket');
     }
 
     /**
      * Fill in values the API derives from the route/session before validating:
-     * the parent project (nested route) and a default owner (current user).
+     * the parent project and a default owner.
+     *
+     * The project comes from the nested create route or from the ticket being
+     * updated, never from the body: moving a ticket to another project would
+     * leave its code, sprint and epic pointing at the project it left.
      */
     protected function prepareForValidation(): void
     {
         $data = [];
+        $ticket = $this->routeTicket();
 
         if ($project = $this->route('project')) {
             $data['project_id'] = is_object($project) ? $project->getKey() : $project;
+        } elseif ($ticket) {
+            $data['project_id'] = $ticket->project_id;
         }
 
-        if (! $this->filled('owner_id') && $this->user()) {
-            $data['owner_id'] = $this->user()->getKey();
+        // An update keeps the ticket's own owner unless the caller names a new
+        // one; only a create falls back to the caller.
+        if (! $this->filled('owner_id') && $owner = ($ticket?->owner_id ?? $this->user()?->getKey())) {
+            $data['owner_id'] = $owner;
         }
 
         if ($data) {
             $this->merge($data);
         }
+    }
+
+    /**
+     * The ticket being updated, when the request went through a route that
+     * binds one. Null on create and outside the HTTP lifecycle.
+     */
+    protected function routeTicket(): ?Ticket
+    {
+        $ticket = $this->route('ticket');
+
+        return $ticket instanceof Ticket ? $ticket : null;
+    }
+
+    /**
+     * Rules for a payload validated outside the HTTP request lifecycle (the
+     * Livewire forms). The project-scoped rules read project_id from the
+     * request, so the data has to be handed over rather than passed to the
+     * validator alone.
+     *
+     * @param  array<string, mixed>  $data
+     * @return array<string, mixed>
+     */
+    public static function rulesFor(array $data): array
+    {
+        return (new self)->merge($data)->rules();
     }
 
     /**
@@ -57,19 +111,86 @@ class TicketRequest extends FormRequest
      */
     public function rules(): array
     {
-        return [
+        $project = $this->project();
+
+        return $this->whenPartial([
             'name' => ['required', 'string', 'max:255'],
             'content' => ['required', 'string'],
             'project_id' => ['required', Rule::exists('projects', 'id')->whereNull('deleted_at')],
-            'owner_id' => ['required', Rule::exists('users', 'id')->whereNull('deleted_at')],
-            'responsible_id' => ['nullable', Rule::exists('users', 'id')->whereNull('deleted_at')],
-            'status_id' => ['required', Rule::exists('ticket_statuses', 'id')],
+            'owner_id' => ['required', $this->contributorRule($project)],
+            'responsible_id' => ['nullable', $this->contributorRule($project)],
+            'status_id' => ['required', $this->statusRule($project)],
             'type_id' => ['required', Rule::exists('ticket_types', 'id')],
             'priority_id' => ['required', Rule::exists('ticket_priorities', 'id')],
             'estimation' => ['nullable', 'numeric', 'min:0'],
-            'epic_id' => ['nullable', Rule::exists('epics', 'id')->whereNull('deleted_at')],
-            'sprint_id' => ['nullable', Rule::exists('sprints', 'id')->whereNull('deleted_at')],
-        ];
+            'epic_id' => ['nullable', $this->sameProjectRule('epics', $project)],
+            'sprint_id' => ['nullable', $this->sameProjectRule('sprints', $project)],
+        ]);
+    }
+
+    /**
+     * The project the ticket belongs to, as far as the payload lets us tell.
+     * A null project only means "cannot be scoped": either project_id is
+     * missing, and its own rule fails the request, or the rules were built
+     * without the payload at hand.
+     */
+    protected function project(): ?Project
+    {
+        $projectId = $this->input('project_id');
+
+        // A non-scalar id is nonsense the project_id rule rejects on its own;
+        // it must not reach find(), which would return a collection.
+        return is_scalar($projectId) && $projectId ? Project::find($projectId) : null;
+    }
+
+    /**
+     * An epic or sprint may only be attached to a ticket of its own project.
+     * Otherwise the ticket shows up in another project's burndown and velocity,
+     * and TicketObserver copies that project's epic onto it.
+     */
+    private function sameProjectRule(string $table, ?Project $project): Exists
+    {
+        $rule = Rule::exists($table, 'id')->whereNull('deleted_at');
+
+        return $project ? $rule->where('project_id', $project->getKey()) : $rule;
+    }
+
+    /**
+     * Ticket statuses are either global (shared by every "default" project) or
+     * scoped to one "custom" project, never both — the same split the boards
+     * and the forms apply when they list the available statuses.
+     */
+    private function statusRule(?Project $project): Exists
+    {
+        $rule = Rule::exists('ticket_statuses', 'id');
+
+        if (! $project) {
+            return $rule;
+        }
+
+        return $project->status_type === 'custom'
+            ? $rule->where('project_id', $project->getKey())
+            : $rule->whereNull('project_id');
+    }
+
+    /**
+     * Owner and responsible must be contributors of the project (its owner or
+     * one of its members): anyone else would start receiving notifications
+     * about a project they cannot even open.
+     */
+    private function contributorRule(?Project $project): Exists
+    {
+        $rule = Rule::exists('users', 'id')->whereNull('deleted_at');
+
+        if (! $project) {
+            return $rule;
+        }
+
+        return $rule->whereIn('id', $project->users()
+            ->pluck('users.id')
+            ->push($project->owner_id)
+            ->unique()
+            ->all());
     }
 
     /**

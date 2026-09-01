@@ -19,12 +19,14 @@
                 <p class="text-base font-semibold leading-none text-gray-900 dark:text-white">
                     <a>{{ $user->name }}</a>
                 </p>
-                <p class="mb-3 text-sm font-normal">
-                    <a href="mailto:{{ $user->email }}"
-                       class="hover:underline">
-                        {{ $user->email }}
-                    </a>
-                </p>
+                @if(auth()->id() === $user->id || auth()->user()?->can('view', $user))
+                    <p class="mb-3 text-sm font-normal">
+                        <a href="mailto:{{ $user->email }}"
+                           class="hover:underline">
+                            {{ $user->email }}
+                        </a>
+                    </p>
+                @endif
                 <p class="mb-4 text-sm font-light">
                     {{ __('Member since') }}
                     <a class="text-blue-600 dark:text-blue-500">
@@ -35,8 +37,7 @@
                     <li class="mr-2">
                         <div>
                         <span class="font-semibold text-gray-900 dark:text-white">
-                            {{ collect(($user->ticketsOwned ?? collect())
-                                    ->merge(($user->ticketsResponsible ?? collect())))->unique('id')->count() }}
+                            {{ $user->ticketsCount }}
                         </span>
                             <span>{{ __('Tickets') }}</span>
                         </div>
@@ -44,8 +45,7 @@
                     <li>
                         <div>
                         <span class="font-semibold text-gray-900 dark:text-white">
-                            {{ collect(($user->projectsOwning ?? collect())
-                                ->merge(($user->projectsAffected ?? collect())))->unique('id')->count() }}
+                            {{ $user->projectsCount }}
                         </span>
                             <span>{{ __('Projects') }}</span>
                         </div>

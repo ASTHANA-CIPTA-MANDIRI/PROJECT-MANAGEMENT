@@ -2,32 +2,55 @@
 
 namespace App\Models;
 
-use App\Notifications\TicketCommented;
-use App\Notifications\TicketCreated;
-use App\Notifications\TicketStatusUpdated;
+use App\Support\HtmlSanitizer;
+use Illuminate\Database\Eloquent\Builder;
+use Illuminate\Database\Eloquent\Casts\Attribute;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Prunable;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\SoftDeletes;
+use Laravel\Scout\Searchable;
 
 class TicketComment extends Model
 {
-    use HasFactory, SoftDeletes;
+    use HasFactory, Prunable, Searchable, SoftDeletes;
+
+    /** How long a soft-deleted comment is kept before model:prune removes it for good. */
+    private const PRUNE_AFTER_DAYS = 90;
 
     protected $fillable = [
-        'user_id', 'ticket_id', 'content'
+        'user_id', 'ticket_id', 'content',
     ];
 
-
-    public static function boot()
+    /**
+     * Sanitize rich-text content on write so stored (and later rendered) HTML
+     * can never carry a script/XSS payload, regardless of the write path.
+     */
+    protected function content(): Attribute
     {
-        parent::boot();
+        return Attribute::set(fn (?string $value) => HtmlSanitizer::clean($value));
+    }
 
-        static::created(function (TicketComment $item) {
-            foreach ($item->ticket->watchers as $user) {
-                $user->notify(new TicketCommented($item));
-            }
-        });
+    /**
+     * The data indexed for full-text search (Laravel Scout).
+     *
+     * project_id is denormalized onto this table (see the
+     * add_project_id_to_ticket_comments_table migration and
+     * TicketCommentObserver::creating()) so SearchService can scope comment
+     * search directly by project_id instead of first pulling every
+     * accessible project's ticket ids into memory.
+     *
+     * @return array<string, mixed>
+     */
+    public function toSearchableArray(): array
+    {
+        return [
+            'id' => $this->id,
+            'content' => strip_tags((string) $this->content),
+            'ticket_id' => $this->ticket_id,
+            'project_id' => $this->project_id,
+        ];
     }
 
     public function user(): BelongsTo
@@ -38,5 +61,17 @@ class TicketComment extends Model
     public function ticket(): BelongsTo
     {
         return $this->belongsTo(Ticket::class, 'ticket_id', 'id');
+    }
+
+    /**
+     * Comments are high-volume user content with no restore UI (unlike
+     * projects/tickets/users - see docs/soft-deletes.md), so once soft-deleted
+     * they are permanently removed after a retention period instead of
+     * accumulating forever. Runs via the scheduled `model:prune` command
+     * (app/Console/Kernel.php), which discovers this automatically.
+     */
+    public function prunable(): Builder
+    {
+        return static::onlyTrashed()->where('deleted_at', '<=', now()->subDays(self::PRUNE_AFTER_DAYS));
     }
 }

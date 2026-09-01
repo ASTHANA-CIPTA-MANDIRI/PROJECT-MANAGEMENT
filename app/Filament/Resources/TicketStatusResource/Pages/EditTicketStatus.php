@@ -3,7 +3,6 @@
 namespace App\Filament\Resources\TicketStatusResource\Pages;
 
 use App\Filament\Resources\TicketStatusResource;
-use App\Models\TicketStatus;
 use Filament\Pages\Actions;
 use Filament\Resources\Pages\EditRecord;
 

@@ -1,0 +1,30 @@
+name: Database backup
+
+# Nightly database backup. Also runnable on demand.
+on:
+  schedule:
+    - cron: '0 2 * * *'   # every day at 02:00 UTC
+  workflow_dispatch:
+
+concurrency:
+  group: db-backup
+  cancel-in-progress: false
+
+jobs:
+  backup:
+    name: Back up production database
+    runs-on: ubuntu-latest
+    environment: production
+
+    steps:
+      - name: Run backup over SSH
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.SSH_HOST }}
+          username: ${{ secrets.SSH_USER }}
+          key: ${{ secrets.SSH_KEY }}
+          port: ${{ secrets.SSH_PORT || 22 }}
+          script: |
+            set -e
+            cd "${{ secrets.DEPLOY_PATH }}"
+            bash scripts/db-backup.sh scheduled

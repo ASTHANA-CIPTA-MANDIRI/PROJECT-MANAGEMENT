@@ -6,6 +6,7 @@ use App\Http\Requests\ProjectRequest;
 use App\Http\Resources\ProjectResource;
 use App\Models\Project;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
 
 class ProjectController extends ApiController
 {
@@ -22,10 +23,7 @@ class ProjectController extends ApiController
         $user = $request->user();
 
         $query = Project::query()
-            ->where(function ($q) use ($user) {
-                $q->where('owner_id', $user->id)
-                    ->orWhereHas('users', fn ($u) => $u->where('users.id', $user->id));
-            })
+            ->accessibleBy($user)
             ->with(['owner', 'status'])
             ->withCount('tickets');
 
@@ -55,5 +53,36 @@ class ProjectController extends ApiController
         $this->authorize('view', $project);
 
         return new ProjectResource($project->load(['owner', 'status', 'users'])->loadCount('tickets'));
+    }
+
+    /**
+     * PUT|PATCH /api/v1/projects/{project}
+     *
+     * PUT replaces the project, PATCH changes only the fields it carries.
+     * Both are limited to the project's owner and its managing members
+     * (ProjectPolicy::update), not to everyone holding "Update project".
+     */
+    public function update(ProjectRequest $request, Project $project)
+    {
+        $this->authorize('update', $project);
+
+        $project->update($request->validated());
+
+        return new ProjectResource($project->load(['owner', 'status'])->loadCount('tickets'));
+    }
+
+    /**
+     * DELETE /api/v1/projects/{project}
+     *
+     * Soft delete. ProjectObserver takes the project's tickets, sprints and
+     * epics down with it, so the whole cascade runs in one transaction.
+     */
+    public function destroy(Project $project)
+    {
+        $this->authorize('delete', $project);
+
+        DB::transaction(fn () => $project->delete());
+
+        return response()->noContent();
     }
 }

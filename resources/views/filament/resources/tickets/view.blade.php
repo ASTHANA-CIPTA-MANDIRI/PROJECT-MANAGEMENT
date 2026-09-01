@@ -26,27 +26,50 @@
             </div>
             <div class="w-full flex items-center gap-2">
                 <div class="px-2 py-1 rounded flex items-center justify-center text-center text-xs text-white"
-                     style="background-color: {{ $record->status->color }};">
+                     style="background-color: {{ \App\Support\Colors::safe($record->status->color) }};">
                     {{ $record->status->name }}
                 </div>
                 <div class="px-2 py-1 rounded flex items-center justify-center text-center text-xs text-white"
-                     style="background-color: {{ $record->priority->color }};">
+                     style="background-color: {{ \App\Support\Colors::safe($record->priority->color) }};">
                     {{ $record->priority->name }}
                 </div>
                 <div class="px-2 py-1 rounded flex items-center justify-center text-center text-xs text-white"
-                     style="background-color: {{ $record->type->color }};">
+                     style="background-color: {{ \App\Support\Colors::safe($record->type->color) }};">
                     <x-icon class="h-3 text-white" name="{{ $record->type->icon }}"/>
                     <span class="ml-2">
                         {{ $record->type->name }}
                     </span>
                 </div>
+                @if($record->due_date)
+                    <div @class([
+                            'px-2 py-1 rounded flex items-center gap-1 text-center text-xs text-white',
+                            'bg-danger-500' => $record->isOverdue,
+                            'bg-gray-400' => ! $record->isOverdue,
+                        ])>
+                        <x-heroicon-o-calendar class="w-3 h-3"/>
+                        {{ __('Due') }} {{ $record->due_date->format(__('Y-m-d')) }}
+                        @if($record->isOverdue)
+                            ({{ __('Overdue') }})
+                        @endif
+                    </div>
+                @endif
             </div>
+            @if($record->labels->count())
+                <div class="w-full flex items-center flex-wrap gap-2">
+                    @foreach($record->labels as $label)
+                        <span class="px-2 py-1 rounded-full text-xs text-white"
+                              style="background-color: {{ \App\Support\Colors::safe($label->color) }};">
+                            {{ $label->name }}
+                        </span>
+                    @endforeach
+                </div>
+            @endif
             <div class="w-full flex flex-col gap-0 pt-5">
                 <span class="text-gray-500 text-sm font-medium">
                     {{ __('Content') }}
                 </span>
                 <div class="w-full prose">
-                    {!! $record->content !!}
+                    {!! \App\Support\HtmlSanitizer::clean($record->content) !!}
                 </div>
             </div>
         </x-filament::card>
@@ -286,7 +309,7 @@
                             @endif
                         </div>
                         <div class="w-full prose">
-                            {!! $comment->content !!}
+                            {!! \App\Support\Mentions::highlight(\App\Support\HtmlSanitizer::clean($comment->content), $record->watchers) !!}
                         </div>
                     </div>
                 @endforeach
@@ -299,8 +322,12 @@
                                  @if(!$loop->last) pb-5 mb-5 border-b border-gray-200 @endif">
                                 <span class="flex items-center gap-1 text-gray-500 text-sm">
                                     <span class="font-medium flex items-center gap-1">
-                                        <x-user-avatar :user="$activity->user"/>
-                                        {{ $activity->user->name }}
+                                        @if($activity->user)
+                                            <x-user-avatar :user="$activity->user"/>
+                                            {{ $activity->user->name }}
+                                        @else
+                                            {{ __('System') }}
+                                        @endif
                                     </span>
                                     <span class="text-gray-400 px-2">|</span>
                                     {{ $activity->created_at->format('Y-m-d g:i A') }}
@@ -309,7 +336,7 @@
                                 <div class="w-full flex items-center gap-10">
                                     <span class="text-gray-400">{{ $activity->oldStatus->name }}</span>
                                     <x-heroicon-o-arrow-right class="w-6 h-6"/>
-                                    <span style="color: {{ $activity->newStatus->color }}">
+                                    <span style="color: {{ \App\Support\Colors::safe($activity->newStatus->color) }}">
                                         {{ $activity->newStatus->name }}
                                     </span>
                                 </div>
@@ -357,5 +384,98 @@
                 .duration(6000)
                 .send()
         });
+    </script>
+
+    {{-- @mention autocomplete for the comment editor (Trix). Additive and
+         self-contained: it degrades to a plain editor if anything is missing. --}}
+    <script>
+        (function () {
+            // Each member carries its id so a pick is resolved unambiguously
+            // even when two members share the exact same display name.
+            const members = @json($record->watchers->filter(fn ($u) => $u->name)->unique('id')->map(fn ($u) => ['id' => $u->id, 'name' => $u->name])->values());
+            if (! members.length) return;
+
+            let box = null, items = [], sel = 0, active = null;
+
+            function close() {
+                if (box) { box.remove(); box = null; }
+                items = []; sel = 0;
+            }
+
+            function query(editor) {
+                const range = editor.getSelectedRange();
+                if (! range || range[0] !== range[1]) return null;
+                const caret = range[0];
+                const before = editor.getDocument().toString().slice(0, caret);
+                const m = before.match(/@([^@\n]*)$/);
+                if (! m) return null;
+                return { text: m[1], at: caret - m[1].length - 1, caret: caret };
+            }
+
+            function paint() {
+                if (! box) return;
+                Array.from(box.children).forEach((c, i) => {
+                    c.style.background = i === sel ? '#eef2ff' : 'transparent';
+                });
+            }
+
+            function pick(editor, q, member) {
+                editor.setSelectedRange([q.at, q.caret]);
+                // The "#id" suffix makes this pick resolve unambiguously
+                // server-side even if another member shares the same name;
+                // it is never shown to users (stripped on display and on edit).
+                editor.insertString('@' + member.name + '#' + member.id + ' ');
+                close();
+            }
+
+            function open(editor, q) {
+                const needle = q.text.toLowerCase();
+                items = members.filter(m => m.name.toLowerCase().startsWith(needle)).slice(0, 8);
+                if (! items.length) { close(); return; }
+                sel = 0;
+
+                if (! box) {
+                    box = document.createElement('div');
+                    box.style.cssText = 'position:absolute;z-index:9999;min-width:180px;max-height:220px;overflow:auto;background:#fff;border:1px solid #e5e7eb;border-radius:.5rem;box-shadow:0 10px 25px rgba(0,0,0,.12);padding:.25rem;';
+                    document.body.appendChild(box);
+                }
+                box.innerHTML = '';
+                items.forEach((member) => {
+                    const btn = document.createElement('button');
+                    btn.type = 'button';
+                    btn.textContent = '@' + member.name;
+                    btn.style.cssText = 'display:block;width:100%;text-align:left;padding:.375rem .5rem;border-radius:.375rem;font-size:.875rem;cursor:pointer;background:transparent;border:none;color:#111827;';
+                    btn.addEventListener('mousedown', (ev) => { ev.preventDefault(); pick(editor, q, member); });
+                    box.appendChild(btn);
+                });
+                paint();
+
+                const rect = editor.getClientRectAtPosition(q.caret) || active.getBoundingClientRect();
+                box.style.left = (window.scrollX + rect.left) + 'px';
+                box.style.top = (window.scrollY + rect.bottom + 4) + 'px';
+            }
+
+            document.addEventListener('input', (e) => {
+                const el = e.target.closest && e.target.closest('trix-editor');
+                if (! el || ! el.editor) return;
+                active = el;
+                const q = query(el.editor);
+                q ? open(el.editor, q) : close();
+            });
+
+            document.addEventListener('keydown', (e) => {
+                if (! box || ! items.length) return;
+                const el = e.target.closest && e.target.closest('trix-editor');
+                if (! el || ! el.editor) return;
+                if (e.key === 'ArrowDown') { e.preventDefault(); sel = (sel + 1) % items.length; paint(); }
+                else if (e.key === 'ArrowUp') { e.preventDefault(); sel = (sel - 1 + items.length) % items.length; paint(); }
+                else if (e.key === 'Enter' || e.key === 'Tab') { e.preventDefault(); pick(el.editor, query(el.editor), items[sel]); }
+                else if (e.key === 'Escape') { close(); }
+            });
+
+            document.addEventListener('click', (e) => {
+                if (box && ! box.contains(e.target)) close();
+            });
+        })();
     </script>
 @endpush

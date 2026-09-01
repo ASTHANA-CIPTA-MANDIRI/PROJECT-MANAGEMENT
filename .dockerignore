@@ -1,11 +1,67 @@
-.github
-docs/
-github-contents/
-tests/
+# Everything the image does not need. This list is a security control, not
+# just a build-speed optimisation: the Dockerfile ends with `COPY . .`, so
+# anything not excluded here is published inside the image.
+
+# Repository history. `.git` carries every past commit — including anything
+# that was committed once and removed later.
+.git
 .gitattributes
 .gitignore
+.github
+
+# Real credentials. Only .env.example may enter the build context; the
+# runtime .env is written from it inside the Dockerfile.
+.env
+.env.*
+!.env.example
+
+# Host-built dependencies and assets. The image builds its own from the lock
+# files, so copying a macOS/Windows build into a Debian runtime would be both
+# wasteful and wrong.
+node_modules
+vendor
+public/build
+public/hot
+public/storage
+
+# Runtime state: caches, logs, sessions, uploaded media. The image ships an
+# empty storage tree; real data belongs on a mounted volume.
+bootstrap/cache
+storage/app/livewire-tmp
+storage/app/media
+storage/app/public
+storage/framework/cache
+storage/framework/sessions
+storage/framework/testing
+storage/framework/views
+storage/logs
+.phpunit.result.cache
+
+# Build/CI/tooling files that have no role at runtime.
+.claude
+.editorconfig
+.fleet
+.idea
+.vscode
+.rnd
+.all-contributorsrc
+Dockerfile
+.dockerignore
 buildDocker.sh
 docker-compose.yml
+phpstan.neon
+phpstan-baseline.neon
+phpunit.xml
+pint.json
+php8.1.code-workspace
+scripts/
+tests/
+
+# Documentation and screenshots.
+docs/
+github-contents/
 readme-logo.png
 README.md
-
+CODE_OF_CONDUCT.md
+SECURITY.md
+LICENSE.md

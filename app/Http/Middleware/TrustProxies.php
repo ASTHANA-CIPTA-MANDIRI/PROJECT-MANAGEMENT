@@ -14,6 +14,14 @@ class TrustProxies extends Middleware
      */
     protected $proxies;
 
+    public function __construct()
+    {
+        // Trust the proxies configured via TRUSTED_PROXIES (config/internal.php)
+        // so $request->ip() reflects the real client behind a load balancer.
+        // An empty list trusts none (the safe default when not behind a proxy).
+        $this->proxies = config('internal.trusted_proxies', []);
+    }
+
     /**
      * The headers that should be used to detect proxies.
      *

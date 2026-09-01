@@ -15,7 +15,7 @@ class TranslationPlaceholderTest extends TestCase
 {
     private function langPath(string $file): string
     {
-        return dirname(__DIR__, 2) . '/lang/' . $file;
+        return dirname(__DIR__, 2).'/lang/'.$file;
     }
 
     /**
@@ -48,7 +48,7 @@ class TranslationPlaceholderTest extends TestCase
     {
         $path = $this->langPath($file);
 
-        if (!file_exists($path)) {
+        if (! file_exists($path)) {
             $this->markTestSkipped("$file is not shipped.");
         }
 
@@ -58,7 +58,7 @@ class TranslationPlaceholderTest extends TestCase
         $broken = [];
         foreach ($translations as $source => $translated) {
             foreach ($this->placeholders($source) as $placeholder) {
-                if (!preg_match('/:' . preg_quote($placeholder, '/') . '\b/', $translated)) {
+                if (! preg_match('/:'.preg_quote($placeholder, '/').'\b/', $translated)) {
                     $broken[] = sprintf(
                         '":%s" is missing from "%s" => "%s"',
                         $placeholder,
@@ -72,7 +72,7 @@ class TranslationPlaceholderTest extends TestCase
         $this->assertSame(
             [],
             $broken,
-            "Broken placeholders in $file:\n - " . implode("\n - ", $broken)
+            "Broken placeholders in $file:\n - ".implode("\n - ", $broken)
         );
     }
 
@@ -83,7 +83,7 @@ class TranslationPlaceholderTest extends TestCase
     {
         $path = $this->langPath($file);
 
-        if (!file_exists($path)) {
+        if (! file_exists($path)) {
             $this->markTestSkipped("$file is not shipped.");
         }
 

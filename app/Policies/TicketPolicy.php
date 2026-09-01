@@ -13,7 +13,6 @@ class TicketPolicy
     /**
      * Determine whether the user can view any models.
      *
-     * @param  \App\Models\User  $user
      * @return \Illuminate\Auth\Access\Response|bool
      */
     public function viewAny(User $user)
@@ -24,28 +23,16 @@ class TicketPolicy
     /**
      * Determine whether the user can view the model.
      *
-     * @param  \App\Models\User  $user
-     * @param  \App\Models\Ticket  $ticket
      * @return \Illuminate\Auth\Access\Response|bool
      */
     public function view(User $user, Ticket $ticket)
     {
-        return $user->can('View ticket')
-            && (
-                $ticket->owner_id === $user->id
-                ||
-                $ticket->responsible_id === $user->id
-                ||
-                $ticket->project->users()->where('users.id', $user->id)->count()
-                ||
-                $ticket->project->owner_id === $user->id
-            );
+        return $user->can('View ticket') && $this->isInvolved($user, $ticket);
     }
 
     /**
      * Determine whether the user can create models.
      *
-     * @param  \App\Models\User  $user
      * @return \Illuminate\Auth\Access\Response|bool
      */
     public function create(User $user)
@@ -56,33 +43,63 @@ class TicketPolicy
     /**
      * Determine whether the user can update the model.
      *
-     * @param  \App\Models\User  $user
-     * @param  \App\Models\Ticket  $ticket
      * @return \Illuminate\Auth\Access\Response|bool
      */
     public function update(User $user, Ticket $ticket)
     {
-        return $user->can('Update ticket')
-            && (
-                $ticket->owner_id === $user->id
-                ||
-                $ticket->responsible_id === $user->id
-                ||
-                $ticket->project->users()->where('users.id', $user->id)->count()
-                ||
-                $ticket->project->owner_id === $user->id
-            );
+        return $user->can('Update ticket') && $this->isInvolved($user, $ticket);
     }
 
     /**
      * Determine whether the user can delete the model.
      *
-     * @param  \App\Models\User  $user
-     * @param  \App\Models\Ticket  $ticket
      * @return \Illuminate\Auth\Access\Response|bool
      */
     public function delete(User $user, Ticket $ticket)
     {
+        return $user->can('Delete ticket') && $this->isInvolved($user, $ticket);
+    }
+
+    /**
+     * Determine whether the user can bulk delete models.
+     *
+     * @return \Illuminate\Auth\Access\Response|bool
+     */
+    public function deleteAny(User $user)
+    {
         return $user->can('Delete ticket');
+    }
+
+    /**
+     * Restoring is the undo of delete, so it is gated the same way.
+     *
+     * @return \Illuminate\Auth\Access\Response|bool
+     */
+    public function restore(User $user, Ticket $ticket)
+    {
+        return $this->delete($user, $ticket);
+    }
+
+    /**
+     * Bulk restoring is the undo of bulk delete, so it is gated the same way.
+     *
+     * @return \Illuminate\Auth\Access\Response|bool
+     */
+    public function restoreAny(User $user)
+    {
+        return $this->deleteAny($user);
+    }
+
+    /**
+     * The object-level half of every ticket ability: the user is the ticket's
+     * owner, the person responsible for it, or has access to the project it
+     * lives in. view/update/delete only ever differ in the permission they
+     * pair this with, so it lives in one place.
+     */
+    private function isInvolved(User $user, Ticket $ticket): bool
+    {
+        return $ticket->owner_id === $user->id
+            || $ticket->responsible_id === $user->id
+            || $ticket->project->isAccessibleBy($user);
     }
 }

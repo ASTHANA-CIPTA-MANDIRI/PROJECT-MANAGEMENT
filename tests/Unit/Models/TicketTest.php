@@ -53,6 +53,31 @@ class TicketTest extends TestCase
         $this->assertSame('BBB-1', $ticketB->code);
     }
 
+    public function test_it_does_not_reuse_the_code_of_a_soft_deleted_ticket(): void
+    {
+        $project = Project::factory()->create(['ticket_prefix' => 'DEL']);
+
+        Ticket::factory()->create(['project_id' => $project->id]);
+        $second = Ticket::factory()->create(['project_id' => $project->id]);
+        $second->delete();
+
+        $third = Ticket::factory()->create(['project_id' => $project->id]);
+
+        $this->assertSame('DEL-3', $third->code);
+    }
+
+    public function test_it_does_not_reuse_the_code_of_a_force_deleted_ticket(): void
+    {
+        $project = Project::factory()->create(['ticket_prefix' => 'PRG']);
+
+        $first = Ticket::factory()->create(['project_id' => $project->id]);
+        $first->forceDelete();
+
+        $second = Ticket::factory()->create(['project_id' => $project->id]);
+
+        $this->assertSame('PRG-2', $second->code);
+    }
+
     public function test_the_first_ticket_of_a_project_gets_order_zero(): void
     {
         $project = Project::factory()->create();
@@ -65,11 +90,60 @@ class TicketTest extends TestCase
     public function test_it_increments_order_for_subsequent_tickets(): void
     {
         $project = Project::factory()->create();
+        $status = TicketStatus::factory()->create();
 
-        Ticket::factory()->create(['project_id' => $project->id]);
-        $second = Ticket::factory()->create(['project_id' => $project->id]);
+        Ticket::factory()->create(['project_id' => $project->id, 'status_id' => $status->id]);
+        $second = Ticket::factory()->create(['project_id' => $project->id, 'status_id' => $status->id]);
 
         $this->assertSame(1, $second->order);
+    }
+
+    /**
+     * The board writes arbitrary order values when cards are dragged around,
+     * so the last inserted ticket is not necessarily the last one on the
+     * board. The next order has to continue from the highest value.
+     */
+    public function test_order_continues_from_the_highest_value_not_the_last_inserted(): void
+    {
+        $project = Project::factory()->create();
+        $status = TicketStatus::factory()->create();
+        $first = Ticket::factory()->create(['project_id' => $project->id, 'status_id' => $status->id]);
+        Ticket::factory()->create(['project_id' => $project->id, 'status_id' => $status->id]);
+
+        // Mirrors a drag-and-drop reorder: the oldest ticket moves to the end.
+        $first->update(['order' => 42]);
+
+        $next = Ticket::factory()->create(['project_id' => $project->id, 'status_id' => $status->id]);
+
+        $this->assertSame(43, $next->order);
+    }
+
+    /**
+     * The Kanban board's order column is per status (each column is
+     * independently numbered), not per project - a ticket already at the
+     * bottom of one column must not push a new ticket in another, empty
+     * column further down than position 0.
+     */
+    public function test_order_is_scoped_per_status_not_the_whole_project(): void
+    {
+        $project = Project::factory()->create();
+        $statusA = TicketStatus::factory()->create();
+        $statusB = TicketStatus::factory()->create();
+
+        Ticket::factory()->create(['project_id' => $project->id, 'status_id' => $statusA->id, 'order' => 42]);
+
+        $firstInStatusB = Ticket::factory()->create(['project_id' => $project->id, 'status_id' => $statusB->id]);
+
+        $this->assertSame(0, $firstInStatusB->order);
+    }
+
+    public function test_a_ticket_without_a_project_fails_with_a_clear_error(): void
+    {
+        // Not "Attempt to read property on null", and not a code-less row
+        // hitting the NOT NULL constraint either.
+        $this->expectException(\Illuminate\Database\Eloquent\ModelNotFoundException::class);
+
+        app(\App\Observers\TicketObserver::class)->creating(new Ticket);
     }
 
     // ------------------------------------------------------- epic from sprint
@@ -155,6 +229,32 @@ class TicketTest extends TestCase
         $this->assertTrue($ticket->priority->is($priority));
     }
 
+    public function test_it_belongs_to_a_sprint(): void
+    {
+        $project = Project::factory()->create();
+        $sprint = Sprint::factory()->create(['project_id' => $project->id]);
+        $ticket = Ticket::factory()->create([
+            'project_id' => $project->id,
+            'sprint_id' => $sprint->id,
+        ]);
+
+        $this->assertTrue($ticket->sprint->is($sprint));
+    }
+
+    /**
+     * `sprints()` used to be a byte-for-byte copy of `sprint()`. Two names for
+     * one belongsTo means two separate relation caches for the same row, so a
+     * reader could get a stale sprint depending on which name it happened to
+     * use. Only the singular form exists now.
+     */
+    public function test_the_sprint_relation_is_not_duplicated_under_a_plural_name(): void
+    {
+        $this->assertFalse(
+            method_exists(Ticket::class, 'sprints'),
+            'Ticket must expose exactly one sprint relation'
+        );
+    }
+
     public function test_it_has_many_comments(): void
     {
         $ticket = Ticket::factory()->create();
@@ -224,6 +324,33 @@ class TicketTest extends TestCase
         ]);
 
         $this->assertSame(1, $ticket->watchers->where('id', $user->id)->count());
+    }
+
+    /**
+     * ->project->users is Eloquent's cached relation collection, not a copy:
+     * watchers() used to push the owner/responsible straight onto it, so
+     * every later read of $project->users in the same request saw them as
+     * project members. TicketCommentObserver::created() reads watchers twice
+     * in a row, so this was not a rare edge case.
+     */
+    public function test_reading_watchers_does_not_leak_into_the_projects_member_list(): void
+    {
+        $owner = User::factory()->create();
+        $responsible = User::factory()->create();
+        $project = Project::factory()->create(['owner_id' => $owner->id]);
+        $ticket = Ticket::factory()->create([
+            'project_id' => $project->id,
+            'owner_id' => $owner->id,
+            'responsible_id' => $responsible->id,
+        ]);
+
+        $ticket->watchers;
+        $ticket->watchers;
+
+        $this->assertFalse(
+            $ticket->project->users->contains('id', $responsible->id),
+            'the ticket responsible must not appear as a project member'
+        );
     }
 
     // ---------------------------------------------------------- logged hours
@@ -306,6 +433,28 @@ class TicketTest extends TestCase
         $ticket = Ticket::factory()->estimated(5)->create();
 
         $this->assertEqualsWithDelta(0.0, $ticket->estimationProgress, 0.001);
+    }
+
+    /**
+     * Without an estimation the divisor used to default to 1 *second*, turning
+     * 200 logged hours into 72,000,000% — a bar the Roadmap then clamped to a
+     * fully-complete 100%.
+     */
+    public function test_estimation_progress_is_null_without_an_estimation(): void
+    {
+        $ticket = Ticket::factory()->create(['estimation' => null]);
+        TicketHour::factory()->hours(200)->create(['ticket_id' => $ticket->id]);
+
+        $this->assertNull($ticket->estimationProgress);
+        $this->assertNull($ticket->completudePercentage);
+    }
+
+    public function test_estimation_progress_is_null_when_the_estimation_is_zero(): void
+    {
+        $ticket = Ticket::factory()->create(['estimation' => 0]);
+        TicketHour::factory()->hours(3)->create(['ticket_id' => $ticket->id]);
+
+        $this->assertNull($ticket->estimationProgress);
     }
 
     public function test_completude_percentage_mirrors_estimation_progress(): void

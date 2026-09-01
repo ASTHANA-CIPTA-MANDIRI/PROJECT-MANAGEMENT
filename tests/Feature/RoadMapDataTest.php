@@ -7,8 +7,10 @@ use App\Models\Permission;
 use App\Models\Project;
 use App\Models\Role;
 use App\Models\Ticket;
+use App\Models\TicketHour;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Notification;
 use Spatie\Permission\PermissionRegistrar;
 use Tests\TestCase;
@@ -94,11 +96,93 @@ class RoadMapDataTest extends TestCase
         $this->actingAs($this->user)->get($this->url($project))->assertSuccessful();
     }
 
+    /**
+     * A ticket with logged hours but no estimation used to divide by a single
+     * second, producing a percentage so large the Gantt clamped it to 100 —
+     * every unestimated ticket looked finished on the road map.
+     */
+    public function test_an_unestimated_ticket_is_not_reported_as_complete(): void
+    {
+        $project = Project::factory()->create(['owner_id' => $this->user->id]);
+        $epic = Epic::factory()->create(['project_id' => $project->id]);
+        $ticket = Ticket::factory()->create([
+            'project_id' => $project->id,
+            'epic_id' => $epic->id,
+            'owner_id' => $this->user->id,
+            'estimation' => null,
+        ]);
+        TicketHour::factory()->hours(200)->create(['ticket_id' => $ticket->id]);
+
+        $rows = $this->actingAs($this->user)->get($this->url($project))->json();
+        $row = collect($rows)->firstWhere('pName', $ticket->name);
+
+        $this->assertNotNull($row, 'the ticket must appear on the road map');
+        $this->assertSame(0, $row['pComp']);
+    }
+
+    public function test_an_estimated_ticket_reports_its_real_progress(): void
+    {
+        $project = Project::factory()->create(['owner_id' => $this->user->id]);
+        $epic = Epic::factory()->create(['project_id' => $project->id]);
+        $ticket = Ticket::factory()->create([
+            'project_id' => $project->id,
+            'epic_id' => $epic->id,
+            'owner_id' => $this->user->id,
+            'estimation' => 4,
+        ]);
+        TicketHour::factory()->hours(1)->create(['ticket_id' => $ticket->id]);
+
+        $rows = $this->actingAs($this->user)->get($this->url($project))->json();
+        $row = collect($rows)->firstWhere('pName', $ticket->name);
+
+        $this->assertSame(25, $row['pComp']);
+    }
+
     public function test_road_map_data_handles_a_project_without_epics(): void
     {
         $project = Project::factory()->create(['owner_id' => $this->user->id]);
 
         $this->actingAs($this->user)->get($this->url($project))->assertSuccessful();
+    }
+
+    public function test_road_map_data_eager_loads_ticket_hours_and_responsible(): void
+    {
+        $project = Project::factory()->create(['owner_id' => $this->user->id]);
+        $epic = Epic::factory()->create(['project_id' => $project->id]);
+        $epicTickets = Ticket::factory()->count(2)->create([
+            'project_id' => $project->id,
+            'epic_id' => $epic->id,
+            'owner_id' => $this->user->id,
+            'responsible_id' => $this->user->id,
+        ]);
+        $looseTickets = Ticket::factory()->count(2)->create([
+            'project_id' => $project->id,
+            'epic_id' => null,
+            'owner_id' => $this->user->id,
+            'responsible_id' => $this->user->id,
+        ]);
+        foreach ($epicTickets->merge($looseTickets) as $ticket) {
+            TicketHour::factory()->create(['ticket_id' => $ticket->id, 'user_id' => $this->user->id]);
+        }
+
+        $hourQueries = 0;
+        $userQueries = 0;
+        DB::listen(function ($query) use (&$hourQueries, &$userQueries) {
+            if (str_contains($query->sql, 'select * from "ticket_hours"')) {
+                $hourQueries++;
+            }
+            if (str_contains($query->sql, 'select * from "users" where "users"."id" in')) {
+                $userQueries++;
+            }
+        });
+
+        $this->actingAs($this->user)->get($this->url($project))->assertSuccessful();
+
+        // Two eager-load batches (epic-attached tickets, then the loose ones)
+        // instead of one query per ticket (N+1) — constant regardless of how
+        // many tickets exist in each group.
+        $this->assertSame(2, $hourQueries);
+        $this->assertSame(2, $userQueries);
     }
 
     public function test_road_map_data_handles_nested_epics(): void

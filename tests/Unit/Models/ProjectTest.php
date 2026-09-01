@@ -10,6 +10,7 @@ use App\Models\Ticket;
 use App\Models\TicketStatus;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\Storage;
 use Tests\TestCase;
 
 class ProjectTest extends TestCase
@@ -104,6 +105,26 @@ class ProjectTest extends TestCase
         $this->assertSame(1, $project->contributors->where('id', $owner->id)->count());
     }
 
+    /**
+     * ->users is Eloquent's cached relation collection, not a copy:
+     * contributors() used to push the owner straight onto it, so every later
+     * read of $project->users in the same request saw the owner as a member -
+     * e.g. Kanban::mount() and Scrum::mount() reading it to decide access.
+     */
+    public function test_reading_contributors_does_not_leak_the_owner_into_the_member_list(): void
+    {
+        $owner = User::factory()->create();
+        $project = Project::factory()->create(['owner_id' => $owner->id]);
+
+        $project->contributors;
+        $project->contributors;
+
+        $this->assertFalse(
+            $project->users->contains('id', $owner->id),
+            'the owner must not appear in the members relation unless actually attached'
+        );
+    }
+
     // ------------------------------------------------------------------ cover
 
     public function test_cover_falls_back_to_a_generated_avatar(): void
@@ -111,6 +132,25 @@ class ProjectTest extends TestCase
         $project = Project::factory()->create(['name' => 'Acme']);
 
         $this->assertStringContainsString('ui-avatars.com', $project->cover);
+    }
+
+    public function test_cover_encodes_special_characters_in_the_project_name(): void
+    {
+        $project = Project::factory()->create(['name' => 'Acme & Sons R&D']);
+
+        $this->assertStringContainsString('name=Acme+%26+Sons+R%26D', $project->cover);
+    }
+
+    public function test_cover_returns_the_uploaded_media_url(): void
+    {
+        Storage::fake('media');
+        $project = Project::factory()->create(['name' => 'Acme']);
+        $media = $project->addMediaFromString('binary-image-data')
+            ->usingFileName('cover.png')
+            ->toMediaCollection();
+
+        $this->assertSame($media->getFullUrl(), $project->fresh()->cover);
+        $this->assertStringNotContainsString('ui-avatars.com', $project->fresh()->cover);
     }
 
     // ------------------------------------------------------------ epic dates
@@ -233,5 +273,106 @@ class ProjectTest extends TestCase
         $project->delete();
 
         $this->assertSoftDeleted('projects', ['id' => $project->id]);
+    }
+
+    // ------------------------------------------------------- accessibleBy scope
+
+    public function test_accessible_by_includes_projects_the_user_owns(): void
+    {
+        $owner = User::factory()->create();
+        $project = Project::factory()->create(['owner_id' => $owner->id]);
+
+        $this->assertTrue(Project::accessibleBy($owner)->whereKey($project->id)->exists());
+    }
+
+    public function test_accessible_by_includes_projects_the_user_is_a_member_of(): void
+    {
+        $member = User::factory()->create();
+        $project = Project::factory()->create();
+        $project->users()->attach($member->id, ['role' => 'developer']);
+
+        $this->assertTrue(Project::accessibleBy($member)->whereKey($project->id)->exists());
+    }
+
+    public function test_accessible_by_excludes_projects_the_user_has_no_relation_to(): void
+    {
+        $stranger = User::factory()->create();
+        $project = Project::factory()->create();
+
+        $this->assertFalse(Project::accessibleBy($stranger)->whereKey($project->id)->exists());
+    }
+
+    public function test_accessible_by_composes_inside_a_where_has_closure(): void
+    {
+        $member = User::factory()->create();
+        $ownProject = Project::factory()->create();
+        $ownProject->users()->attach($member->id, ['role' => 'developer']);
+        $foreignProject = Project::factory()->create();
+
+        Ticket::factory()->create(['project_id' => $ownProject->id]);
+        Ticket::factory()->create(['project_id' => $foreignProject->id]);
+
+        $visibleProjectIds = Ticket::query()
+            ->whereHas('project', fn ($query) => $query->accessibleBy($member))
+            ->pluck('project_id');
+
+        $this->assertTrue($visibleProjectIds->contains($ownProject->id));
+        $this->assertFalse($visibleProjectIds->contains($foreignProject->id));
+    }
+
+    // ------------------------------------------ isAccessibleBy / isManageableBy
+
+    public function test_the_owner_can_access_and_manage_the_project(): void
+    {
+        $owner = User::factory()->create();
+        $project = Project::factory()->create(['owner_id' => $owner->id]);
+
+        $this->assertTrue($project->isAccessibleBy($owner));
+        $this->assertTrue($project->isManageableBy($owner));
+    }
+
+    public function test_a_stranger_can_neither_access_nor_manage_the_project(): void
+    {
+        $stranger = User::factory()->create();
+        $project = Project::factory()->create();
+
+        $this->assertFalse($project->isAccessibleBy($stranger));
+        $this->assertFalse($project->isManageableBy($stranger));
+    }
+
+    public function test_an_ordinary_member_can_access_but_not_manage_the_project(): void
+    {
+        $member = User::factory()->create();
+        $project = Project::factory()->create();
+        $project->users()->attach($member->id, ['role' => 'developer']);
+
+        $this->assertTrue($project->isAccessibleBy($member));
+        $this->assertFalse($project->isManageableBy($member));
+    }
+
+    public function test_a_member_holding_the_managing_role_can_manage_the_project(): void
+    {
+        $manager = User::factory()->create();
+        $project = Project::factory()->create();
+        $project->users()->attach($manager->id, [
+            'role' => config('system.projects.affectations.roles.can_manage'),
+        ]);
+
+        $this->assertTrue($project->isAccessibleBy($manager));
+        $this->assertTrue($project->isManageableBy($manager));
+    }
+
+    /**
+     * The membership half must be answered by the database, not by loading
+     * every member of the project into memory to count them.
+     */
+    public function test_the_access_check_does_not_load_the_member_collection(): void
+    {
+        $member = User::factory()->create();
+        $project = Project::factory()->create();
+        $project->users()->attach($member->id, ['role' => 'developer']);
+
+        $this->assertTrue($project->isAccessibleBy($member));
+        $this->assertFalse($project->relationLoaded('users'));
     }
 }

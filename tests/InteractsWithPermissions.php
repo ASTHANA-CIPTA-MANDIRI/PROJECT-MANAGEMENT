@@ -15,11 +15,11 @@ trait InteractsWithPermissions
     /**
      * Create a user granted exactly the given permission names.
      *
-     * @param array<int, string> $permissions
+     * @param  array<int, string>  $permissions
      */
     protected function userWithPermissions(array $permissions = []): User
     {
-        $role = Role::create(['name' => 'role_' . uniqid()]);
+        $role = Role::create(['name' => 'role_'.uniqid()]);
 
         foreach ($permissions as $permission) {
             Permission::firstOrCreate(['name' => $permission]);

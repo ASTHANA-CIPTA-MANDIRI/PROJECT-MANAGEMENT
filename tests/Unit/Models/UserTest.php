@@ -8,7 +8,9 @@ use App\Models\TicketHour;
 use App\Models\User;
 use App\Notifications\UserCreatedNotification;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Notification;
+use Illuminate\Support\Str;
 use Tests\TestCase;
 
 class UserTest extends TestCase
@@ -42,6 +44,24 @@ class UserTest extends TestCase
 
         $this->assertNotNull($user->password);
         $this->assertNotSame('', $user->password);
+    }
+
+    public function test_a_db_users_temporary_password_comes_from_a_cryptographic_random(): void
+    {
+        // uniqid() is time-based and guessable; the temporary password given to
+        // an admin-created account before activation must not be.
+        Notification::fake();
+        Str::createRandomStringsUsing(fn ($length) => str_repeat('x', $length));
+
+        $user = User::create([
+            'name' => 'Jane',
+            'email' => 'jane2b@example.com',
+            'type' => 'db',
+        ]);
+
+        $this->assertTrue(Hash::check(str_repeat('x', 32), $user->password));
+
+        Str::createRandomStringsNormally();
     }
 
     public function test_a_db_user_is_notified_on_creation(): void

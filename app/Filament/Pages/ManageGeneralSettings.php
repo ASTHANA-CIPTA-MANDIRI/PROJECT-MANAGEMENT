@@ -2,29 +2,42 @@
 
 namespace App\Filament\Pages;
 
+use App\Filament\Pages\Concerns\AuthorizesPageAccess;
 use App\Models\Role;
+use App\Models\User;
 use App\Settings\GeneralSettings;
 use Filament\Forms\Components\Card;
-use Filament\Forms\Components\Checkbox;
 use Filament\Forms\Components\FileUpload;
 use Filament\Forms\Components\Grid;
+use Filament\Forms\Components\Placeholder;
 use Filament\Forms\Components\Select;
 use Filament\Forms\Components\TextInput;
 use Filament\Forms\Components\Toggle;
 use Filament\Pages\Actions\Action;
 use Filament\Pages\SettingsPage;
 use Illuminate\Contracts\Support\Htmlable;
+use Illuminate\Support\HtmlString;
+use Illuminate\Validation\ValidationException;
 
 class ManageGeneralSettings extends SettingsPage
 {
+    // SettingsPage is not a Filament\Pages\Page subclass we own, so the shared
+    // concern is applied directly instead of extending AuthorizedPage.
+    use AuthorizesPageAccess;
+
+    /**
+     * Repointing the Super Admin role decides who User::isSuperAdmin() treats
+     * as the main administrator, so it is gated behind its own permission: a
+     * plain settings manager must not be able to promote a role they already
+     * hold.
+     */
+    public const SUPER_ADMIN_PERMISSION = 'Manage super admin settings';
+
+    protected static ?string $permission = 'Manage general settings';
+
     protected static ?string $navigationIcon = 'heroicon-o-cog';
 
     protected static string $settings = GeneralSettings::class;
-
-    protected static function shouldRegisterNavigation(): bool
-    {
-        return auth()->user()->can('Manage general settings');
-    }
 
     protected function getHeading(): string|Htmlable
     {
@@ -51,7 +64,13 @@ class ManageGeneralSettings extends SettingsPage
                             FileUpload::make('site_logo')
                                 ->label(__('Site logo'))
                                 ->helperText(__('This is the platform logo (e.g. Used in site favicon)'))
-                                ->image()
+                                // Not ->image(): that accepts image/*, which
+                                // includes image/svg+xml. The logo is written
+                                // straight to the public disk with no
+                                // authorization check on its URL, so an SVG
+                                // could embed <script> and execute for anyone
+                                // who opens it.
+                                ->acceptedFileTypes(config('system.images.accepted_mime_types'))
                                 ->columnSpan(1)
                                 ->maxSize(config('system.max_file_size')),
 
@@ -61,7 +80,7 @@ class ManageGeneralSettings extends SettingsPage
                                     TextInput::make('site_name')
                                         ->label(__('Site name'))
                                         ->helperText(__('This is the platform name'))
-                                        ->default(fn() => config('app.name'))
+                                        ->default(fn () => config('app.name'))
                                         ->required(),
 
                                     Toggle::make('enable_registration')
@@ -87,6 +106,28 @@ class ManageGeneralSettings extends SettingsPage
                                         ->helperText(__('The platform default role (assigned to newly registered users).'))
                                         ->searchable()
                                         ->options(Role::all()->pluck('name', 'id')->toArray()),
+
+                                    Select::make('super_admin_role')
+                                        ->label(__('Super Admin role'))
+                                        ->helperText(__('Role treated as the main administrator (full access, 2FA policy). This role cannot be deleted while selected.'))
+                                        ->searchable()
+                                        ->reactive()
+                                        ->rules(['nullable', 'exists:roles,id'])
+                                        ->visible(fn () => static::userCanManageSuperAdminRole())
+                                        ->options(Role::all()->pluck('name', 'id')->toArray()),
+
+                                    Placeholder::make('super_admin_status')
+                                        ->label(__('Super Admin summary'))
+                                        // Without the dedicated permission the select above is hidden,
+                                        // so say why rather than making the setting look missing.
+                                        ->helperText(fn () => static::userCanManageSuperAdminRole()
+                                            ? null
+                                            : __('Changing which role counts as Super Admin requires the “:permission” permission.', ['permission' => self::SUPER_ADMIN_PERMISSION]))
+                                        ->content(fn (callable $get) => $this->superAdminSummary(
+                                            static::userCanManageSuperAdminRole()
+                                                ? $get('super_admin_role')
+                                                : app(GeneralSettings::class)->super_admin_role
+                                        )),
                                 ]),
                         ]),
                 ]),
@@ -98,10 +139,110 @@ class ManageGeneralSettings extends SettingsPage
         return parent::getSaveFormAction()->label(__('Save'));
     }
 
+    public static function userCanManageSuperAdminRole(): bool
+    {
+        return (bool) auth()->user()?->can(self::SUPER_ADMIN_PERMISSION);
+    }
+
+    /**
+     * Last line of defence for the privilege-escalation paths this form exposes.
+     * A crafted Livewire payload that smuggles `super_admin_role` into the form
+     * state is overwritten with the stored value, and both role settings are
+     * then held to the same rule as every other role hand-out: you cannot point
+     * them at privileges you do not hold yourself.
+     */
+    protected function mutateFormDataBeforeSave(array $data): array
+    {
+        if (! static::userCanManageSuperAdminRole()) {
+            $data['super_admin_role'] = app(GeneralSettings::class)->super_admin_role;
+        }
+
+        $this->assertSuperAdminRoleIsNotSelfPromotion($data['super_admin_role'] ?? null);
+        $this->assertDefaultRoleIsGrantable($data['default_role'] ?? null);
+
+        return $data;
+    }
+
+    /**
+     * Repointing "which role counts as Super Admin" at a role the actor already
+     * holds is a one-click self-promotion, so only a Super Admin may do it. The
+     * dedicated permission alone is not enough.
+     */
+    private function assertSuperAdminRoleIsNotSelfPromotion($roleId): void
+    {
+        $actor = auth()->user();
+
+        if (blank($roleId) || $actor === null || $actor->isSuperAdmin()) {
+            return;
+        }
+
+        // Only a change matters: an unchanged value must never block the save.
+        if ((string) $roleId === (string) app(GeneralSettings::class)->super_admin_role) {
+            return;
+        }
+
+        if ($actor->roles->pluck('id')->map('strval')->contains((string) $roleId)) {
+            throw ValidationException::withMessages([
+                'data.super_admin_role' => __('You cannot point the Super Admin role at a role you hold yourself.'),
+            ]);
+        }
+    }
+
+    /**
+     * The default role is handed to every new registrant, so pointing it at a
+     * role stronger than the actor's own turns "enable registration" into a
+     * self-service account carrying those privileges. Only a change is checked,
+     * so a value already stored never makes the settings form unsaveable.
+     */
+    private function assertDefaultRoleIsGrantable($roleId): void
+    {
+        if (blank($roleId) || (string) $roleId === (string) app(GeneralSettings::class)->default_role) {
+            return;
+        }
+
+        $role = Role::find($roleId);
+
+        if ($role && auth()->user()?->canGrantRole($role)) {
+            return;
+        }
+
+        throw ValidationException::withMessages([
+            'data.default_role' => $role?->isSuperAdminRole()
+                ? __('You are not allowed to make the Super Admin role the default role.')
+                : __('You cannot choose a default role holding permissions you do not have yourself.'),
+        ]);
+    }
+
     private function getLanguages(): array
     {
         $languages = config('system.locales.list');
         asort($languages);
+
         return $languages;
+    }
+
+    /**
+     * A friendly, live summary of who the current Super Admins are so the
+     * setting's effect is never silent.
+     */
+    private function superAdminSummary($roleId): HtmlString
+    {
+        if ($roleId && $role = Role::find($roleId)) {
+            $count = $role->users()->count();
+
+            return new HtmlString(
+                '<span style="color:#15803d">✓ <strong>'.e($role->name).'</strong></span> — '
+                .$count.' '.__('user(s) currently hold this role')
+            );
+        }
+
+        // No (valid) selection → the app falls back to a role named "Super Admin".
+        $count = User::superAdmins()->count();
+
+        return new HtmlString(
+            '<span style="color:#b45309">⚠ '
+            .__('No role selected — the app falls back to a role named “Super Admin”')
+            .'</span> ('.$count.' '.__('user(s)').')'
+        );
     }
 }

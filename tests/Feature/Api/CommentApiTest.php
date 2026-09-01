@@ -29,7 +29,7 @@ class CommentApiTest extends TestCase
         foreach ($permissions as $p) {
             Permission::firstOrCreate(['name' => $p]);
         }
-        $role = Role::create(['name' => 'r_' . uniqid()]);
+        $role = Role::create(['name' => 'r_'.uniqid()]);
         $role->syncPermissions($permissions);
 
         $user = User::factory()->create();
@@ -131,5 +131,140 @@ class CommentApiTest extends TestCase
             'content' => 'Spoof',
             'user_id' => $someoneElse->id,
         ])->assertCreated()->assertJsonPath('data.user_id', $user->id);
+    }
+
+    // ------------------------------------------------------------- update
+
+    public function test_editing_a_comment_requires_authentication(): void
+    {
+        $comment = TicketComment::factory()->create();
+
+        $this->putJson("/api/v1/comments/{$comment->id}", ['content' => 'X'])->assertUnauthorized();
+    }
+
+    public function test_the_author_can_edit_their_own_comment(): void
+    {
+        $user = $this->actingWith(['View ticket']);
+        $ticket = Ticket::factory()->create(['owner_id' => $user->id]);
+        $comment = TicketComment::factory()->create([
+            'ticket_id' => $ticket->id,
+            'user_id' => $user->id,
+        ]);
+
+        $this->putJson("/api/v1/comments/{$comment->id}", ['content' => 'Edited'])
+            ->assertOk()
+            ->assertJsonPath('data.id', $comment->id)
+            ->assertJsonPath('data.content', 'Edited');
+
+        $this->assertDatabaseHas('ticket_comments', ['id' => $comment->id, 'content' => 'Edited']);
+    }
+
+    public function test_a_project_administrator_can_edit_any_comment(): void
+    {
+        $admin = $this->actingWith([]);
+        $project = Project::factory()->create();
+        $project->users()->attach($admin->id, ['role' => 'administrator']);
+        $ticket = Ticket::factory()->create(['project_id' => $project->id]);
+        $author = User::factory()->create();
+        $comment = TicketComment::factory()->create([
+            'ticket_id' => $ticket->id,
+            'user_id' => $author->id,
+        ]);
+
+        // Moderating someone else's comment must not rewrite its authorship.
+        $this->putJson("/api/v1/comments/{$comment->id}", ['content' => 'Moderated'])
+            ->assertOk()
+            ->assertJsonPath('data.content', 'Moderated')
+            ->assertJsonPath('data.user_id', $author->id)
+            ->assertJsonPath('data.ticket_id', $ticket->id);
+
+        $this->assertDatabaseHas('ticket_comments', [
+            'id' => $comment->id,
+            'user_id' => $author->id,
+            'ticket_id' => $ticket->id,
+        ]);
+    }
+
+    public function test_a_plain_member_cannot_edit_someone_elses_comment(): void
+    {
+        $user = $this->actingWith(['View ticket']);
+        $project = Project::factory()->create();
+        $project->users()->attach($user->id, ['role' => 'employee']);
+        $ticket = Ticket::factory()->create(['project_id' => $project->id]);
+        $comment = TicketComment::factory()->create(['ticket_id' => $ticket->id]);
+
+        $this->putJson("/api/v1/comments/{$comment->id}", ['content' => 'Nope'])
+            ->assertForbidden();
+
+        $this->assertDatabaseMissing('ticket_comments', ['id' => $comment->id, 'content' => 'Nope']);
+    }
+
+    public function test_a_stranger_cannot_edit_a_comment(): void
+    {
+        $this->actingWith(['View ticket']);
+        $comment = TicketComment::factory()->create();
+
+        $this->putJson("/api/v1/comments/{$comment->id}", ['content' => 'Nope'])->assertForbidden();
+    }
+
+    public function test_editing_validates_the_content(): void
+    {
+        $user = $this->actingWith(['View ticket']);
+        $comment = TicketComment::factory()->create(['user_id' => $user->id]);
+
+        $this->putJson("/api/v1/comments/{$comment->id}", [])
+            ->assertStatus(422)
+            ->assertJsonValidationErrors(['content']);
+    }
+
+    // ------------------------------------------------------------ destroy
+
+    public function test_the_author_can_delete_their_own_comment(): void
+    {
+        $user = $this->actingWith(['View ticket']);
+        $comment = TicketComment::factory()->create(['user_id' => $user->id]);
+
+        $this->deleteJson("/api/v1/comments/{$comment->id}")->assertNoContent();
+
+        $this->assertSoftDeleted('ticket_comments', ['id' => $comment->id]);
+    }
+
+    public function test_a_project_administrator_can_delete_any_comment(): void
+    {
+        $admin = $this->actingWith([]);
+        $project = Project::factory()->create();
+        $project->users()->attach($admin->id, ['role' => 'administrator']);
+        $ticket = Ticket::factory()->create(['project_id' => $project->id]);
+        $comment = TicketComment::factory()->create(['ticket_id' => $ticket->id]);
+
+        $this->deleteJson("/api/v1/comments/{$comment->id}")->assertNoContent();
+
+        $this->assertSoftDeleted('ticket_comments', ['id' => $comment->id]);
+    }
+
+    public function test_a_stranger_cannot_delete_a_comment(): void
+    {
+        $this->actingWith(['View ticket']);
+        $comment = TicketComment::factory()->create();
+
+        $this->deleteJson("/api/v1/comments/{$comment->id}")->assertForbidden();
+
+        $this->assertDatabaseHas('ticket_comments', ['id' => $comment->id, 'deleted_at' => null]);
+    }
+
+    public function test_a_deleted_comment_is_gone_from_the_listing(): void
+    {
+        $user = $this->actingWith(['View ticket']);
+        $ticket = Ticket::factory()->create(['owner_id' => $user->id]);
+        $comment = TicketComment::factory()->create([
+            'ticket_id' => $ticket->id,
+            'user_id' => $user->id,
+        ]);
+
+        $this->deleteJson("/api/v1/comments/{$comment->id}")->assertNoContent();
+
+        $this->getJson("/api/v1/tickets/{$ticket->id}/comments")
+            ->assertOk()
+            ->assertJsonCount(0, 'data');
     }
 }

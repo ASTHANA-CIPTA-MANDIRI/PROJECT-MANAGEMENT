@@ -70,22 +70,28 @@ class TransactionTest extends TestCase
         $this->seedDefaults();
         $user = User::factory()->create();
 
-        // The second ticket references a different project with the SAME key,
-        // which violates the unique ticket_prefix constraint mid-batch.
+        // The second ticket lands in an existing project of the importer's that
+        // is configured for custom statuses but has none yet, so there is no
+        // status to give the ticket. (Duplicate ticket prefixes no longer fail
+        // the batch - the import now allocates a free one.)
+        $broken = Project::factory()->customStatuses()->create([
+            'name' => 'Beta', 'owner_id' => $user->id,
+        ]);
+
         $batch = [
-            $this->jiraTicket('Alpha', 'DUP', 'First'),
-            $this->jiraTicket('Beta', 'DUP', 'Second'),
+            $this->jiraTicket('Alpha', 'ALP', 'First'),
+            $this->jiraTicket('Beta', 'BET', 'Second'),
         ];
 
         try {
             (new ImportJiraTicketsJob($batch, $user))->handle();
-            $this->fail('Expected the duplicate prefix to throw.');
+            $this->fail('Expected the missing status to throw.');
         } catch (\Throwable $e) {
             // expected
         }
 
         // Nothing from the batch survives: the first project/ticket rolled back.
-        $this->assertSame(0, Project::count(), 'no project should remain');
+        $this->assertSame([$broken->id], Project::pluck('id')->all(), 'only the pre-existing project remains');
         $this->assertSame(0, Ticket::count(), 'no ticket should remain');
     }
 
@@ -134,6 +140,29 @@ class TransactionTest extends TestCase
 
         $this->assertSame(1, Ticket::count());
         Notification::assertSentTo($ticket->owner, TicketCreated::class);
+    }
+
+    // -------------------------------------------------- scout search index
+
+    /**
+     * Ticket/Project/TicketComment all use Scout's Searchable trait, and
+     * several of the paths above (Jira import, sprint start, the API
+     * controllers) wrap their writes in DB::transaction(). Scout's own
+     * ModelObserver has no after_commit branching of its own - it is
+     * Laravel's event Dispatcher that defers a listener until commit, and
+     * only for a listener exposing a truthy $afterCommit property (see
+     * Illuminate\Events\Dispatcher::afterCommit()). config/scout.php sets
+     * that property via ModelObserver's constructor, so this asserts the
+     * property Laravel actually reads rather than just the config value -
+     * same reasoning as test_notifications_defer_until_after_commit() above,
+     * which for the same reason (a test's wrapping transaction never truly
+     * commits under RefreshDatabase) cannot observe the deferred dispatch
+     * itself either.
+     */
+    public function test_search_indexing_defers_until_the_transaction_commits(): void
+    {
+        $this->assertTrue(config('scout.after_commit'));
+        $this->assertTrue((new \Laravel\Scout\ModelObserver)->afterCommit);
     }
 
     // ------------------------------------------------------ sprint start

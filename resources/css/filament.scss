@@ -1,5 +1,10 @@
 @import '../../vendor/filament/filament/resources/css/app.css';
 
+// Tooltip styles, bundled from the local npm dependency instead of a CDN.
+// Filament's app.css imports the same file, so this is a no-op duplicate that
+// keeps the tooltips working even if that vendor import ever goes away.
+@import 'tippy.js/dist/tippy.css';
+
 @import './kanban';
 @import './dialogs';
 @import './loading.io';

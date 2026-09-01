@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Casts\Attribute;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
@@ -10,20 +11,37 @@ use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\SoftDeletes;
 use Illuminate\Support\Facades\Cache;
+use Illuminate\Support\Facades\DB;
+use Laravel\Scout\Searchable;
 use Spatie\MediaLibrary\HasMedia;
 use Spatie\MediaLibrary\InteractsWithMedia;
 
 class Project extends Model implements HasMedia
 {
-    use HasFactory, SoftDeletes, InteractsWithMedia;
+    use HasFactory, InteractsWithMedia, Searchable, SoftDeletes;
+
+    /**
+     * The data indexed for full-text search (Laravel Scout).
+     *
+     * @return array<string, mixed>
+     */
+    public function toSearchableArray(): array
+    {
+        return [
+            'id' => $this->id,
+            'name' => $this->name,
+            'description' => strip_tags((string) $this->description),
+            'ticket_prefix' => $this->ticket_prefix,
+        ];
+    }
 
     protected $fillable = [
         'name', 'description', 'status_id', 'owner_id', 'ticket_prefix',
-        'status_type', 'type'
+        'status_type', 'type',
     ];
 
     protected $appends = [
-        'cover'
+        'cover',
     ];
 
     public function owner(): BelongsTo
@@ -39,6 +57,46 @@ class Project extends Model implements HasMedia
     public function users(): BelongsToMany
     {
         return $this->belongsToMany(User::class, 'project_users', 'project_id', 'user_id')->withPivot(['role']);
+    }
+
+    /**
+     * Projects the given user owns or is a member of. The single source of
+     * truth for "does this user have access to this project" query logic,
+     * usable standalone (Project::accessibleBy($user)) or nested inside a
+     * whereHas('project', ...) closure on a related model.
+     */
+    public function scopeAccessibleBy(Builder $query, User $user): Builder
+    {
+        return $query->where(fn (Builder $query) => $query->where('owner_id', $user->id)
+            ->orWhereHas('users', fn (Builder $query) => $query->where('users.id', $user->id)));
+    }
+
+    /**
+     * Whether this user may reach the project's contents: its owner, or one of
+     * its members. The single-instance twin of the accessibleBy() scope above —
+     * the policies ask this question about a model they already hold, where a
+     * query scope would have nothing to filter.
+     *
+     * exists(), not count(): the answer is a yes/no, and count() makes the
+     * database tally rows nobody looks at.
+     */
+    public function isAccessibleBy(User $user): bool
+    {
+        return $this->owner_id === $user->id
+            || $this->users()->whereKey($user->id)->exists();
+    }
+
+    /**
+     * Whether this user may change the project itself, and everything planned
+     * under it: its owner, or a member holding the managing project role.
+     */
+    public function isManageableBy(User $user): bool
+    {
+        return $this->owner_id === $user->id
+            || $this->users()
+                ->whereKey($user->id)
+                ->wherePivot('role', config('system.projects.affectations.roles.can_manage'))
+                ->exists();
     }
 
     public function tickets(): HasMany
@@ -61,38 +119,54 @@ class Project extends Model implements HasMedia
         return $this->hasMany(Sprint::class, 'project_id', 'id');
     }
 
+    /**
+     * The date range the road map spans.
+     *
+     * Both always return a date object, and Eloquent caches object attribute
+     * values by default (Attribute::$withObjectCaching), so these were never
+     * re-querying. shouldCache() states that requirement outright instead of
+     * leaning on a default that silently stops applying the day one of them
+     * returns null - which is exactly what bit currentSprint below.
+     */
     public function epicsFirstDate(): Attribute
     {
-        return new Attribute(
+        return (new Attribute(
             get: function () {
                 $firstEpic = $this->epics()->orderBy('starts_at')->first();
                 if ($firstEpic) {
                     return $firstEpic->starts_at;
                 }
+
                 return now();
             }
-        );
+        ))->shouldCache();
     }
 
     public function epicsLastDate(): Attribute
     {
-        return new Attribute(
+        return (new Attribute(
             get: function () {
                 $firstEpic = $this->epics()->orderBy('ends_at', 'desc')->first();
                 if ($firstEpic) {
                     return $firstEpic->ends_at;
                 }
+
                 return now();
             }
-        );
+        ))->shouldCache();
     }
 
     public function contributors(): Attribute
     {
         return new Attribute(
             get: function () {
-                $users = $this->users;
+                // ->users is Eloquent's cached relation collection, not a
+                // copy: push()ing onto it would leave the owner looking like
+                // a member to every other reader of $project->users for the
+                // rest of the request.
+                $users = $this->users->collect();
                 $users->push($this->owner);
+
                 return $users->unique('id');
             }
         );
@@ -100,26 +174,42 @@ class Project extends Model implements HasMedia
 
     public function cover(): Attribute
     {
+        // The Filament SpatieMediaLibraryFileUpload stores the cover in the
+        // default collection, so read it back with the proper Spatie API
+        // instead of misusing the media() relation.
         return new Attribute(
-            get: fn() => $this->media('cover')?->first()?->getFullUrl()
-                ??
-                'https://ui-avatars.com/api/?background=3f84f3&color=ffffff&name=' . $this->name
+            get: fn () => $this->getFirstMedia()?->getFullUrl()
+                ?? 'https://ui-avatars.com/api/?background=3f84f3&color=ffffff&name='.urlencode($this->name)
         );
     }
 
+    /**
+     * The running sprint, if any.
+     *
+     * The scrum board reads this from the page heading, the board query, two
+     * action visibility checks and the sub-heading. Eloquent caches object
+     * attribute values by default, so that was already one query - but only
+     * while a sprint is actually running: null is not an object, so a project
+     * between sprints re-ran the query on every single read. shouldCache()
+     * covers the empty case too.
+     *
+     * Starting or ending a sprint writes through the query builder and then
+     * re-reads the project fresh, so the per-instance cache never goes stale
+     * on that path.
+     */
     public function currentSprint(): Attribute
     {
-        return new Attribute(
-            get: fn() => $this->sprints()
+        return (new Attribute(
+            get: fn () => $this->sprints()
                 ->whereNotNull('started_at')
                 ->whereNull('ended_at')
                 ->first()
-        );
+        ))->shouldCache();
     }
 
     public function nextSprint(): Attribute
     {
-        return new Attribute(
+        return (new Attribute(
             get: function () {
                 if ($this->currentSprint) {
                     return $this->sprints()
@@ -129,9 +219,33 @@ class Project extends Model implements HasMedia
                         ->orderBy('starts_at')
                         ->first();
                 }
+
                 return null;
             }
-        );
+        ))->shouldCache();
+    }
+
+    /**
+     * Hand out the next ticket number for this project. The counter lives on
+     * the project row and is bumped under a row lock inside a transaction, so
+     * two simultaneous creations can never get the same number, and a number
+     * is never reused after its ticket is (soft) deleted.
+     */
+    public function allocateTicketNumber(): int
+    {
+        return DB::transaction(function () {
+            $next = (int) static::withTrashed()
+                ->whereKey($this->id)
+                ->lockForUpdate()
+                ->value('last_ticket_number') + 1;
+
+            static::withTrashed()->whereKey($this->id)
+                ->update(['last_ticket_number' => $next]);
+
+            $this->last_ticket_number = $next;
+
+            return $next;
+        });
     }
 
     /**

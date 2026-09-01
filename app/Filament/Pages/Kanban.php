@@ -8,10 +8,13 @@ use Filament\Facades\Filament;
 use Filament\Forms\Concerns\InteractsWithForms;
 use Filament\Forms\Contracts\HasForms;
 use Filament\Pages\Actions\Action;
-use Filament\Pages\Page;
 use Illuminate\Contracts\Support\Htmlable;
 
-class Kanban extends Page implements HasForms
+/**
+ * No page permission: access is decided per project in `mount()` (owner or
+ * member only).
+ */
+class Kanban extends AuthorizedPage implements HasForms
 {
     use InteractsWithForms, KanbanScrumHelper;
 
@@ -23,23 +26,20 @@ class Kanban extends Page implements HasForms
 
     protected static bool $shouldRegisterNavigation = false;
 
-    protected $listeners = [
-        'recordUpdated',
-        'closeTicketDialog'
-    ];
-
     public function mount(Project $project)
     {
         $this->project = $project;
+
+        // Checked before the board-type redirect: sending a stranger over to
+        // the Scrum board would only move the same 403 one request further on.
+        abort_unless($this->project->isAccessibleBy(auth()->user()), 403);
+
         if ($this->project->type === 'scrum') {
-            $this->redirect(route('filament.pages.scrum/{project}', ['project' => $project]));
-        } elseif (
-            $this->project->owner_id != auth()->user()->id
-            &&
-            !$this->project->users->where('id', auth()->user()->id)->count()
-        ) {
-            abort(403);
+            // Returned, not just called: without it mount() carried on and
+            // filled the form of a board this project does not even use.
+            return $this->redirect(route('filament.pages.scrum/{project}', ['project' => $project]));
         }
+
         $this->form->fill();
     }
 
@@ -53,7 +53,7 @@ class Kanban extends Page implements HasForms
                 ->action(function () {
                     $this->getRecords();
                     Filament::notify('success', __('Kanban board updated'));
-                })
+                }),
         ];
     }
 
@@ -66,5 +66,4 @@ class Kanban extends Page implements HasForms
     {
         return $this->formSchema();
     }
-
 }

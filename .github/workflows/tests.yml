@@ -1,22 +1,46 @@
-name: Tests
+name: CI
 
 on:
+  # Every branch, not just main/master/dev: remediation work happens on
+  # feature branches (e.g. jarne) and needs the same Pint/PHPStan/tests/
+  # coverage gate before it ever reaches a pull request, not just after.
   push:
-    branches: [ main, master, dev ]
+    branches: [ '**' ]
   pull_request:
     branches: [ main, master, dev ]
 
 jobs:
 
-  phpunit:
+  lint:
+    name: Code style & static analysis
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
 
+      - name: Setup PHP
+        uses: shivammathur/setup-php@f3e473d116dcccaddc5834248c87452386958240 # v2.37.2
+        with:
+          php-version: '8.2'
+          coverage: none
+
+      - name: Install dependencies
+        run: composer install --prefer-dist --no-interaction --no-progress
+
+      - name: Check code style
+        run: vendor/bin/pint --test app database tests
+
+      - name: Static analysis (PHPStan/Larastan)
+        run: vendor/bin/phpstan analyse --no-progress
+
+  phpunit:
+    name: Tests
     runs-on: ubuntu-latest
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
 
       - name: Setup PHP
-        uses: shivammathur/setup-php@v2
+        uses: shivammathur/setup-php@f3e473d116dcccaddc5834248c87452386958240 # v2.37.2
         with:
           php-version: '8.2'
           extensions: iconv, mbstring, pdo, pdo_sqlite, sqlite3, gd, zip, bcmath, intl, fileinfo, exif, dom, curl
@@ -24,7 +48,7 @@ jobs:
           coverage: pcov
 
       - name: Cache Composer packages
-        uses: actions/cache@v4
+        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
         with:
           path: vendor
           key: composer-${{ hashFiles('**/composer.lock') }}
@@ -32,6 +56,20 @@ jobs:
 
       - name: Install dependencies
         run: composer install --prefer-dist --no-interaction --no-progress
+
+      - name: Setup Node
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: '20'
+          cache: npm
+
+      - name: Build frontend assets
+        # Feature tests that render views hitting @vite (e.g. the Filament
+        # dashboard) need public/build/manifest.json, which is gitignored
+        # and otherwise only produced on a developer machine.
+        run: |
+          npm ci
+          npm run build
 
       - name: Prepare environment
         run: |
@@ -67,9 +105,108 @@ jobs:
 
       - name: Upload coverage report
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: coverage-report
           path: |
             coverage.clover
             junit.xml
+
+  security-audit:
+    name: Dependency audit (known vs new advisories)
+    runs-on: ubuntu-latest
+    # Gate, not advisory: known/accepted advisories (documented with a risk
+    # assessment in docs/security-advisories.md, listed by ID in
+    # docs/accepted-security-advisories.json) are logged but do not fail the
+    # job. Anything NOT in that accepted list — a genuinely new advisory —
+    # fails CI. No blanket continue-on-error on the job: that would hide a
+    # new vulnerability behind the same "advisory only" label as the already
+    # -reviewed Laravel 9 / Vite 3 findings. Only the purely informational
+    # log steps below are individually allowed to fail.
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+
+      - name: Setup PHP
+        uses: shivammathur/setup-php@f3e473d116dcccaddc5834248c87452386958240 # v2.37.2
+        with:
+          php-version: '8.2'
+          coverage: none
+
+      - name: Install PHP dependencies
+        run: composer install --prefer-dist --no-interaction --no-progress
+
+      - name: Composer audit (human-readable log, incl. abandoned packages)
+        # Informational only: lists abandoned transitive packages (currently
+        # pulled in by Filament 2, unavoidable until the Filament 3 upgrade)
+        # alongside any advisories. The gate step below makes the actual
+        # pass/fail decision, so this step is allowed to exit non-zero.
+        continue-on-error: true
+        run: composer audit --abandoned=report
+
+      - name: Composer audit gate (fail on new/unaccepted advisories)
+        run: |
+          php -r '
+            $accepted = json_decode(file_get_contents("docs/accepted-security-advisories.json"), true)["composer"];
+            $result = json_decode(shell_exec("composer audit --format=json --no-interaction 2>/dev/null"), true);
+            $new = [];
+            foreach ($result["advisories"] ?? [] as $package => $advisories) {
+                foreach ($advisories as $advisory) {
+                    $id = $advisory["advisoryId"] ?? $advisory["cve"] ?? $advisory["title"];
+                    if (in_array($id, $accepted, true)) {
+                        echo "ACCEPTED (see docs/security-advisories.md): $package $id\n";
+                    } else {
+                        $new[] = "$package: $id ({$advisory["title"]})";
+                    }
+                }
+            }
+            if ($new) {
+                echo "NEW/UNACCEPTED composer advisories found:\n" . implode("\n", $new) . "\n";
+                echo "Add a risk assessment to docs/security-advisories.md and its ID to docs/accepted-security-advisories.json only if this is genuinely accepted risk; otherwise fix it.\n";
+                exit(1);
+            }
+            echo "No new/unaccepted composer advisories.\n";
+          '
+
+      - name: Setup Node
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: '20'
+
+      - name: npm audit (human-readable log)
+        # Informational only, same reasoning as the composer log step above.
+        continue-on-error: true
+        run: npm audit
+
+      - name: npm audit gate (fail on new/unaccepted advisories)
+        run: |
+          node -e '
+            const fs = require("fs");
+            const { execSync } = require("child_process");
+            const accepted = new Set(JSON.parse(fs.readFileSync("docs/accepted-security-advisories.json")).npm);
+            let data;
+            try {
+              data = JSON.parse(execSync("npm audit --json", { maxBuffer: 1024 * 1024 * 20 }));
+            } catch (e) {
+              data = JSON.parse(e.stdout);
+            }
+            const unaccepted = [];
+            for (const [name, vuln] of Object.entries(data.vulnerabilities || {})) {
+              for (const via of vuln.via) {
+                if (typeof via !== "object" || !via.url) continue;
+                const m = via.url.match(/advisories\/(GHSA-[a-z0-9-]+)/i);
+                const id = m ? m[1] : via.url;
+                if (accepted.has(id)) {
+                  console.log(`ACCEPTED (see docs/security-advisories.md): ${name} ${id}`);
+                } else {
+                  unaccepted.push(`${name}: ${id} - ${via.title}`);
+                }
+              }
+            }
+            if (unaccepted.length) {
+              console.log("NEW/UNACCEPTED npm advisories found:");
+              console.log(unaccepted.join("\n"));
+              console.log("Add a risk assessment to docs/security-advisories.md and its ID to docs/accepted-security-advisories.json only if this is genuinely accepted risk; otherwise fix it.");
+              process.exit(1);
+            }
+            console.log("No new/unaccepted npm advisories.");
+          '

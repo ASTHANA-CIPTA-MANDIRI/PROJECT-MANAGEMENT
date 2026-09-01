@@ -3,15 +3,16 @@
 namespace App\Filament\Resources;
 
 use App\Filament\Resources\UserResource\Pages;
-use App\Filament\Resources\UserResource\RelationManagers;
+use App\Models\Role;
 use App\Models\User;
+use App\Support\UniqueAmongTrashedRule;
 use Filament\Forms;
 use Filament\Resources\Form;
-use Filament\Resources\Pages\CreateRecord;
 use Filament\Resources\Resource;
 use Filament\Resources\Table;
 use Filament\Tables;
-use Illuminate\Support\HtmlString;
+use Illuminate\Database\Eloquent\Builder;
+use Illuminate\Database\Eloquent\SoftDeletingScope;
 
 class UserResource extends Resource
 {
@@ -54,20 +55,75 @@ class UserResource extends Resource
                                     ->label(__('Email address'))
                                     ->email()
                                     ->required()
-                                    ->rule(
-                                        fn($record) => 'unique:users,email,'
-                                            . ($record ? $record->id : 'NULL')
-                                            . ',id,deleted_at,NULL'
-                                    )
+                                    // The raw "...,deleted_at,NULL" rule this
+                                    // replaced ignored trashed users, so it let a
+                                    // trashed user's email pass validation only
+                                    // to hit the database's own unique index (no
+                                    // deleted_at awareness) and throw a raw
+                                    // QueryException on save - see
+                                    // UniqueAmongTrashedRule and M-3 in
+                                    // docs/soft-deletes.md.
+                                    ->rule(fn ($record) => UniqueAmongTrashedRule::make(
+                                        User::class,
+                                        'email',
+                                        $record?->id,
+                                        __('This email is already used by another user.'),
+                                        __('This email belongs to a deleted user. Restore that user to reuse it, or choose a different email.'),
+                                    ))
                                     ->maxLength(255),
 
                                 Forms\Components\CheckboxList::make('roles')
                                     ->label(__('Permission roles'))
                                     ->required()
                                     ->columns(3)
-                                    ->relationship('roles', 'name'),
+                                    ->relationship('roles', 'name')
+                                    // Guards: the Super Admin role can't be removed
+                                    // from the last Super Admin, and nobody may hand
+                                    // out a role stronger than the one they hold.
+                                    ->rule(fn (?User $record) => function (string $attribute, $value, \Closure $fail) use ($record) {
+                                        $superAdminRoleId = User::superAdminRoleId()
+                                            ?? Role::where('name', 'Super Admin')->value('id');
+                                        $selected = array_map('strval', (array) $value);
+                                        $keepsSuperAdmin = $superAdminRoleId !== null
+                                            && in_array((string) $superAdminRoleId, $selected, true);
+
+                                        if ($record && $record->isLastSuperAdmin() && ! $keepsSuperAdmin) {
+                                            $fail(__('You cannot remove the Super Admin role from the last Super Admin.'));
+
+                                            return;
+                                        }
+
+                                        // Privilege escalation: without this, anyone holding
+                                        // "Update user" could grant themselves (or a
+                                        // confederate) a role more powerful than their own.
+                                        // Only roles being *added* are checked, so editing
+                                        // the name of a user who already holds a strong role
+                                        // keeps working.
+                                        $current = $record
+                                            ? $record->roles->pluck('id')->map('strval')->all()
+                                            : [];
+                                        $added = array_diff($selected, $current);
+
+                                        if ($added === []) {
+                                            return;
+                                        }
+
+                                        $actor = auth()->user();
+
+                                        foreach (Role::whereKey($added)->with('permissions')->get() as $role) {
+                                            if ($actor?->canGrantRole($role)) {
+                                                continue;
+                                            }
+
+                                            $fail($role->isSuperAdminRole()
+                                                ? __('Only a Super Admin can assign the Super Admin role.')
+                                                : __('You cannot assign a role holding permissions you do not have yourself.'));
+
+                                            return;
+                                        }
+                                    }),
                             ]),
-                    ])
+                    ]),
             ]);
     }
 
@@ -89,6 +145,11 @@ class UserResource extends Resource
                     ->label(__('Roles'))
                     ->limit(2),
 
+                Tables\Columns\IconColumn::make('is_super_admin')
+                    ->label(__('Super Admin'))
+                    ->boolean()
+                    ->getStateUsing(fn (User $record) => $record->isSuperAdmin()),
+
                 Tables\Columns\TextColumn::make('email_verified_at')
                     ->label(__('Email verified at'))
                     ->dateTime()
@@ -106,15 +167,48 @@ class UserResource extends Resource
                     ->searchable(),
             ])
             ->filters([
-                //
+                // New registrants get no role until an admin assigns one; this
+                // surfaces those awaiting approval so they can be actioned.
+                Tables\Filters\Filter::make('pending_approval')
+                    ->label(__('Pending approval'))
+                    ->query(fn ($query) => $query->doesntHave('roles')),
+
+                Tables\Filters\Filter::make('super_admins')
+                    ->label(__('Super Admins only'))
+                    ->query(function ($query) {
+                        $roleId = User::superAdminRoleId();
+
+                        return $query->whereHas('roles', fn ($q) => $roleId !== null
+                            ? $q->whereKey($roleId)
+                            : $q->where('name', 'Super Admin'));
+                    }),
+
+                Tables\Filters\TrashedFilter::make(),
             ])
             ->actions([
                 Tables\Actions\ViewAction::make(),
                 Tables\Actions\EditAction::make(),
+                Tables\Actions\RestoreAction::make(),
             ])
             ->bulkActions([
                 Tables\Actions\DeleteBulkAction::make(),
+                Tables\Actions\RestoreBulkAction::make(),
             ]);
+    }
+
+    /**
+     * The SoftDeletingScope is dropped here (not just left to TrashedFilter)
+     * because row/bulk actions like RestoreAction resolve their target
+     * record through this unfiltered base query, not through the table's
+     * filtered query - with the scope still active a trashed row could never
+     * be found to restore it. TrashedFilter still controls what the
+     * *listing* shows by default.
+     */
+    public static function getEloquentQuery(): Builder
+    {
+        return parent::getEloquentQuery()
+            ->withoutGlobalScopes([SoftDeletingScope::class])
+            ->with(['roles', 'socials']);
     }
 
     public static function getRelations(): array

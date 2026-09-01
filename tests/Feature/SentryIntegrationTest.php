@@ -24,10 +24,9 @@ class SentryIntegrationTest extends TestCase
      */
     private function recordingTransport(\ArrayObject $sink): TransportInterface
     {
-        return new class($sink) implements TransportInterface {
-            public function __construct(private \ArrayObject $sink)
-            {
-            }
+        return new class($sink) implements TransportInterface
+        {
+            public function __construct(private \ArrayObject $sink) {}
 
             public function send(Event $event): Result
             {
@@ -63,7 +62,7 @@ class SentryIntegrationTest extends TestCase
 
     public function test_the_handler_reports_exceptions_to_sentry_with_user_context(): void
     {
-        $events = new \ArrayObject();
+        $events = new \ArrayObject;
 
         $hub = SentrySdk::getCurrentHub();
         $originalClient = $hub->getClient();
@@ -73,7 +72,7 @@ class SentryIntegrationTest extends TestCase
         $client = (new ClientBuilder(new Options([
             'dsn' => 'https://examplePublicKey@o0.ingest.sentry.io/0',
             'default_integrations' => false,
-            'integrations' => [new Integration()],
+            'integrations' => [new Integration],
         ])))->setTransport($this->recordingTransport($events))->getClient();
 
         $hub->bindClient($client);

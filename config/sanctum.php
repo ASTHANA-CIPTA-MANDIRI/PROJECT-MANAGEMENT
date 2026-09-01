@@ -46,7 +46,9 @@ return [
     |
     */
 
-    'expiration' => null,
+    // Bounded by default (14 days) so a leaked token cannot live forever;
+    // override per environment via SANCTUM_TOKEN_EXPIRATION (minutes).
+    'expiration' => (int) env('SANCTUM_TOKEN_EXPIRATION', 20160),
 
     /*
     |--------------------------------------------------------------------------

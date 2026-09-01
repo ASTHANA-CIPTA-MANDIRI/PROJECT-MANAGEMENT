@@ -15,10 +15,15 @@ class FormRequestValidationTest extends TestCase
     use RefreshDatabase;
 
     private int $userId;
+
     private int $projectStatusId;
+
     private int $projectId;
+
     private int $ticketStatusId;
+
     private int $ticketTypeId;
+
     private int $ticketPriorityId;
 
     /**
@@ -71,7 +76,7 @@ class FormRequestValidationTest extends TestCase
 
     public function test_project_valid_payload_passes(): void
     {
-        $v = $this->validate((new ProjectRequest())->rules(), [
+        $v = $this->validate((new ProjectRequest)->rules(), [
             'name' => 'My project',
             'owner_id' => $this->userId,
             'status_id' => $this->projectStatusId,
@@ -80,12 +85,12 @@ class FormRequestValidationTest extends TestCase
             'status_type' => 'default',
         ]);
 
-        $this->assertTrue($v->passes(), 'Valid project payload should pass. Errors: ' . $v->errors());
+        $this->assertTrue($v->passes(), 'Valid project payload should pass. Errors: '.$v->errors());
     }
 
     public function test_project_missing_required_fields_fail(): void
     {
-        $v = $this->validate((new ProjectRequest())->rules(), []);
+        $v = $this->validate((new ProjectRequest)->rules(), []);
 
         $this->assertFalse($v->passes());
         foreach (['name', 'owner_id', 'status_id', 'ticket_prefix', 'type', 'status_type'] as $field) {
@@ -95,7 +100,7 @@ class FormRequestValidationTest extends TestCase
 
     public function test_project_rejects_invalid_type_and_long_prefix(): void
     {
-        $v = $this->validate((new ProjectRequest())->rules(), [
+        $v = $this->validate((new ProjectRequest)->rules(), [
             'name' => 'X', 'owner_id' => $this->userId, 'status_id' => $this->projectStatusId,
             'ticket_prefix' => 'TOOLONG', 'type' => 'waterfall', 'status_type' => 'default',
         ]);
@@ -107,7 +112,7 @@ class FormRequestValidationTest extends TestCase
 
     public function test_project_rejects_nonexistent_owner(): void
     {
-        $v = $this->validate((new ProjectRequest())->rules(), [
+        $v = $this->validate((new ProjectRequest)->rules(), [
             'name' => 'X', 'owner_id' => 99999, 'status_id' => $this->projectStatusId,
             'ticket_prefix' => 'ABC', 'type' => 'kanban', 'status_type' => 'default',
         ]);
@@ -120,19 +125,19 @@ class FormRequestValidationTest extends TestCase
 
     public function test_ticket_valid_payload_passes(): void
     {
-        $v = $this->validate((new TicketRequest())->rules(), [
+        $v = $this->validate((new TicketRequest)->rules(), [
             'name' => 'Fix bug', 'content' => 'Steps to reproduce',
             'project_id' => $this->projectId, 'owner_id' => $this->userId,
             'status_id' => $this->ticketStatusId, 'type_id' => $this->ticketTypeId,
             'priority_id' => $this->ticketPriorityId, 'estimation' => 3.5,
         ]);
 
-        $this->assertTrue($v->passes(), 'Valid ticket payload should pass. Errors: ' . $v->errors());
+        $this->assertTrue($v->passes(), 'Valid ticket payload should pass. Errors: '.$v->errors());
     }
 
     public function test_ticket_rejects_negative_estimation(): void
     {
-        $v = $this->validate((new TicketRequest())->rules(), [
+        $v = $this->validate((new TicketRequest)->rules(), [
             'name' => 'X', 'content' => 'Y', 'project_id' => $this->projectId,
             'owner_id' => $this->userId, 'status_id' => $this->ticketStatusId,
             'type_id' => $this->ticketTypeId, 'priority_id' => $this->ticketPriorityId,
@@ -145,7 +150,7 @@ class FormRequestValidationTest extends TestCase
 
     public function test_ticket_missing_required_fields_fail(): void
     {
-        $v = $this->validate((new TicketRequest())->rules(), []);
+        $v = $this->validate((new TicketRequest)->rules(), []);
 
         $this->assertFalse($v->passes());
         foreach (['name', 'content', 'project_id', 'owner_id', 'status_id', 'type_id', 'priority_id'] as $field) {
@@ -153,21 +158,74 @@ class FormRequestValidationTest extends TestCase
         }
     }
 
+    /**
+     * rulesFor() is what callers outside the HTTP lifecycle use: it builds the
+     * rules against the payload, which is what makes the relation checks
+     * project-aware.
+     */
+    public function test_ticket_rules_for_a_payload_reject_another_projects_sprint(): void
+    {
+        $now = now();
+        $otherProjectId = DB::table('projects')->insertGetId([
+            'name' => 'Other', 'owner_id' => $this->userId, 'status_id' => $this->projectStatusId,
+            'ticket_prefix' => 'OTH', 'status_type' => 'default', 'type' => 'scrum',
+            'created_at' => $now, 'updated_at' => $now,
+        ]);
+        $foreignSprintId = DB::table('sprints')->insertGetId([
+            'name' => 'Sprint 1', 'project_id' => $otherProjectId,
+            'starts_at' => $now, 'ends_at' => $now->copy()->addWeek(),
+            'created_at' => $now, 'updated_at' => $now,
+        ]);
+
+        $payload = [
+            'name' => 'Fix bug', 'content' => 'Steps',
+            'project_id' => $this->projectId, 'owner_id' => $this->userId,
+            'status_id' => $this->ticketStatusId, 'type_id' => $this->ticketTypeId,
+            'priority_id' => $this->ticketPriorityId, 'sprint_id' => $foreignSprintId,
+        ];
+
+        $v = $this->validate(TicketRequest::rulesFor($payload), $payload);
+
+        $this->assertFalse($v->passes());
+        $this->assertArrayHasKey('sprint_id', $v->errors()->toArray());
+    }
+
+    public function test_ticket_rules_for_a_payload_accept_the_projects_own_sprint(): void
+    {
+        $now = now();
+        $sprintId = DB::table('sprints')->insertGetId([
+            'name' => 'Sprint 1', 'project_id' => $this->projectId,
+            'starts_at' => $now, 'ends_at' => $now->copy()->addWeek(),
+            'created_at' => $now, 'updated_at' => $now,
+        ]);
+
+        $payload = [
+            'name' => 'Fix bug', 'content' => 'Steps',
+            'project_id' => $this->projectId, 'owner_id' => $this->userId,
+            'status_id' => $this->ticketStatusId, 'type_id' => $this->ticketTypeId,
+            'priority_id' => $this->ticketPriorityId, 'sprint_id' => $sprintId,
+        ];
+
+        $v = $this->validate(TicketRequest::rulesFor($payload), $payload);
+
+        $this->assertTrue($v->passes(), 'Own-project sprint should pass. Errors: '.$v->errors());
+    }
+
     // ----------------------------------------------------------------- Sprint
 
     public function test_sprint_valid_payload_passes(): void
     {
-        $v = $this->validate((new SprintRequest())->rules(), [
+        $v = $this->validate((new SprintRequest)->rules(), [
             'name' => 'Sprint 1', 'starts_at' => '2026-01-01', 'ends_at' => '2026-01-14',
             'project_id' => $this->projectId,
         ]);
 
-        $this->assertTrue($v->passes(), 'Valid sprint payload should pass. Errors: ' . $v->errors());
+        $this->assertTrue($v->passes(), 'Valid sprint payload should pass. Errors: '.$v->errors());
     }
 
     public function test_sprint_rejects_end_before_start(): void
     {
-        $v = $this->validate((new SprintRequest())->rules(), [
+        $v = $this->validate((new SprintRequest)->rules(), [
             'name' => 'Sprint 1', 'starts_at' => '2026-01-14', 'ends_at' => '2026-01-01',
             'project_id' => $this->projectId,
         ]);
@@ -178,7 +236,7 @@ class FormRequestValidationTest extends TestCase
 
     public function test_sprint_missing_required_fields_fail(): void
     {
-        $v = $this->validate((new SprintRequest())->rules(), []);
+        $v = $this->validate((new SprintRequest)->rules(), []);
 
         $this->assertFalse($v->passes());
         foreach (['name', 'starts_at', 'ends_at', 'project_id'] as $field) {

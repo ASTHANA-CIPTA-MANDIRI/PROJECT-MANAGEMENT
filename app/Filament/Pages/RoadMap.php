@@ -8,10 +8,13 @@ use Carbon\Carbon;
 use Filament\Forms\Components\Select;
 use Filament\Forms\Concerns\InteractsWithForms;
 use Filament\Forms\Contracts\HasForms;
-use Filament\Pages\Page;
 use Illuminate\Database\Eloquent\Builder;
 
-class RoadMap extends Page implements HasForms
+/**
+ * No page permission: every query is scoped to projects the user can access
+ * (`projectQuery()`).
+ */
+class RoadMap extends AuthorizedPage implements HasForms
 {
     use InteractsWithForms;
 
@@ -25,14 +28,14 @@ class RoadMap extends Page implements HasForms
 
     public $project;
 
-    public Epic|null $epic = null;
+    public ?Epic $epic = null;
 
     public bool $ticket = false;
 
     protected $listeners = [
         'closeEpicDialog' => 'closeDialog',
         'closeTicketDialog' => 'closeDialog',
-        'updateEpic'
+        'updateEpic',
     ];
 
     protected static function getNavigationLabel(): string
@@ -55,7 +58,7 @@ class RoadMap extends Page implements HasForms
         }
         if ($this->project) {
             $this->form->fill([
-                'selectedProject' => $this->project->id
+                'selectedProject' => $this->project->id,
             ]);
         } else {
             $this->form->fill();
@@ -70,7 +73,7 @@ class RoadMap extends Page implements HasForms
                 ->disableLabel()
                 ->searchable()
                 ->extraAttributes([
-                    'class' => 'min-w-[16rem]'
+                    'class' => 'min-w-[16rem]',
                 ])
                 ->disablePlaceholderSelection()
                 ->required()
@@ -79,37 +82,71 @@ class RoadMap extends Page implements HasForms
                         ->get()
                         ->pluck('name', 'id')
                         ->toArray();
-                })
+                }),
         ];
     }
 
     public function filter(): void
     {
         $data = $this->form->getState();
-        $project = $data['selectedProject'];
-        $this->project = Project::where('id', $project)->first();
+
+        // The select's options are scoped, but its posted value is just client
+        // state — re-resolve it through the same scoped query rather than
+        // trusting the id that came back.
+        $project = $this->projectQuery()->whereKey($data['selectedProject'])->first();
+
+        if (! $project) {
+            // Either the id was tampered with, or the user has no projects at
+            // all. Keep whatever was selected instead of switching to (and
+            // then dereferencing) nothing.
+            $this->form->fill(['selectedProject' => $this->project?->id]);
+
+            return;
+        }
+
+        $this->project = $project;
         $this->dispatchBrowserEvent('projectChanged', [
             'url' => route('road-map.data', $this->project),
             'start_date' => Carbon::parse($this->project->epicsFirstDate)->subYear()->format('Y-m-d'),
             'end_date' => Carbon::parse($this->project->epicsLastDate)->addYear()->format('Y-m-d'),
-            'scroll_to' => Carbon::parse($this->project->epicsFirstDate)->subDays(5)->format('Y-m-d')
+            'scroll_to' => Carbon::parse($this->project->epicsFirstDate)->subDays(5)->format('Y-m-d'),
         ]);
     }
 
+    /**
+     * Public Livewire listeners, reachable whatever the template renders. A
+     * user with no project at all has $this->project === null (see mount()),
+     * and there is nothing to attach an epic or a ticket to — dereferencing it
+     * used to answer the click with a 500.
+     */
     public function createTicket(): void
     {
+        if (! $this->project) {
+            return;
+        }
+
         $this->ticket = true;
     }
 
     public function createEpic(): void
     {
-        $this->epic = new Epic();
+        if (! $this->project) {
+            return;
+        }
+
+        $this->epic = new Epic;
         $this->epic->project_id = $this->project->id;
     }
 
+    /**
+     * Public Livewire listener: the epic id arrives straight from the browser,
+     * so it is resolved through the project scope and 404s otherwise.
+     */
     public function updateEpic(int $epicId): void
     {
-        $this->epic = Epic::where('id', $epicId)->first();
+        $this->epic = Epic::query()
+            ->whereHas('project', fn ($query) => $query->accessibleBy(auth()->user()))
+            ->findOrFail($epicId);
     }
 
     public function closeDialog(bool $refresh): void
@@ -123,11 +160,6 @@ class RoadMap extends Page implements HasForms
 
     private function projectQuery(): Builder
     {
-        return Project::where(function ($query) {
-            return $query->where('owner_id', auth()->user()->id)
-                ->orWhereHas('users', function ($query) {
-                    return $query->where('users.id', auth()->user()->id);
-                });
-        });
+        return Project::query()->accessibleBy(auth()->user());
     }
 }

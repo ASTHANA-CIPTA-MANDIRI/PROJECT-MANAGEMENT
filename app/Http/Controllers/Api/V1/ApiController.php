@@ -7,6 +7,7 @@ use App\Models\Project;
 use App\Models\User;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\Request;
+use Illuminate\Validation\ValidationException;
 
 /**
  * Base controller for the v1 JSON API. Provides shared query features:
@@ -23,7 +24,10 @@ abstract class ApiController extends Controller
     /**
      * Apply `?filter[field]=value` constraints, limited to $allowed fields.
      *
-     * @param array<int, string> $allowed
+     * @param  array<int, string>  $allowed
+     *
+     * @throws \Illuminate\Validation\ValidationException when a whitelisted
+     *                                                    filter carries a non-scalar value
      */
     protected function applyFilters(Builder $query, Request $request, array $allowed): Builder
     {
@@ -34,9 +38,20 @@ abstract class ApiController extends Controller
         }
 
         foreach ($filters as $field => $value) {
-            if (in_array($field, $allowed, true) && $value !== null && $value !== '') {
-                $query->where($field, $value);
+            if (! in_array($field, $allowed, true) || $value === null || $value === '') {
+                continue;
             }
+
+            // ?filter[project_id][]=1 arrives as an array, which where() cannot
+            // bind — that used to surface as a 500. Malformed input is the
+            // caller's mistake, so answer 422 instead of crashing.
+            if (! is_scalar($value)) {
+                throw ValidationException::withMessages([
+                    "filter.{$field}" => "The {$field} filter must be a single value.",
+                ]);
+            }
+
+            $query->where($field, $value);
         }
 
         return $query;
@@ -45,7 +60,7 @@ abstract class ApiController extends Controller
     /**
      * Apply `?sort=field` (asc) or `?sort=-field` (desc), limited to $allowed.
      *
-     * @param array<int, string> $allowed
+     * @param  array<int, string>  $allowed
      */
     protected function applySorting(Builder $query, Request $request, array $allowed, string $default = 'created_at'): Builder
     {
@@ -82,9 +97,10 @@ abstract class ApiController extends Controller
      */
     protected function assertProjectAccess(Project $project, User $user): void
     {
-        $hasAccess = $project->owner_id === $user->id
-            || $project->users()->where('users.id', $user->id)->exists();
-
-        abort_unless($hasAccess, 403, 'You do not have access to this project.');
+        abort_unless(
+            $project->isAccessibleBy($user),
+            403,
+            'You do not have access to this project.'
+        );
     }
 }

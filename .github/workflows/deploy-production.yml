@@ -1,0 +1,146 @@
+name: Deploy (production)
+
+# Deploys to production when a version tag (v*) is pushed, or manually.
+# The "production" GitHub Environment should require a manual approval
+# (Settings -> Environments -> production -> Required reviewers).
+on:
+  push:
+    tags: [ 'v*' ]
+  workflow_dispatch:
+    inputs:
+      ref:
+        description: 'Git ref (tag/branch/SHA) to deploy'
+        required: true
+        default: 'main'
+      skip_ci_check:
+        description: 'Deploy even if CI is not green for this commit (emergencies only)'
+        type: boolean
+        default: false
+
+concurrency:
+  group: deploy-production
+  cancel-in-progress: false
+
+# The deploy itself only needs SSH secrets; the gate below reads workflow runs.
+permissions:
+  contents: read
+  actions: read
+
+jobs:
+  ci-gate:
+    name: Require green CI
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.inputs.ref || github.ref_name }}
+
+      - name: Resolve commit
+        id: commit
+        run: echo "sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+
+      # A v* tag fires this workflow directly, and tests.yml only runs on
+      # branch pushes/PRs — so without this check a tag placed on a commit with
+      # a red (or never-run) suite would deploy anyway.
+      - name: Require a successful CI run for this commit
+        if: ${{ github.event.inputs.skip_ci_check != 'true' }}
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          SHA: ${{ steps.commit.outputs.sha }}
+        run: |
+          set -eo pipefail
+          conclusion="$(gh api \
+            "repos/$GITHUB_REPOSITORY/actions/workflows/tests.yml/runs?head_sha=$SHA&status=completed&per_page=1" \
+            --jq '.workflow_runs[0].conclusion // "belum pernah dijalankan"')"
+          echo "CI untuk $SHA: $conclusion"
+          if [ "$conclusion" != "success" ]; then
+            echo "::error::Workflow CI belum hijau untuk commit $SHA ($conclusion). Deploy dibatalkan."
+            exit 1
+          fi
+
+  deploy:
+    name: Deploy to production
+    runs-on: ubuntu-latest
+    needs: ci-gate
+    environment:
+      name: production
+      url: ${{ vars.APP_URL }}
+
+    steps:
+      - name: Resolve ref
+        id: ref
+        run: echo "value=${{ github.event.inputs.ref || github.ref_name }}" >> "$GITHUB_OUTPUT"
+
+      - name: Deploy over SSH
+        uses: appleboy/ssh-action@v1.0.3
+        env:
+          DEPLOY_REF: ${{ steps.ref.outputs.value }}
+        with:
+          host: ${{ secrets.SSH_HOST }}
+          username: ${{ secrets.SSH_USER }}
+          key: ${{ secrets.SSH_KEY }}
+          port: ${{ secrets.SSH_PORT || 22 }}
+          envs: DEPLOY_REF
+          # Records the current release before deploying so it can be rolled
+          # back (see rollback.yml / docs/cicd.md). A pre-deploy DB snapshot is
+          # taken as an extra safety net.
+          #
+          # The release steps run in a subshell so a failure half-way through
+          # (a broken build, a migration that blows up) does not abandon the
+          # site: the code is put back on the previous release and the EXIT trap
+          # always lifts maintenance mode.
+          script: |
+            set -e
+            cd "${{ secrets.DEPLOY_PATH }}"
+            PREVIOUS_RELEASE="$(git rev-parse HEAD)"
+            echo "$PREVIOUS_RELEASE" > storage/app/PREVIOUS_RELEASE
+
+            trap 'php artisan up || true' EXIT
+
+            php artisan down --retry=15 || true
+            bash scripts/db-backup.sh pre-deploy || echo "backup skipped"
+
+            set +e
+            (
+              set -e
+              git fetch --all --tags --prune
+              git checkout --force "$DEPLOY_REF"
+              composer install --no-dev --optimize-autoloader --no-interaction
+              npm ci
+              npm run build
+              php artisan migrate --force
+              php artisan config:cache
+              php artisan route:cache
+              php artisan view:cache
+              php artisan queue:restart
+            )
+            RELEASE_STATUS=$?
+
+            if [ "$RELEASE_STATUS" -eq 0 ]; then
+              echo "Rilis $DEPLOY_REF berhasil."
+              exit 0
+            fi
+
+            echo "Rilis $DEPLOY_REF gagal (exit $RELEASE_STATUS) — mengembalikan kode ke $PREVIOUS_RELEASE."
+            (
+              set -e
+              git checkout --force "$PREVIOUS_RELEASE"
+              composer install --no-dev --optimize-autoloader --no-interaction
+              npm ci
+              npm run build
+              php artisan config:cache
+              php artisan route:cache
+              php artisan view:cache
+              php artisan queue:restart
+            )
+            RESTORE_STATUS=$?
+
+            if [ "$RESTORE_STATUS" -eq 0 ]; then
+              echo "Kode sudah kembali ke $PREVIOUS_RELEASE."
+              echo "Basis data TIDAK ikut dikembalikan: jalankan workflow Rollback (production)"
+              echo "dengan restore_db=true bila migrasi sempat berjalan sebagian."
+            else
+              echo "::error::Pengembalian otomatis juga gagal (exit $RESTORE_STATUS). Server perlu ditangani manual."
+            fi
+            exit 1

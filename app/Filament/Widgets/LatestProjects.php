@@ -11,10 +11,11 @@ use Illuminate\Support\HtmlString;
 class LatestProjects extends BaseWidget
 {
     protected static ?int $sort = 7;
+
     protected int|string|array $columnSpan = [
         'sm' => 1,
         'md' => 6,
-        'lg' => 3
+        'lg' => 3,
     ];
 
     public function mount(): void
@@ -35,14 +36,12 @@ class LatestProjects extends BaseWidget
     protected function getTableQuery(): Builder
     {
         return Project::query()
-            ->with(['owner', 'status'])
+            // Eager load media too: each row renders $record->cover, which
+            // reads the project's media collection — without this it is one
+            // extra query per row (N+1).
+            ->with(['owner', 'status', 'media'])
             ->limit(5)
-            ->where(function ($query) {
-                return $query->where('owner_id', auth()->user()->id)
-                    ->orWhereHas('users', function ($query) {
-                        return $query->where('users.id', auth()->user()->id);
-                    });
-            })
+            ->accessibleBy(auth()->user())
             ->latest();
     }
 
@@ -51,11 +50,11 @@ class LatestProjects extends BaseWidget
         return [
             Tables\Columns\TextColumn::make('name')
                 ->label(__('Project name'))
-                ->formatStateUsing(fn($record) => new HtmlString('
+                ->formatStateUsing(fn ($record) => new HtmlString('
                             <div class="w-full flex items-center gap-2">
-                                <div style=\'background-image: url("' . $record->cover . '")\'
+                                <div style=\'background-image: url("'.e($record->cover).'")\'
                                  class="w-8 h-8 bg-cover bg-center bg-no-repeat"></div>
-                                ' . $record->name . '
+                                '.e($record->name).'
                             </div>
                         ')),
 
@@ -64,13 +63,10 @@ class LatestProjects extends BaseWidget
 
             Tables\Columns\TextColumn::make('status.name')
                 ->label(__('Project status'))
-                ->formatStateUsing(fn($record) => new HtmlString('
-                            <div class="flex items-center gap-2">
-                                <span class="filament-tables-color-column relative flex h-6 w-6 rounded-md"
-                                    style="background-color: ' . $record->status->color . '"></span>
-                                <span>' . $record->status->name . '</span>
-                            </div>
-                        ')),
+                ->formatStateUsing(fn ($record) => view('components.color-badge', [
+                    'color' => $record->status->color,
+                    'label' => $record->status->name,
+                ])),
         ];
     }
 }

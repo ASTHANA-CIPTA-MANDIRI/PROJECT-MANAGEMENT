@@ -3,7 +3,6 @@
 namespace Database\Seeders;
 
 use App\Models\TicketStatus;
-use Illuminate\Database\Console\Seeds\WithoutModelEvents;
 use Illuminate\Database\Seeder;
 
 class TicketStatusSeeder extends Seeder
@@ -13,25 +12,27 @@ class TicketStatusSeeder extends Seeder
             'name' => 'Todo',
             'color' => '#cecece',
             'is_default' => true,
-            'order' => 1
+            'order' => 1,
         ],
         [
             'name' => 'In progress',
             'color' => '#ff7f00',
             'is_default' => false,
-            'order' => 2
+            'order' => 2,
         ],
         [
             'name' => 'Done',
             'color' => '#008000',
             'is_default' => false,
-            'order' => 3
+            'is_final' => true,
+            'order' => 3,
         ],
         [
             'name' => 'Archived',
             'color' => '#ff0000',
             'is_default' => false,
-            'order' => 4
+            'is_final' => true,
+            'order' => 4,
         ],
     ];
 
@@ -43,7 +44,7 @@ class TicketStatusSeeder extends Seeder
     public function run()
     {
         foreach ($this->data as $item) {
-            TicketStatus::firstOrCreate($item);
+            TicketStatus::firstOrCreate(['name' => $item['name']], $item);
         }
     }
 }

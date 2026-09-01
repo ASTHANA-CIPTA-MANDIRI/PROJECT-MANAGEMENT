@@ -21,6 +21,10 @@ return new class extends Migration
     /**
      * Reverse the migrations.
      *
+     * Only restores the column shape, not the data: dropColumn() in up()
+     * discards whatever was stored there, and there is no backup to restore
+     * from. Expected for a column drop, noted here per audit criteria.
+     *
      * @return void
      */
     public function down()

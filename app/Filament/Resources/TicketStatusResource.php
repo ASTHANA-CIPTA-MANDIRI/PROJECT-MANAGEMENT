@@ -3,13 +3,15 @@
 namespace App\Filament\Resources;
 
 use App\Filament\Resources\TicketStatusResource\Pages;
-use App\Filament\Resources\TicketStatusResource\RelationManagers;
 use App\Models\TicketStatus;
+use App\Support\Colors;
 use Filament\Forms;
 use Filament\Resources\Form;
 use Filament\Resources\Resource;
 use Filament\Resources\Table;
 use Filament\Tables;
+use Illuminate\Database\Eloquent\Builder;
+use Illuminate\Database\Eloquent\SoftDeletingScope;
 
 class TicketStatusResource extends Resource
 {
@@ -18,6 +20,19 @@ class TicketStatusResource extends Resource
     protected static ?string $navigationIcon = 'heroicon-o-clipboard';
 
     protected static ?int $navigationSort = 1;
+
+    /**
+     * The SoftDeletingScope is dropped here (not just left to TrashedFilter)
+     * because row/bulk actions like RestoreAction resolve their target
+     * record through this unfiltered base query, not through the table's
+     * filtered query - with the scope still active a trashed row could never
+     * be found to restore it. TrashedFilter still controls what the
+     * *listing* shows by default.
+     */
+    public static function getEloquentQuery(): Builder
+    {
+        return parent::getEloquentQuery()->withoutGlobalScopes([SoftDeletingScope::class]);
+    }
 
     protected static function getNavigationLabel(): string
     {
@@ -49,7 +64,8 @@ class TicketStatusResource extends Resource
 
                                 Forms\Components\ColorPicker::make('color')
                                     ->label(__('Status color'))
-                                    ->required(),
+                                    ->required()
+                                    ->regex(Colors::HEX_PATTERN),
 
                                 Forms\Components\Checkbox::make('is_default')
                                     ->label(__('Default status'))
@@ -57,13 +73,19 @@ class TicketStatusResource extends Resource
                                         __('If checked, this status will be automatically affected to new projects')
                                     ),
 
+                                Forms\Components\Checkbox::make('is_final')
+                                    ->label(__('Final status'))
+                                    ->helperText(
+                                        __('If checked, tickets in this status are considered done: they stop receiving due-date reminders and count as completed in reports')
+                                    ),
+
                                 Forms\Components\TextInput::make('order')
                                     ->label(__('Status order'))
                                     ->integer()
-                                    ->default(fn() => TicketStatus::whereNull('project_id')->count() + 1)
+                                    ->default(fn () => TicketStatus::whereNull('project_id')->count() + 1)
                                     ->required(),
-                            ])
-                    ])
+                            ]),
+                    ]),
             ]);
     }
 
@@ -91,6 +113,11 @@ class TicketStatusResource extends Resource
                     ->boolean()
                     ->sortable(),
 
+                Tables\Columns\IconColumn::make('is_final')
+                    ->label(__('Final status'))
+                    ->boolean()
+                    ->sortable(),
+
                 Tables\Columns\TextColumn::make('created_at')
                     ->label(__('Created at'))
                     ->dateTime()
@@ -98,14 +125,16 @@ class TicketStatusResource extends Resource
                     ->searchable(),
             ])
             ->filters([
-                //
+                Tables\Filters\TrashedFilter::make(),
             ])
             ->actions([
                 Tables\Actions\ViewAction::make(),
                 Tables\Actions\EditAction::make(),
+                Tables\Actions\RestoreAction::make(),
             ])
             ->bulkActions([
                 Tables\Actions\DeleteBulkAction::make(),
+                Tables\Actions\RestoreBulkAction::make(),
             ])
             ->reorderable('order')
             ->defaultSort('order');

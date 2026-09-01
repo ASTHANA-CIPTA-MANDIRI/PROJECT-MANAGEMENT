@@ -65,4 +65,43 @@ class TicketController extends ApiController
             $ticket->load(['owner', 'responsible', 'status'])->loadCount('comments')
         );
     }
+
+    /**
+     * PUT|PATCH /api/v1/tickets/{ticket}
+     *
+     * project_id stays the ticket's own (TicketRequest), so an update can
+     * never move a ticket to another project. PUT replaces the ticket, PATCH
+     * changes only the fields it carries.
+     */
+    public function update(TicketRequest $request, Ticket $ticket)
+    {
+        $this->authorize('update', $ticket);
+
+        // Atomic: the update plus the lifecycle writes TicketObserver makes on
+        // it (status activity, epic sync) commit together or not at all.
+        DB::transaction(fn () => $ticket->update($request->validated()));
+
+        // The observer writes epic_id straight to the table, so re-read the
+        // row instead of answering with the value we still hold in memory.
+        $ticket->refresh();
+
+        return new TicketResource(
+            $ticket->load(['owner', 'responsible', 'status'])->loadCount('comments')
+        );
+    }
+
+    /**
+     * DELETE /api/v1/tickets/{ticket}
+     *
+     * Soft delete, as in the panel: the ticket keeps its number, which the
+     * project's counter never hands out again.
+     */
+    public function destroy(Ticket $ticket)
+    {
+        $this->authorize('delete', $ticket);
+
+        $ticket->delete();
+
+        return response()->noContent();
+    }
 }

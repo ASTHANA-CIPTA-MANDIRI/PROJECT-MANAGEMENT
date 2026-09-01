@@ -3,17 +3,32 @@
 namespace App\Filament\Resources;
 
 use App\Filament\Resources\ProjectStatusResource\Pages;
-use App\Filament\Resources\ProjectStatusResource\RelationManagers;
 use App\Models\ProjectStatus;
+use App\Support\Colors;
 use Filament\Forms;
 use Filament\Resources\Form;
 use Filament\Resources\Resource;
 use Filament\Resources\Table;
 use Filament\Tables;
+use Illuminate\Database\Eloquent\Builder;
+use Illuminate\Database\Eloquent\SoftDeletingScope;
 
 class ProjectStatusResource extends Resource
 {
     protected static ?string $model = ProjectStatus::class;
+
+    /**
+     * The SoftDeletingScope is dropped here (not just left to TrashedFilter)
+     * because row/bulk actions like RestoreAction resolve their target
+     * record through this unfiltered base query, not through the table's
+     * filtered query - with the scope still active a trashed row could never
+     * be found to restore it. TrashedFilter still controls what the
+     * *listing* shows by default.
+     */
+    public static function getEloquentQuery(): Builder
+    {
+        return parent::getEloquentQuery()->withoutGlobalScopes([SoftDeletingScope::class]);
+    }
 
     protected static ?string $navigationIcon = 'heroicon-o-clipboard-list';
 
@@ -49,15 +64,16 @@ class ProjectStatusResource extends Resource
 
                                 Forms\Components\ColorPicker::make('color')
                                     ->label(__('Status color'))
-                                    ->required(),
+                                    ->required()
+                                    ->regex(Colors::HEX_PATTERN),
 
                                 Forms\Components\Checkbox::make('is_default')
                                     ->label(__('Default status'))
                                     ->helperText(
                                         __('If checked, this status will be automatically affected to new projects')
                                     ),
-                            ])
-                    ])
+                            ]),
+                    ]),
             ]);
     }
 
@@ -87,14 +103,16 @@ class ProjectStatusResource extends Resource
                     ->searchable(),
             ])
             ->filters([
-                //
+                Tables\Filters\TrashedFilter::make(),
             ])
             ->actions([
                 Tables\Actions\ViewAction::make(),
                 Tables\Actions\EditAction::make(),
+                Tables\Actions\RestoreAction::make(),
             ])
             ->bulkActions([
                 Tables\Actions\DeleteBulkAction::make(),
+                Tables\Actions\RestoreBulkAction::make(),
             ]);
     }
 

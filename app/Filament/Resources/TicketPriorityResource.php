@@ -3,14 +3,13 @@
 namespace App\Filament\Resources;
 
 use App\Filament\Resources\TicketPriorityResource\Pages;
-use App\Filament\Resources\TicketPriorityResource\RelationManagers;
 use App\Models\TicketPriority;
+use App\Support\Colors;
 use Filament\Forms;
 use Filament\Resources\Form;
 use Filament\Resources\Resource;
 use Filament\Resources\Table;
 use Filament\Tables;
-use Guava\FilamentIconPicker\Tables\IconColumn;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\SoftDeletingScope;
 
@@ -21,6 +20,19 @@ class TicketPriorityResource extends Resource
     protected static ?string $navigationIcon = 'heroicon-o-badge-check';
 
     protected static ?int $navigationSort = 4;
+
+    /**
+     * The SoftDeletingScope is dropped here (not just left to TrashedFilter)
+     * because row/bulk actions like RestoreAction resolve their target
+     * record through this unfiltered base query, not through the table's
+     * filtered query - with the scope still active a trashed row could never
+     * be found to restore it. TrashedFilter still controls what the
+     * *listing* shows by default.
+     */
+    public static function getEloquentQuery(): Builder
+    {
+        return parent::getEloquentQuery()->withoutGlobalScopes([SoftDeletingScope::class]);
+    }
 
     protected static function getNavigationLabel(): string
     {
@@ -52,15 +64,16 @@ class TicketPriorityResource extends Resource
 
                                 Forms\Components\ColorPicker::make('color')
                                     ->label(__('Priority color'))
-                                    ->required(),
+                                    ->required()
+                                    ->regex(Colors::HEX_PATTERN),
 
                                 Forms\Components\Checkbox::make('is_default')
                                     ->label(__('Default priority'))
                                     ->helperText(
                                         __('If checked, this priority will be automatically affected to new tickets')
                                     ),
-                            ])
-                    ])
+                            ]),
+                    ]),
             ]);
     }
 
@@ -90,14 +103,16 @@ class TicketPriorityResource extends Resource
                     ->searchable(),
             ])
             ->filters([
-                //
+                Tables\Filters\TrashedFilter::make(),
             ])
             ->actions([
                 Tables\Actions\ViewAction::make(),
                 Tables\Actions\EditAction::make(),
+                Tables\Actions\RestoreAction::make(),
             ])
             ->bulkActions([
                 Tables\Actions\DeleteBulkAction::make(),
+                Tables\Actions\RestoreBulkAction::make(),
             ]);
     }
 

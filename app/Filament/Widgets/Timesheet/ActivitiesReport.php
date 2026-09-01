@@ -8,18 +8,26 @@ use App\Models\TicketHour;
 use App\Models\User;
 use Carbon\Carbon;
 use Filament\Widgets\BarChartWidget;
-use Illuminate\Database\Eloquent\Collection;
-use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Collection;
 
 class ActivitiesReport extends BarChartWidget
 {
+    use HasYearFilter;
+
     protected int|string|array $columnSpan = [
         'sm' => 1,
         'md' => 6,
-        'lg' => 3
+        'lg' => 3,
     ];
 
-    public ?string $filter = '2023';
+    public ?string $filter = null;
+
+    public function __construct($id = null)
+    {
+        $this->filter = (string) Carbon::now()->year;
+
+        parent::__construct($id);
+    }
 
     protected function getHeading(): string
     {
@@ -28,17 +36,12 @@ class ActivitiesReport extends BarChartWidget
 
     protected function getFilters(): ?array
     {
-        return [
-            2022 => 2022,
-            2023 => 2023
-        ];
+        return $this->yearFilterOptions();
     }
 
     protected function getData(): array
     {
-        $collection = $this->filter(auth()->user(), [
-            'year' => $this->filter
-        ]);
+        $collection = $this->filter(auth()->user(), $this->filter);
 
         $datasets = $this->getDatasets($collection);
 
@@ -48,10 +51,10 @@ class ActivitiesReport extends BarChartWidget
                     'label' => __('Total time logged'),
                     'data' => $datasets['sets'],
                     'backgroundColor' => [
-                        'rgba(54, 162, 235, .6)'
+                        'rgba(54, 162, 235, .6)',
                     ],
                     'borderColor' => [
-                        'rgba(54, 162, 235, .8)'
+                        'rgba(54, 162, 235, .8)',
                     ],
                 ],
             ],
@@ -59,11 +62,14 @@ class ActivitiesReport extends BarChartWidget
         ];
     }
 
+    /**
+     * @param  Collection<int, object{value: float, activity: ?\App\Models\Activity}>  $collection
+     */
     protected function getDatasets(Collection $collection): array
     {
         $datasets = [
             'sets' => [],
-            'labels' => []
+            'labels' => [],
         ];
 
         foreach ($collection as $item) {
@@ -74,18 +80,28 @@ class ActivitiesReport extends BarChartWidget
         return $datasets;
     }
 
-    protected function filter(User $user, array $params): Collection
+    /**
+     * Total logged hours per activity for the user and year. Grouping happens
+     * in PHP so it runs on any database driver.
+     *
+     * @return Collection<int, object{value: float, activity: ?\App\Models\Activity}>
+     */
+    protected function filter(User $user, ?string $year): Collection
     {
+        $year = (int) ($year ?: Carbon::now()->year);
+
         return TicketHour::with('activity')
-            ->select([
-                'activity_id',
-                DB::raw('SUM(value) as value'),
-            ])
-            ->whereRaw(
-                DB::raw("YEAR(created_at)=" . (is_null($params['year']) ? Carbon::now()->format('Y') : $params['year']))
-            )
             ->where('user_id', $user->id)
+            ->whereBetween('created_at', [
+                Carbon::create($year, 1, 1)->startOfDay(),
+                Carbon::create($year, 12, 31)->endOfDay(),
+            ])
+            ->get()
             ->groupBy('activity_id')
-            ->get();
+            ->map(fn (Collection $group) => (object) [
+                'value' => (float) $group->sum('value'),
+                'activity' => $group->first()->activity,
+            ])
+            ->values();
     }
 }

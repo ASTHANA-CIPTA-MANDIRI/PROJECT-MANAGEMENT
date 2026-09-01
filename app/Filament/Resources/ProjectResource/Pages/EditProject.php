@@ -3,8 +3,10 @@
 namespace App\Filament\Resources\ProjectResource\Pages;
 
 use App\Filament\Resources\ProjectResource;
+use App\Models\Project;
 use Filament\Pages\Actions;
 use Filament\Resources\Pages\EditRecord;
+use Illuminate\Support\Facades\DB;
 
 class EditProject extends EditRecord
 {
@@ -15,8 +17,7 @@ class EditProject extends EditRecord
         return [
             Actions\Action::make('kanban')
                 ->label(
-                    fn ()
-                    => ($this->record->type === 'scrum' ? __('Scrum board') : __('Kanban board'))
+                    fn () => ($this->record->type === 'scrum' ? __('Scrum board') : __('Kanban board'))
                 )
                 ->icon('heroicon-o-view-boards')
                 ->color('secondary')
@@ -29,7 +30,12 @@ class EditProject extends EditRecord
                 }),
 
             Actions\ViewAction::make(),
-            Actions\DeleteAction::make(),
+            // Unlike the API's destroy() (ProjectController), Filament's own
+            // DeleteAction does not wrap the record delete in a transaction,
+            // so ProjectObserver's ticket/sprint/epic cascade would not be
+            // atomic with the project's own row here without this.
+            Actions\DeleteAction::make()
+                ->using(fn (Project $record) => DB::transaction(fn () => $record->delete())),
         ];
     }
 }

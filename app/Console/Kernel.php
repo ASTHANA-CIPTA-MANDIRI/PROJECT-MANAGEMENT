@@ -10,12 +10,30 @@ class Kernel extends ConsoleKernel
     /**
      * Define the application's command schedule.
      *
-     * @param  \Illuminate\Console\Scheduling\Schedule  $schedule
      * @return void
      */
     protected function schedule(Schedule $schedule)
     {
-        // $schedule->command('inspire')->hourly();
+        // Email each user yesterday's activity digest, every morning.
+        $schedule->command('reports:daily')
+            ->dailyAt('07:00')
+            ->withoutOverlapping();
+
+        // Archive activities older than 90 days, weekly.
+        $schedule->command('cleanup:old-activities --days=90')
+            ->weeklyOn(1, '02:00')
+            ->withoutOverlapping();
+
+        // Remind ticket owners & responsibles of tickets due tomorrow or today.
+        $schedule->command('tickets:due-date-reminders')
+            ->dailyAt('08:00')
+            ->withoutOverlapping();
+
+        // Permanently remove soft-deleted records past their retention period
+        // (currently just TicketComment::prunable(), 90 days - see that model).
+        $schedule->command('model:prune')
+            ->dailyAt('03:00')
+            ->withoutOverlapping();
     }
 
     /**

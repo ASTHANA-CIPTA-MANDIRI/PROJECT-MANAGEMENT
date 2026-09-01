@@ -2,8 +2,8 @@
 
 namespace App\View\Components;
 
-use Illuminate\View\Component;
 use App\Models\TicketType as Model;
+use Illuminate\View\Component;
 
 class TicketType extends Component
 {

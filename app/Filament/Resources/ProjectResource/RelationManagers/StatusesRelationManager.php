@@ -2,8 +2,8 @@
 
 namespace App\Filament\Resources\ProjectResource\RelationManagers;
 
-use App\Models\Ticket;
 use App\Models\TicketStatus;
+use App\Support\Colors;
 use Filament\Forms;
 use Filament\Resources\Form;
 use Filament\Resources\RelationManagers\RelationManager;
@@ -33,7 +33,8 @@ class StatusesRelationManager extends RelationManager
 
                 Forms\Components\ColorPicker::make('color')
                     ->label(__('Status color'))
-                    ->required(),
+                    ->required()
+                    ->regex(Colors::HEX_PATTERN),
 
                 Forms\Components\Checkbox::make('is_default')
                     ->label(__('Default status'))
@@ -44,8 +45,7 @@ class StatusesRelationManager extends RelationManager
                 Forms\Components\TextInput::make('order')
                     ->label(__('Status order'))
                     ->integer()
-                    ->default(fn($livewire) =>
-                        TicketStatus::where('project_id', $livewire->ownerRecord->id)->count() + 1
+                    ->default(fn ($livewire) => TicketStatus::where('project_id', $livewire->ownerRecord->id)->count() + 1
                     )
                     ->required(),
             ]);

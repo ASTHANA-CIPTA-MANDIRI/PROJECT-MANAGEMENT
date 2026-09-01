@@ -6,7 +6,6 @@ use App\Models\Permission;
 use App\Models\Role;
 use App\Models\User;
 use App\Settings\GeneralSettings;
-use Illuminate\Database\Console\Seeds\WithoutModelEvents;
 use Illuminate\Database\Seeder;
 use Illuminate\Support\Str;
 
@@ -15,23 +14,25 @@ class PermissionsSeeder extends Seeder
     private array $modules = [
         'permission', 'project', 'project status', 'role', 'ticket',
         'ticket priority', 'ticket status', 'ticket type', 'user',
-        'activity', 'sprint'
+        'activity', 'sprint', 'label',
     ];
 
     private array $pluralActions = [
-        'List'
+        'List',
     ];
 
     private array $singularActions = [
-        'View', 'Create', 'Update', 'Delete'
+        'View', 'Create', 'Update', 'Delete',
     ];
 
     private array $extraPermissions = [
-        'Manage general settings', 'Import from Jira',
-        'List timesheet data', 'View timesheet dashboard'
+        'Manage general settings', 'Manage super admin settings',
+        'Import from Jira',
+        'List timesheet data', 'View timesheet dashboard',
+        'View analytics',
     ];
 
-    private string $defaultRole = 'Default role';
+    private string $superAdminRole = 'Super Admin';
 
     /**
      * Run the database seeds.
@@ -46,36 +47,40 @@ class PermissionsSeeder extends Seeder
             $singular = $module;
             foreach ($this->pluralActions as $action) {
                 Permission::firstOrCreate([
-                    'name' => $action . ' ' . $plural
+                    'name' => $action.' '.$plural,
                 ]);
             }
             foreach ($this->singularActions as $action) {
                 Permission::firstOrCreate([
-                    'name' => $action . ' ' . $singular
+                    'name' => $action.' '.$singular,
                 ]);
             }
         }
 
         foreach ($this->extraPermissions as $permission) {
             Permission::firstOrCreate([
-                'name' => $permission
+                'name' => $permission,
             ]);
         }
 
-        // Create default role
-        $role = Role::firstOrCreate([
-            'name' => $this->defaultRole
+        // Super Admin role: holds every permission. This is the main admin's
+        // role and is deliberately NOT used as the registration default.
+        $superAdmin = Role::firstOrCreate([
+            'name' => $this->superAdminRole,
         ]);
+        $superAdmin->syncPermissions(Permission::all()->pluck('name')->toArray());
+
+        // New registrants must not be granted a role automatically: leave the
+        // default role unset so they stay pending until an admin assigns them a
+        // role/package (see UserResource). Granting the all-permission role by
+        // default would let anyone self-register into a full admin account.
         $settings = app(GeneralSettings::class);
-        $settings->default_role = $role->id;
+        $settings->default_role = null;
         $settings->save();
 
-        // Add all permissions to default role
-        $role->syncPermissions(Permission::all()->pluck('name')->toArray());
-
-        // Assign default role to first database user
+        // Bootstrap: give the first user (the main admin) the Super Admin role.
         if ($user = User::first()) {
-            $user->syncRoles([$this->defaultRole]);
+            $user->syncRoles([$this->superAdminRole]);
         }
     }
 }

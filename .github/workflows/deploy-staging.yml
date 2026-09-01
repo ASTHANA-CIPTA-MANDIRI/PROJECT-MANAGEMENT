@@ -1,0 +1,85 @@
+name: Deploy (staging)
+
+# Auto-deploys to staging on every push to the main branch. Configure branch
+# protection so this only runs after the CI workflow passes.
+on:
+  push:
+    branches: [ main ]
+  workflow_dispatch:
+
+concurrency:
+  group: deploy-staging
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    name: Deploy to staging
+    runs-on: ubuntu-latest
+    # Uses the "staging" GitHub Environment: put the secrets below on it.
+    environment:
+      name: staging
+      url: ${{ vars.APP_URL }}
+
+    steps:
+      - name: Deploy over SSH
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.SSH_HOST }}
+          username: ${{ secrets.SSH_USER }}
+          key: ${{ secrets.SSH_KEY }}
+          port: ${{ secrets.SSH_PORT || 22 }}
+          # DEPLOY_PATH is the app root on the server. See docs/cicd.md.
+          #
+          # Mirrors the production script: the release steps run in a subshell
+          # so a failure part-way through restores the previous commit, and the
+          # EXIT trap lifts maintenance mode whatever happens. Staging takes no
+          # pre-deploy DB snapshot, so the database is never touched on the way
+          # back — see docs/cicd.md.
+          script: |
+            set -e
+            cd "${{ secrets.DEPLOY_PATH }}"
+            PREVIOUS_RELEASE="$(git rev-parse HEAD)"
+
+            trap 'php artisan up || true' EXIT
+
+            php artisan down --retry=15 || true
+
+            set +e
+            (
+              set -e
+              git fetch --all --prune
+              git reset --hard origin/main
+              composer install --no-dev --optimize-autoloader --no-interaction
+              npm ci
+              npm run build
+              php artisan migrate --force
+              php artisan config:cache
+              php artisan route:cache
+              php artisan view:cache
+              php artisan queue:restart
+            )
+            RELEASE_STATUS=$?
+
+            if [ "$RELEASE_STATUS" -eq 0 ]; then
+              echo "Staging berhasil diperbarui."
+              exit 0
+            fi
+
+            echo "Deploy staging gagal (exit $RELEASE_STATUS) — mengembalikan kode ke $PREVIOUS_RELEASE."
+            (
+              set -e
+              git reset --hard "$PREVIOUS_RELEASE"
+              composer install --no-dev --optimize-autoloader --no-interaction
+              npm ci
+              npm run build
+              php artisan config:cache
+              php artisan route:cache
+              php artisan view:cache
+              php artisan queue:restart
+            )
+            RESTORE_STATUS=$?
+
+            if [ "$RESTORE_STATUS" -ne 0 ]; then
+              echo "::error::Pengembalian otomatis juga gagal (exit $RESTORE_STATUS). Server perlu ditangani manual."
+            fi
+            exit 1

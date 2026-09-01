@@ -11,7 +11,7 @@ class ProjectFavorite extends Model
     use HasFactory;
 
     protected $fillable = [
-        'user_id', 'project_id'
+        'user_id', 'project_id',
     ];
 
     public function user(): BelongsTo

@@ -3,7 +3,6 @@
 namespace App\Filament\Resources;
 
 use App\Filament\Resources\TimesheetResource\Pages;
-use App\Filament\Resources\TimesheetResource\RelationManagers;
 use App\Models\Activity;
 use App\Models\TicketHour;
 use Filament\Forms;
@@ -43,6 +42,17 @@ class TimesheetResource extends Resource
         return auth()->user()->can('List timesheet data');
     }
 
+    /**
+     * TicketHourPolicy only lets a user view/update/delete their own logged
+     * hours, so the list must not surface anyone else's rows either.
+     */
+    public static function getEloquentQuery(): \Illuminate\Database\Eloquent\Builder
+    {
+        return parent::getEloquentQuery()
+            ->where('user_id', auth()->id())
+            ->with(['user', 'activity', 'ticket']);
+    }
+
     public static function form(Form $form): Form
     {
         return $form
@@ -54,7 +64,7 @@ class TimesheetResource extends Resource
                             ->searchable()
                             ->reactive()
                             ->options(function ($get, $set) {
-                                return Activity::all()->pluck('name', 'id')->toArray();
+                                return Activity::query()->pluck('name', 'id')->toArray();
                             }),
                         TextInput::make('value')
                             ->label(__('Time to log'))
@@ -64,7 +74,7 @@ class TimesheetResource extends Resource
                         Textarea::make('comment')
                             ->label(__('Comment'))
                             ->rows(3),
-                    ])
+                    ]),
             ]);
     }
 
@@ -75,7 +85,7 @@ class TimesheetResource extends Resource
                 Tables\Columns\TextColumn::make('user.name')
                     ->label(__('Owner'))
                     ->sortable()
-                    ->formatStateUsing(fn($record) => view('components.user-avatar', ['user' => $record->user]))
+                    ->formatStateUsing(fn ($record) => view('components.user-avatar', ['user' => $record->user]))
                     ->searchable(),
 
                 Tables\Columns\TextColumn::make('value')
