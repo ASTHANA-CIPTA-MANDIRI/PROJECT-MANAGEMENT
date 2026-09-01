@@ -5,6 +5,7 @@ namespace App\Providers;
 use App\Models\User;
 use App\Settings\GeneralSettings;
 use App\Support\BulkDeleteAuthorizer;
+use App\Support\BulkRestoreAuthorizer;
 use App\Support\UserCountsMemo;
 use DutchCodingCompany\FilamentSocialite\FilamentSocialite;
 use Filament\Facades\Filament;
@@ -117,6 +118,37 @@ class AppServiceProvider extends ServiceProvider
                         ->warning()
                         ->title(__('Some records were not deleted'))
                         ->body(__(':count record(s) you are not allowed to delete were skipped.', [
+                            'count' => $denied,
+                        ]))
+                        ->send();
+                }
+            });
+        });
+
+        // Every bulk restore — in every resource and relation manager, present
+        // and future — is filtered by the model's policy. Mirrors the
+        // DeleteBulkAction configuration above: RestoreBulkAction only checks
+        // `restoreAny()`, which can be more permissive than `restore()` (e.g.
+        // UserPolicy::restore refuses to restore a Super Admin account).
+        Tables\Actions\RestoreBulkAction::configureUsing(function (Tables\Actions\RestoreBulkAction $action): void {
+            $action->using(static function (EloquentCollection $records): void {
+                $denied = 0;
+
+                $records->each(function (Model $record) use (&$denied): void {
+                    if (! BulkRestoreAuthorizer::allows($record)) {
+                        $denied++;
+
+                        return;
+                    }
+
+                    $record->restore();
+                });
+
+                if ($denied > 0) {
+                    Notification::make()
+                        ->warning()
+                        ->title(__('Some records were not restored'))
+                        ->body(__(':count record(s) you are not allowed to restore were skipped.', [
                             'count' => $denied,
                         ]))
                         ->send();

@@ -412,6 +412,8 @@
     "If enabled, configured users can login via their social accounts.": "Jika diaktifkan, pengguna yang dikonfigurasi dapat masuk melalui akun sosial mereka.",
     "Some records were not deleted": "Sebagian data tidak dihapus",
     ":count record(s) you are not allowed to delete were skipped.": ":count data yang tidak boleh Anda hapus telah dilewati.",
+    "Some records were not restored": "Sebagian data tidak dipulihkan",
+    ":count record(s) you are not allowed to restore were skipped.": ":count data yang tidak boleh Anda pulihkan telah dilewati.",
     "Start sprint": "Mulai sprint",
     "Stop sprint": "Hentikan sprint",
     "If a ticket is already associated with an other sprint, it will be migrated to this sprint": "Jika sebuah Tugas sudah terkait dengan sprint lain, Tugas tersebut akan dipindahkan ke sprint ini",
