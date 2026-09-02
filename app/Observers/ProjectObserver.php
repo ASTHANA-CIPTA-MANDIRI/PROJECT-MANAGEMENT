@@ -3,6 +3,7 @@
 namespace App\Observers;
 
 use App\Models\Project;
+use App\Support\OrganizationContext;
 use Illuminate\Support\Facades\DB;
 
 /**
@@ -14,6 +15,25 @@ use Illuminate\Support\Facades\DB;
  */
 class ProjectObserver
 {
+    /**
+     * Stamp every newly created project with the creator's current
+     * Organization, so new data doesn't perpetuate the pre-Phase-3A
+     * "organization_id always null" escape hatch. The single touch point for
+     * every creation path (Filament, API, anything future) since they all
+     * funnel through this Eloquent event.
+     *
+     * Only fires for an authenticated creator with no organization_id
+     * already set — console/factory/seeder creation (no authenticated user)
+     * is left untouched, matching existing test expectations that a
+     * factory-created project has organization_id === null.
+     */
+    public function creating(Project $project): void
+    {
+        if ($project->organization_id === null && auth()->check()) {
+            $project->organization_id = OrganizationContext::current(auth()->user())?->id;
+        }
+    }
+
     /**
      * Kept low enough that a project with tens of thousands of tickets never
      * holds more than one chunk's worth of models in memory at once.

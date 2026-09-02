@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Support\OrganizationContext;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Casts\Attribute;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
@@ -65,21 +66,35 @@ class Project extends Model implements HasMedia
     }
 
     /**
-     * Projects the given user owns or is a member of. The single source of
-     * truth for "does this user have access to this project" query logic,
-     * usable standalone (Project::accessibleBy($user)) or nested inside a
-     * whereHas('project', ...) closure on a related model.
+     * Projects the given user owns or is a member of, within their current
+     * Organization context. The single source of truth for "does this user
+     * have access to this project" query logic, usable standalone
+     * (Project::accessibleBy($user)) or nested inside a whereHas('project', ...)
+     * closure on a related model.
+     *
+     * A project with no organization_id (not yet backfilled into Phase 2's
+     * Organization model) is left ungated by the organization check — it was
+     * never assigned to any tenant, so there is no "wrong org" to leak into;
+     * visibility stays governed purely by the owner/project_users rule below,
+     * exactly as it was before Organization existed (ADR 0001, "must not
+     * become an escape hatch" — nothing gains new visibility this way).
      */
     public function scopeAccessibleBy(Builder $query, User $user): Builder
     {
-        return $query->where(fn (Builder $query) => $query->where('owner_id', $user->id)
-            ->orWhereHas('users', fn (Builder $query) => $query->where('users.id', $user->id)));
+        return $query
+            ->where(fn (Builder $query) => $query->where('owner_id', $user->id)
+                ->orWhereHas('users', fn (Builder $query) => $query->where('users.id', $user->id)))
+            ->where(fn (Builder $query) => $query->whereNull('organization_id')
+                ->orWhere('organization_id', OrganizationContext::current($user)?->id));
     }
 
     /**
      * Whether this user may reach the project's contents: its owner, or one of
-     * its members. The single-instance twin of the accessibleBy() scope above —
-     * the policies ask this question about a model they already hold, where a
+     * its members, and — when the project belongs to an Organization — only
+     * while that Organization is the user's current context (see
+     * scopeAccessibleBy() above for why a null organization_id is exempt).
+     * The single-instance twin of the accessibleBy() scope above — the
+     * policies ask this question about a model they already hold, where a
      * query scope would have nothing to filter.
      *
      * exists(), not count(): the answer is a yes/no, and count() makes the
@@ -87,21 +102,36 @@ class Project extends Model implements HasMedia
      */
     public function isAccessibleBy(User $user): bool
     {
-        return $this->owner_id === $user->id
-            || $this->users()->whereKey($user->id)->exists();
+        return $this->isWithinOrganizationContext($user)
+            && ($this->owner_id === $user->id
+                || $this->users()->whereKey($user->id)->exists());
     }
 
     /**
      * Whether this user may change the project itself, and everything planned
-     * under it: its owner, or a member holding the managing project role.
+     * under it: its owner, or a member holding the managing project role —
+     * gated by the same Organization context as isAccessibleBy() above.
      */
     public function isManageableBy(User $user): bool
     {
-        return $this->owner_id === $user->id
-            || $this->users()
-                ->whereKey($user->id)
-                ->wherePivot('role', config('system.projects.affectations.roles.can_manage'))
-                ->exists();
+        return $this->isWithinOrganizationContext($user)
+            && ($this->owner_id === $user->id
+                || $this->users()
+                    ->whereKey($user->id)
+                    ->wherePivot('role', config('system.projects.affectations.roles.can_manage'))
+                    ->exists());
+    }
+
+    /**
+     * Whether the user's current Organization context (see
+     * App\Support\OrganizationContext) matches this project's organization —
+     * or the project has none, in which case there is nothing to match
+     * against and the check is skipped entirely (see scopeAccessibleBy()).
+     */
+    private function isWithinOrganizationContext(User $user): bool
+    {
+        return $this->organization_id === null
+            || $this->organization_id === OrganizationContext::current($user)?->id;
     }
 
     public function tickets(): HasMany
