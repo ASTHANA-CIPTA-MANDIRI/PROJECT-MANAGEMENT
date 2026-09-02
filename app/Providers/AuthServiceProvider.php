@@ -5,6 +5,7 @@ namespace App\Providers;
 use App\Models\Activity;
 use App\Models\Epic;
 use App\Models\Label;
+use App\Models\Organization;
 use App\Models\Permission;
 use App\Models\Project;
 use App\Models\ProjectStatus;
@@ -20,6 +21,7 @@ use App\Models\User;
 use App\Policies\ActivityPolicy;
 use App\Policies\EpicPolicy;
 use App\Policies\LabelPolicy;
+use App\Policies\OrganizationPolicy;
 use App\Policies\PermissionPolicy;
 use App\Policies\ProjectPolicy;
 use App\Policies\ProjectStatusPolicy;
@@ -53,6 +55,7 @@ class AuthServiceProvider extends ServiceProvider
         Activity::class => ActivityPolicy::class,
         Epic::class => EpicPolicy::class,
         Label::class => LabelPolicy::class,
+        Organization::class => OrganizationPolicy::class,
         Permission::class => PermissionPolicy::class,
         Project::class => ProjectPolicy::class,
         ProjectStatus::class => ProjectStatusPolicy::class,

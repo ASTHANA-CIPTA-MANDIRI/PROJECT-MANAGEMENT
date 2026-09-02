@@ -32,12 +32,6 @@ class PolicyRegistrationTest extends TestCase
         \App\Models\TicketActivity::class,
         \App\Models\TicketRelation::class,
         \App\Models\TicketSubscriber::class,
-        // Phase 2 (Organization Foundation) data model only — see
-        // docs/adr/0001-hybrid-multi-tenant-authorization.md. No Filament
-        // resource, controller, or route exposes it yet, so there is
-        // nothing to authorize against. Its Policy arrives with Organization
-        // Context / RBAC in a later phase; do not add one here.
-        \App\Models\Organization::class,
     ];
 
     /**

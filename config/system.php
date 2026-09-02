@@ -127,6 +127,37 @@ return [
 
     ],
 
+    // Organizations configuration (Phase 4 — Organization RBAC)
+    'organizations' => [
+
+        // Users affectations
+        'affectations' => [
+
+            // Users affectations roles
+            'roles' => [
+
+                // Default role
+                'default' => 'member',
+
+                // Roles that can manage the organization. A list, not a single
+                // value like projects.affectations.roles.can_manage: the ADR
+                // names three tiers (Owner/Admin/Member), and both of the top
+                // two manage - Project's single-role shape doesn't fit that.
+                'can_manage' => ['owner', 'admin'],
+
+                // Roles list
+                'list' => [
+                    'owner' => 'Owner',
+                    'admin' => 'Admin',
+                    'member' => 'Member',
+                ],
+
+            ],
+
+        ],
+
+    ],
+
     // Tickets configuration
     'tickets' => [
 
