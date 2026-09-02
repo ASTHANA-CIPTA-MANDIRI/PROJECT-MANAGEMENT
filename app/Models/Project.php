@@ -49,6 +49,11 @@ class Project extends Model implements HasMedia
         return $this->belongsTo(User::class, 'owner_id', 'id');
     }
 
+    public function organization(): BelongsTo
+    {
+        return $this->belongsTo(Organization::class, 'organization_id', 'id');
+    }
+
     public function status(): BelongsTo
     {
         return $this->belongsTo(ProjectStatus::class, 'status_id', 'id')->withTrashed();
