@@ -5,6 +5,7 @@ namespace App\Filament\Resources;
 use App\Filament\Resources\TimesheetResource\Pages;
 use App\Models\Activity;
 use App\Models\TicketHour;
+use App\Support\OrganizationContext;
 use Filament\Forms;
 use Filament\Forms\Components\Select;
 use Filament\Forms\Components\Textarea;
@@ -45,11 +46,24 @@ class TimesheetResource extends Resource
     /**
      * TicketHourPolicy only lets a user view/update/delete their own logged
      * hours, so the list must not surface anyone else's rows either.
+     *
+     * A user who belongs to more than one Organization could still have
+     * logged hours against a ticket whose project belongs to an
+     * Organization other than their current context - the same
+     * null-safe organization match Project::scopeAccessibleBy() applies,
+     * reused here rather than duplicated as new logic (see
+     * TicketHourPolicy::isWithinOrganizationContext(), which gates the
+     * same rows for direct/edit access).
      */
     public static function getEloquentQuery(): \Illuminate\Database\Eloquent\Builder
     {
+        $organizationId = OrganizationContext::current(auth()->user())?->id;
+
         return parent::getEloquentQuery()
             ->where('user_id', auth()->id())
+            ->whereHas('ticket.project', fn ($query) => $query
+                ->whereNull('organization_id')
+                ->orWhere('organization_id', $organizationId))
             ->with(['user', 'activity', 'ticket']);
     }
 

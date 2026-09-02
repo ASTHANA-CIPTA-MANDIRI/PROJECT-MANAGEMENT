@@ -54,7 +54,7 @@ class TicketForm
             ->searchable()
             ->reactive()
             ->afterStateUpdated(function ($get, $set) {
-                $project = Project::where('id', $get('project_id'))->first();
+                $project = self::accessibleProject($get('project_id'));
                 $set('status_id', self::defaultStatusId($project));
             })
             ->options(fn () => Project::accessibleBy(auth()->user())->pluck('name', 'id')->toArray())
@@ -69,7 +69,11 @@ class TicketForm
             ->searchable()
             ->reactive()
             ->options(function ($get, $set) {
-                return Epic::where('project_id', $get('project_id'))->pluck('name', 'id')->toArray();
+                $project = self::accessibleProject($get('project_id'));
+
+                return $project
+                    ? Epic::where('project_id', $project->id)->pluck('name', 'id')->toArray()
+                    : [];
             });
     }
 
@@ -123,12 +127,12 @@ class TicketForm
                     ->label(__('Ticket status'))
                     ->searchable()
                     ->options(function ($get) {
-                        $project = Project::where('id', $get('project_id'))->first();
+                        $project = self::accessibleProject($get('project_id'));
 
                         return self::statusesFor($project)->pluck('name', 'id')->toArray();
                     })
                     ->default(function ($get) {
-                        $project = Project::where('id', $get('project_id'))->first();
+                        $project = self::accessibleProject($get('project_id'));
 
                         return self::defaultStatusId($project);
                     })
@@ -248,14 +252,9 @@ class TicketForm
                             ->required()
                             ->searchable()
                             ->columnSpan(2)
-                            ->options(function ($livewire) {
-                                $query = Ticket::query();
-                                if ($livewire instanceof EditRecord && $livewire->record) {
-                                    $query->where('id', '<>', $livewire->record->id);
-                                }
-
-                                return $query->get()->pluck('name', 'id')->toArray();
-                            }),
+                            ->options(fn ($livewire) => self::relatedTicketOptions(
+                                $livewire instanceof EditRecord && $livewire->record ? $livewire->record->id : null
+                            )),
                     ]),
             ]);
     }
@@ -279,5 +278,50 @@ class TicketForm
     private static function defaultStatusId(?Project $project): ?int
     {
         return self::statusesFor($project)->firstWhere('is_default', true)?->id;
+    }
+
+    /**
+     * Options for the "related ticket" picker, scoped to tickets whose
+     * project the current user can access — previously an unscoped
+     * `Ticket::query()->get()`, which listed every ticket's name/id across
+     * the whole installation regardless of project or organization.
+     *
+     * @return array<int, string>
+     */
+    public static function relatedTicketOptions(?int $excludingTicketId = null): array
+    {
+        $query = Ticket::query()->whereHas('project', fn ($query) => $query->accessibleBy(auth()->user()));
+
+        if ($excludingTicketId) {
+            $query->where('id', '<>', $excludingTicketId);
+        }
+
+        return $query->get()->pluck('name', 'id')->toArray();
+    }
+
+    /**
+     * Resolve a reactive `project_id` field value into a Project, but only
+     * when the current user can actually access it. Every option list
+     * derived from the selected project (epics, statuses) reads this instead
+     * of looking the id up directly, so tampering with the Livewire-held
+     * project_id can't leak another tenant's epic/status names into the
+     * form's options.
+     */
+    private static function accessibleProject($projectId): ?Project
+    {
+        return $projectId ? Project::accessibleBy(auth()->user())->find($projectId) : null;
+    }
+
+    /**
+     * The write-side twin of accessibleProject(): called from
+     * CreateTicket/EditTicket right before the record is persisted, since
+     * project_id is Livewire state the client controls and the options list
+     * being scoped only stops the rendered dropdown from *offering* a
+     * foreign project - it doesn't stop a crafted request from submitting
+     * one directly.
+     */
+    public static function assertAccessibleProject(int $projectId): Project
+    {
+        return Project::accessibleBy(auth()->user())->findOrFail($projectId);
     }
 }

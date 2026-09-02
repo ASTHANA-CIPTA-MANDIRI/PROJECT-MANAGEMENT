@@ -4,6 +4,7 @@ namespace App\Policies;
 
 use App\Models\TicketHour;
 use App\Models\User;
+use App\Support\OrganizationContext;
 use Illuminate\Auth\Access\HandlesAuthorization;
 
 class TicketHourPolicy
@@ -27,7 +28,9 @@ class TicketHourPolicy
      */
     public function view(User $user, TicketHour $ticketHour)
     {
-        return $user->can('List timesheet data') && $ticketHour->user_id === $user->id;
+        return $user->can('List timesheet data')
+            && $ticketHour->user_id === $user->id
+            && $this->isWithinOrganizationContext($user, $ticketHour);
     }
 
     /**
@@ -47,7 +50,9 @@ class TicketHourPolicy
      */
     public function update(User $user, TicketHour $ticketHour)
     {
-        return $user->can('List timesheet data') && $ticketHour->user_id === $user->id;
+        return $user->can('List timesheet data')
+            && $ticketHour->user_id === $user->id
+            && $this->isWithinOrganizationContext($user, $ticketHour);
     }
 
     /**
@@ -57,7 +62,9 @@ class TicketHourPolicy
      */
     public function delete(User $user, TicketHour $ticketHour)
     {
-        return $user->can('List timesheet data') && $ticketHour->user_id === $user->id;
+        return $user->can('List timesheet data')
+            && $ticketHour->user_id === $user->id
+            && $this->isWithinOrganizationContext($user, $ticketHour);
     }
 
     /**
@@ -68,5 +75,23 @@ class TicketHourPolicy
     public function deleteAny(User $user)
     {
         return $user->can('List timesheet data');
+    }
+
+    /**
+     * TicketHour is always scoped to its own owner (own rows only, never a
+     * cross-user leak) - but a user who belongs to more than one
+     * Organization could still have logged hours against a ticket that
+     * belongs to an Organization other than their current context. This
+     * mirrors Project::isWithinOrganizationContext(): a row whose ticket's
+     * project has no organization at all is left ungated, exactly like a
+     * null-organization Project stays reachable by its existing
+     * owner/member.
+     */
+    private function isWithinOrganizationContext(User $user, TicketHour $ticketHour): bool
+    {
+        $organizationId = $ticketHour->ticket?->project?->organization_id;
+
+        return $organizationId === null
+            || $organizationId === OrganizationContext::current($user)?->id;
     }
 }

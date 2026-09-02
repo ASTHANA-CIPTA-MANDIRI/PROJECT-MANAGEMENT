@@ -4,6 +4,7 @@ namespace App\Policies;
 
 use App\Models\Ticket;
 use App\Models\User;
+use App\Support\OrganizationContext;
 use Illuminate\Auth\Access\HandlesAuthorization;
 
 class TicketPolicy
@@ -95,11 +96,30 @@ class TicketPolicy
      * owner, the person responsible for it, or has access to the project it
      * lives in. view/update/delete only ever differ in the permission they
      * pair this with, so it lives in one place.
+     *
+     * Being the ticket's owner/responsible still bypasses whether the user
+     * is currently a *project* member — unchanged, same as it always was —
+     * but it must not bypass the *organization* boundary Phase 3A added:
+     * Project::isAccessibleBy() already refuses a wrong-context project
+     * outright for its own owner, and a ticket cannot be more reachable
+     * than the project it lives in.
      */
     private function isInvolved(User $user, Ticket $ticket): bool
     {
+        if (! $this->isWithinOrganizationContext($user, $ticket)) {
+            return false;
+        }
+
         return $ticket->owner_id === $user->id
             || $ticket->responsible_id === $user->id
             || $ticket->project->isAccessibleBy($user);
+    }
+
+    private function isWithinOrganizationContext(User $user, Ticket $ticket): bool
+    {
+        $organizationId = $ticket->project?->organization_id;
+
+        return $organizationId === null
+            || $organizationId === OrganizationContext::current($user)?->id;
     }
 }
