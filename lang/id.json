@@ -76,6 +76,7 @@
     "Old status:": "Status lama:",
     "Old status: :oldStatus - New status: :newStatus": "Status lama: :oldStatus - Status baru: :newStatus",
     "Only default statuses are listed when no projects selected": "Hanya status default yang terdaftar ketika tidak ada proyek yang dipilih",
+    "Organization": "Organisasi",
     "Owner": "Pemilik",
     "Owner:": "Pemilik:",
     "Owners \/ Responsibles": "Pemilik \/ Penanggung Jawab",

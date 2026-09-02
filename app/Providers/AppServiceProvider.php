@@ -14,6 +14,7 @@ use Filament\Tables;
 use Illuminate\Database\Eloquent\Collection as EloquentCollection;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Foundation\Vite;
+use Illuminate\Support\Facades\Blade;
 use Illuminate\Support\Facades\Config;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
@@ -63,6 +64,10 @@ class AppServiceProvider extends ServiceProvider
 
         // Enforce a strong password policy on registration/profile/reset
         $this->configurePasswordPolicy();
+
+        // Render the Organization switcher (Phase 3C) near the top of every
+        // Filament panel page's sidebar.
+        $this->configureOrganizationSwitcher();
 
         // Monitor database queries in local development. Writes to a dedicated
         // storage/logs/query.log channel; never active in testing/production.
@@ -213,6 +218,20 @@ class AppServiceProvider extends ServiceProvider
         $this->app->booted(function () {
             FilamentBreezy::setPasswordRules([Password::defaults()]);
         });
+    }
+
+    /**
+     * A render hook (a Blade injection point), not Filament's Tenancy
+     * feature — ADR 0001 deliberately left Tenancy off, and this doesn't
+     * touch that decision. `sidebar.start` is the slot Filament's own
+     * sidebar template renders first, right before the navigation groups.
+     */
+    private function configureOrganizationSwitcher(): void
+    {
+        Filament::registerRenderHook(
+            'sidebar.start',
+            fn (): string => Blade::render("@livewire('organization-switcher')")
+        );
     }
 
     private function configureSocialiteProviders(): void
