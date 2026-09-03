@@ -51,4 +51,33 @@ class Organization extends Model
             ->wherePivotIn('role', config('system.organizations.affectations.roles.can_manage'))
             ->exists();
     }
+
+    /**
+     * This organization's role for the given user, or null when they are not
+     * a member at all — the single place both OrganizationPolicy's member-
+     * management abilities and this class's own helpers below read a
+     * member's role from, so a cross-organization target (someone who
+     * simply isn't in this organization) is unambiguous: null, never a
+     * stale/wrong role borrowed from elsewhere.
+     */
+    public function roleOf(User $user): ?string
+    {
+        return $this->users()->whereKey($user->id)->first()?->pivot->role;
+    }
+
+    public function isOwnedBy(User $user): bool
+    {
+        return $this->roleOf($user) === 'owner';
+    }
+
+    /**
+     * How many Owners this organization currently has. The sole Owner can
+     * never be demoted or removed (Phase 5's Owner protection rule) — this
+     * is the single count both OrganizationPolicy::updateMemberRole() and
+     * ::removeMember() check before allowing either.
+     */
+    public function ownerCount(): int
+    {
+        return $this->users()->wherePivot('role', 'owner')->count();
+    }
 }

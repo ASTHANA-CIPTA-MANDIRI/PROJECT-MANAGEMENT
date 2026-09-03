@@ -46,6 +46,11 @@ parameters:
 			path: app/Filament/Pages/Kanban.php
 
 		-
+			message: "#^Access to an undefined property App\\\\Filament\\\\Pages\\\\OrganizationSettings\\:\\:\\$form\\.$#"
+			count: 2
+			path: app/Filament/Pages/OrganizationSettings.php
+
+		-
 			message: "#^Access to an undefined property App\\\\Models\\\\Project\\:\\:\\$currentSprint\\.$#"
 			count: 2
 			path: app/Filament/Pages/Kanban.php
@@ -299,6 +304,11 @@ parameters:
 			message: "#^Parameter \\#1 \\$user of method App\\\\Listeners\\\\SocialRegistration\\:\\:assignDefaultRole\\(\\) expects App\\\\Models\\\\User, Illuminate\\\\Database\\\\Eloquent\\\\Model\\|null given\\.$#"
 			count: 1
 			path: app/Listeners/SocialRegistration.php
+
+		-
+			message: "#^Access to an undefined property App\\\\Models\\\\User\\:\\:\\$pivot\\.$#"
+			count: 1
+			path: app/Models/Organization.php
 
 		-
 			message: "#^Access to an undefined property App\\\\Models\\\\Project\\:\\:\\$contributors\\.$#"

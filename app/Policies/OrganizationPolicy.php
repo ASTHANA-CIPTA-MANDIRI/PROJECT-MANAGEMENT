@@ -39,4 +39,68 @@ class OrganizationPolicy
     {
         return $organization->isManageableBy($user);
     }
+
+    /**
+     * Phase 5 — Organization Management. $role is Livewire/Filament state
+     * the client controls, never trusted at face value: it must be one of
+     * the app's known Organization roles before anything else is even
+     * evaluated, exactly the lesson TicketForm's Phase 3B fix already
+     * applied to a client-supplied project_id.
+     *
+     * An Admin may change a Member's or another Admin's role, but never an
+     * Owner's — and never promote anyone *to* Owner — only an Owner may
+     * touch Owner status at all. The organization's sole Owner can never be
+     * demoted by anyone, Owner included, since that would leave the
+     * organization without anyone who can manage it.
+     */
+    public function updateMemberRole(User $user, Organization $organization, User $target, string $role): bool
+    {
+        if (! array_key_exists($role, config('system.organizations.affectations.roles.list'))) {
+            return false;
+        }
+
+        if (! $organization->isManageableBy($user)) {
+            return false;
+        }
+
+        $targetCurrentRole = $organization->roleOf($target);
+
+        if ($targetCurrentRole === null) {
+            return false;
+        }
+
+        if (($targetCurrentRole === 'owner' || $role === 'owner') && ! $organization->isOwnedBy($user)) {
+            return false;
+        }
+
+        if ($targetCurrentRole === 'owner' && $role !== 'owner' && $organization->ownerCount() <= 1) {
+            return false;
+        }
+
+        return true;
+    }
+
+    /**
+     * An Admin may remove a Member or another Admin, but never an Owner.
+     * The sole Owner can never be removed by anyone — the organization must
+     * always keep at least one Owner able to manage it.
+     */
+    public function removeMember(User $user, Organization $organization, User $target): bool
+    {
+        if (! $organization->isManageableBy($user)) {
+            return false;
+        }
+
+        $targetCurrentRole = $organization->roleOf($target);
+
+        if ($targetCurrentRole === null) {
+            return false;
+        }
+
+        if ($targetCurrentRole === 'owner' && (! $organization->isOwnedBy($user) || $organization->ownerCount() <= 1)) {
+            return false;
+        }
+
+        return true;
+    }
 }
