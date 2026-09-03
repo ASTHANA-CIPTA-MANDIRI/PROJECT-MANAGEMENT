@@ -5,7 +5,8 @@ namespace App\Filament\Pages;
 use App\Models\Organization;
 use App\Models\User;
 use App\Support\OrganizationContext;
-use Filament\Forms\Components\Card;
+use Filament\Forms\Components\Placeholder;
+use Filament\Forms\Components\Section;
 use Filament\Forms\Components\Select;
 use Filament\Forms\Components\TextInput;
 use Filament\Forms\Concerns\InteractsWithForms;
@@ -85,7 +86,7 @@ class OrganizationSettings extends AuthorizedPage implements HasForms, HasTable
 
     protected function getHeading(): string|Htmlable
     {
-        return $this->organization()->name;
+        return __('Organization settings');
     }
 
     // ------------------------------------------------------------- settings
@@ -93,7 +94,7 @@ class OrganizationSettings extends AuthorizedPage implements HasForms, HasTable
     protected function getFormSchema(): array
     {
         return [
-            Card::make()
+            Section::make(__('Organization information'))
                 ->schema([
                     TextInput::make('name')
                         ->label(__('Organization name'))
@@ -120,11 +121,63 @@ class OrganizationSettings extends AuthorizedPage implements HasForms, HasTable
             ->send();
     }
 
+    /**
+     * Public on purpose: the Blade view reads this to decide whether to
+     * show the Save button at all — a UX nicety only. save() itself still
+     * authorizes independently, so hiding the button here changes nothing
+     * about what a crafted request can or cannot do.
+     */
+    public function canManageOrganization(): bool
+    {
+        return $this->organization()->isManageableBy(auth()->user());
+    }
+
     // -------------------------------------------------------------- members
 
+    /**
+     * Filament's table pipeline requires a plain Builder (not a Relation),
+     * which means BelongsToMany::get()'s own pivot-hydration step
+     * (Illuminate\Database\Eloquent\Relations\BelongsToMany::hydratePivotRelation())
+     * never runs here — $record->pivot would silently be empty. Rather than
+     * fight that, the role is selected explicitly under its own name
+     * (member_role) and read via that, and every other place that needs a
+     * row's role calls Organization::roleOf() (which does use the real
+     * relation and is unaffected by this) instead of $record->pivot. This
+     * was Phase 5's actual bug: the "Role" badge column had nothing to read.
+     */
     protected function getTableQuery(): Builder
     {
-        return $this->organization()->users()->getQuery();
+        // select('users.*') rather than the relation's default bare '*':
+        // the join means an unqualified '*' collides users.id with
+        // organization_users.id, and the ambiguous result silently broke
+        // record identification (Filament's getTableRecordKey() came back
+        // null) once a second select was added alongside it.
+        return $this->organization()->users()
+            ->getQuery()
+            ->select('users.*')
+            ->addSelect('organization_users.role as member_role');
+    }
+
+    protected function getTableHeading(): string|Htmlable|null
+    {
+        return __('Organization members');
+    }
+
+    protected function getTableHeaderActions(): array
+    {
+        return [
+            // No invitation/add-member flow exists anywhere in this app yet
+            // (no email/token infrastructure) - Step 9 explicitly forbids
+            // building one just for this page. A disabled placeholder keeps
+            // the target layout without pretending the feature works;
+            // wiring it up is Future Phase.
+            Tables\Actions\Action::make('addMember')
+                ->label(__('Add member'))
+                ->icon('heroicon-o-plus')
+                ->disabled()
+                ->tooltip(__('Coming soon'))
+                ->visible(fn () => $this->organization()->isManageableBy(auth()->user())),
+        ];
     }
 
     protected function getTableColumns(): array
@@ -139,9 +192,17 @@ class OrganizationSettings extends AuthorizedPage implements HasForms, HasTable
                 ->label(__('Email'))
                 ->searchable(),
 
-            Tables\Columns\BadgeColumn::make('pivot.role')
+            Tables\Columns\BadgeColumn::make('member_role')
                 ->label(__('Role'))
                 ->enum(config('system.organizations.affectations.roles.list'))
+                ->colors(config('system.organizations.affectations.roles.colors'))
+                ->tooltip(function (User $record) {
+                    $organization = $this->organization();
+
+                    return $organization->roleOf($record) === 'owner' && $organization->ownerCount() <= 1
+                        ? __('Sole Owner — cannot be removed or demoted')
+                        : null;
+                })
                 ->searchable()
                 ->sortable(),
         ];
@@ -153,13 +214,38 @@ class OrganizationSettings extends AuthorizedPage implements HasForms, HasTable
             Tables\Actions\Action::make('changeRole')
                 ->label(__('Change role'))
                 ->icon('heroicon-o-pencil')
+                ->modalHeading(__('Change member role'))
+                // A target that is an Owner can only ever be touched by
+                // another Owner (OrganizationPolicy::updateMemberRole) -
+                // excluded here too so the modal never opens onto a form
+                // with zero valid options for an Admin actor.
                 ->visible(fn (User $record) => $this->organization()->isManageableBy(auth()->user())
-                    && $record->id !== auth()->id())
+                    && $record->id !== auth()->id()
+                    && ($this->organization()->roleOf($record) !== 'owner' || $this->organization()->isOwnedBy(auth()->user())))
                 ->form([
+                    Placeholder::make('target_name')
+                        ->label(__('User full name'))
+                        ->content(fn (User $record) => $record->name),
+                    Placeholder::make('target_email')
+                        ->label(__('Email'))
+                        ->content(fn (User $record) => $record->email),
                     Select::make('role')
                         ->label(__('Role'))
                         ->required()
-                        ->options(fn () => config('system.organizations.affectations.roles.list'))
+                        // Reuses the exact same Policy method the action
+                        // itself enforces below - a role this actor could
+                        // not actually set for this target (e.g. demoting
+                        // the sole Owner) never even appears as an option,
+                        // rather than duplicating that logic here.
+                        ->options(function (User $record) {
+                            $organization = $this->organization();
+                            $actor = auth()->user();
+
+                            return collect(config('system.organizations.affectations.roles.list'))
+                                ->filter(fn ($label, $role) => Gate::forUser($actor)
+                                    ->allows('updateMemberRole', [$organization, $record, $role]))
+                                ->all();
+                        })
                         ->default(fn (User $record) => $this->organization()->roleOf($record)),
                 ])
                 ->action(function (User $record, array $data): void {
@@ -185,8 +271,18 @@ class OrganizationSettings extends AuthorizedPage implements HasForms, HasTable
                 ->icon('heroicon-o-trash')
                 ->color('danger')
                 ->requiresConfirmation()
-                ->visible(fn (User $record) => $this->organization()->isManageableBy(auth()->user())
-                    && $record->id !== auth()->id())
+                ->modalHeading(__('Remove member?'))
+                ->modalSubheading(fn (User $record) => __('Are you sure you want to remove :name from :organization?', [
+                    'name' => $record->name,
+                    'organization' => $this->organization()->name,
+                ]))
+                ->modalButton(__('Remove'))
+                // Exact reuse of the real Policy check (not just the coarse
+                // "can manage" test): a target that removeMember() would
+                // refuse (the sole Owner, or an Owner acted on by an Admin)
+                // never shows a button that would only fail on click.
+                ->visible(fn (User $record) => $record->id !== auth()->id()
+                    && Gate::forUser(auth()->user())->allows('removeMember', [$this->organization(), $record]))
                 ->action(function (User $record): void {
                     $organization = $this->organization();
 

@@ -7,6 +7,7 @@ use App\Models\Organization;
 use App\Models\Project;
 use App\Models\Role;
 use App\Models\User;
+use App\Support\OrganizationContext;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Gate;
 use Livewire\Livewire;
@@ -319,7 +320,21 @@ class OrganizationManagementTest extends TestCase
         ]);
     }
 
-    public function test_removing_the_sole_owner_via_the_ui_action_is_denied(): void
+    /**
+     * removeMember's ->visible() is now an exact reuse of
+     * OrganizationPolicy::removeMember() (Phase 5.1), so Filament hides the
+     * button outright rather than only failing on click — Filament's own
+     * test harness correctly refuses to call an action that isn't shown, so
+     * this asserts the hidden state directly. "Manual invocation still
+     * denied by the Policy even when the button IS shown" is proven
+     * elsewhere for the equivalent changeRole case
+     * (test_an_admin_promoting_a_member_to_owner_via_the_real_action_is_denied),
+     * and for removeMember directly via Gate::forUser() in
+     * test_the_sole_owner_cannot_be_removed_by_anyone /
+     * test_admin_cannot_remove_an_owner above — the Policy itself is what's
+     * authoritative, not this UI-level check.
+     */
+    public function test_the_remove_action_is_hidden_for_the_sole_owner(): void
     {
         $organization = Organization::factory()->create();
         $soleOwner = User::factory()->create();
@@ -329,8 +344,7 @@ class OrganizationManagementTest extends TestCase
         $this->actingAs($admin);
 
         Livewire::test(OrganizationSettings::class)
-            ->callTableAction('removeMember', $soleOwner)
-            ->assertForbidden();
+            ->assertTableActionHidden('removeMember', $soleOwner);
 
         $this->assertTrue($organization->fresh()->isAccessibleBy($soleOwner));
     }
@@ -341,5 +355,62 @@ class OrganizationManagementTest extends TestCase
         $this->actingAs($stranger);
 
         Livewire::test(OrganizationSettings::class)->assertNotFound();
+    }
+
+    // ------------------------------------------------------- Phase 5.1: UI polish
+
+    public function test_role_badges_display_the_actual_role_names(): void
+    {
+        $organization = Organization::factory()->create();
+        $owner = User::factory()->create();
+        $admin = User::factory()->create();
+        $member = User::factory()->create();
+        $this->attach($organization, $owner, 'owner');
+        $this->attach($organization, $admin, 'admin');
+        $this->attach($organization, $member, 'member');
+        $this->actingAs($owner);
+
+        Livewire::test(OrganizationSettings::class)
+            ->assertSee('Owner')
+            ->assertSee('Admin')
+            ->assertSee('Member');
+    }
+
+    public function test_owner_sees_manage_actions_for_other_members(): void
+    {
+        $organization = Organization::factory()->create();
+        $owner = User::factory()->create();
+        $member = User::factory()->create();
+        $this->attach($organization, $owner, 'owner');
+        $this->attach($organization, $member, 'member');
+        $this->actingAs($owner);
+
+        Livewire::test(OrganizationSettings::class)
+            ->assertTableActionVisible('changeRole', $member)
+            ->assertTableActionVisible('removeMember', $member);
+    }
+
+    public function test_organization_context_determines_the_visible_member_list(): void
+    {
+        $alpha = Organization::factory()->create();
+        $beta = Organization::factory()->create();
+        $user = User::factory()->create();
+        $alphaOnlyMember = User::factory()->create(['name' => 'Alpha Only Person']);
+        $betaOnlyMember = User::factory()->create(['name' => 'Beta Only Person']);
+        $this->attach($alpha, $user, 'owner');
+        $this->attach($beta, $user, 'owner');
+        $this->attach($alpha, $alphaOnlyMember, 'member');
+        $this->attach($beta, $betaOnlyMember, 'member');
+        $this->actingAs($user);
+
+        OrganizationContext::switch($user, $alpha->id);
+        Livewire::test(OrganizationSettings::class)
+            ->assertCanSeeTableRecords([$user, $alphaOnlyMember])
+            ->assertCanNotSeeTableRecords([$betaOnlyMember]);
+
+        OrganizationContext::switch($user, $beta->id);
+        Livewire::test(OrganizationSettings::class)
+            ->assertCanSeeTableRecords([$user, $betaOnlyMember])
+            ->assertCanNotSeeTableRecords([$alphaOnlyMember]);
     }
 }

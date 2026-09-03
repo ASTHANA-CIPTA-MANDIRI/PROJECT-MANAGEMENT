@@ -4,9 +4,11 @@
         <form wire:submit.prevent="save">
             {{ $this->form }}
 
-            <x-filament::button type="submit" class="mt-4">
-                {{ __('Save') }}
-            </x-filament::button>
+            @if ($this->canManageOrganization())
+                <x-filament::button type="submit" class="mt-4">
+                    {{ __('Save changes') }}
+                </x-filament::button>
+            @endif
         </form>
 
         {{ $this->table }}

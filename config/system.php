@@ -152,6 +152,13 @@ return [
                     'member' => 'Member',
                 ],
 
+                // Roles colors
+                'colors' => [
+                    'success' => 'owner',
+                    'warning' => 'admin',
+                    'secondary' => 'member',
+                ],
+
             ],
 
         ],
