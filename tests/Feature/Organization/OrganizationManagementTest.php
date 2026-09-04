@@ -413,4 +413,32 @@ class OrganizationManagementTest extends TestCase
             ->assertCanSeeTableRecords([$user, $betaOnlyMember])
             ->assertCanNotSeeTableRecords([$alphaOnlyMember]);
     }
+
+    // ------------------------------------------------- Phase 5.2 regression
+
+    /**
+     * Found while building Phase 5.2's CreateOrganization: this page never
+     * declared `public $data;`, so InteractsWithForms had nowhere to
+     * hydrate the form into across requests - the very first render worked,
+     * but any actual interaction with the "Organization name" field (typing
+     * into it is exactly the same wire:model update path a test's
+     * fillForm()/set() exercises) threw "Public property [$data] not
+     * found". The Save button was silently broken for every real user.
+     * Fixed by declaring the property, the same way Filament's own
+     * CreateRecord page does.
+     */
+    public function test_saving_the_organization_name_actually_persists(): void
+    {
+        $organization = Organization::factory()->create(['name' => 'Old Name']);
+        $owner = User::factory()->create();
+        $this->attach($organization, $owner, 'owner');
+        $this->actingAs($owner);
+
+        Livewire::test(OrganizationSettings::class)
+            ->fillForm(['name' => 'Renamed Organization'])
+            ->call('save')
+            ->assertHasNoFormErrors();
+
+        $this->assertSame('Renamed Organization', $organization->fresh()->name);
+    }
 }

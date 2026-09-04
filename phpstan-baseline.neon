@@ -36,6 +36,11 @@ parameters:
 			path: app/Filament/Pages/Board.php
 
 		-
+			message: "#^Access to an undefined property App\\\\Filament\\\\Pages\\\\CreateOrganization\\:\\:\\$form\\.$#"
+			count: 2
+			path: app/Filament/Pages/CreateOrganization.php
+
+		-
 			message: "#^Access to an undefined property App\\\\Filament\\\\Pages\\\\JiraImport\\:\\:\\$form\\.$#"
 			count: 1
 			path: app/Filament/Pages/JiraImport.php

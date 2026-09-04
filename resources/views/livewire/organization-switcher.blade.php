@@ -1,4 +1,4 @@
-<div class="px-6 pb-4">
+<div class="px-6 pb-4 flex flex-col gap-2">
     @if ($organizations->isEmpty())
         {{-- No organization membership at all: nothing to switch between. --}}
     @elseif ($organizations->count() === 1)
@@ -28,4 +28,13 @@
             </select>
         </div>
     @endif
+
+    {{-- Always offered, regardless of how many organizations the user
+         already belongs to (0, 1, or several) — Phase 5.2. --}}
+    <a
+        href="{{ route('filament.pages.create-organization') }}"
+        class="text-xs font-medium text-primary-600 hover:text-primary-500 dark:text-primary-400"
+    >
+        + {{ __('Create organization') }}
+    </a>
 </div>

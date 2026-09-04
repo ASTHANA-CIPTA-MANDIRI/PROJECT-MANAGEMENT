@@ -25,6 +25,20 @@ class OrganizationPolicy
         return true;
     }
 
+    /**
+     * Phase 5.2 — anyone who can reach the panel at all may create their
+     * own organization; there is no Spatie permission for this (same reason
+     * none of this Policy's other abilities have one) and no membership to
+     * check yet, since the organization doesn't exist until after this
+     * passes. Still a real Policy method — not a bypass — so
+     * CreateOrganization's create() action has a single, testable gate to
+     * call, the same as every other write in this app.
+     */
+    public function create(User $user): bool
+    {
+        return true;
+    }
+
     public function view(User $user, Organization $organization): bool
     {
         return $organization->isAccessibleBy($user);

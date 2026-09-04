@@ -39,6 +39,23 @@ class OrganizationSettings extends AuthorizedPage implements HasForms, HasTable
     use InteractsWithForms;
     use Tables\Concerns\InteractsWithTable;
 
+    /**
+     * Phase 5.2 fix (pre-existing since Phase 5): Livewire needs this
+     * declared as a real public property to hydrate the form across
+     * requests - Filament's own Resource pages declare the same
+     * (vendor/filament/filament/src/Resources/Pages/CreateRecord.php:24).
+     * Without it, InteractsWithForms's magic __get() only starts finding it
+     * once something else has already made it exist, which never happened
+     * here - the property never existed at all, so the very next Livewire
+     * request after the first render threw "Public property [$data] not
+     * found" the moment anything tried to update the name field. Confirmed
+     * this was silently broken in the real component (not just a test
+     * artifact): a plain `wire:model`-style property update goes through
+     * the exact same PerformDataBindingUpdates middleware a test's set()
+     * call does.
+     */
+    public $data;
+
     protected static ?string $navigationIcon = 'heroicon-o-office-building';
 
     protected static string $view = 'filament.pages.organization-settings';
