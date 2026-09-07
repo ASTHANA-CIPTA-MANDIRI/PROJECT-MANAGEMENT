@@ -95,6 +95,38 @@ class OrganizationPolicy
     }
 
     /**
+     * Phase 5.3A — adding a brand new membership (not updating an existing
+     * one). $role is client-controlled Livewire/Filament state, validated
+     * against the allow-list first — exactly the same rule
+     * updateMemberRole() applies to its own $role, so a request cannot
+     * smuggle in "super_admin"/"platform_admin"/anything not in
+     * config('system.organizations.affectations.roles.list').
+     *
+     * An Admin may add a Member or another Admin, but never an Owner — only
+     * an Owner may hand out the Owner role at all, mirroring
+     * updateMemberRole()'s "only an Owner touches Owner" rule for a
+     * brand-new row instead of an existing one. There is no target user's
+     * *current* role to check here (they are not a member yet, by
+     * definition of this being an add rather than an update).
+     */
+    public function addMember(User $user, Organization $organization, string $role): bool
+    {
+        if (! array_key_exists($role, config('system.organizations.affectations.roles.list'))) {
+            return false;
+        }
+
+        if (! $organization->isManageableBy($user)) {
+            return false;
+        }
+
+        if ($role === 'owner' && ! $organization->isOwnedBy($user)) {
+            return false;
+        }
+
+        return true;
+    }
+
+    /**
      * An Admin may remove a Member or another Admin, but never an Owner.
      * The sole Owner can never be removed by anyone — the organization must
      * always keep at least one Owner able to manage it.

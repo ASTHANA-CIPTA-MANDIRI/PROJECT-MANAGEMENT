@@ -16,7 +16,9 @@ use Filament\Tables;
 use Filament\Tables\Contracts\HasTable;
 use Illuminate\Contracts\Support\Htmlable;
 use Illuminate\Database\Eloquent\Builder;
+use Illuminate\Database\QueryException;
 use Illuminate\Support\Facades\Gate;
+use Illuminate\Validation\ValidationException;
 
 /**
  * Phase 5 — Organization Management. Deliberately NOT a Resource +
@@ -183,17 +185,120 @@ class OrganizationSettings extends AuthorizedPage implements HasForms, HasTable
     protected function getTableHeaderActions(): array
     {
         return [
-            // No invitation/add-member flow exists anywhere in this app yet
-            // (no email/token infrastructure) - Step 9 explicitly forbids
-            // building one just for this page. A disabled placeholder keeps
-            // the target layout without pretending the feature works;
-            // wiring it up is Future Phase.
+            // Phase 5.3A. Adding an EXISTING User, never an invitation (no
+            // email/token infrastructure exists or is added here) - the
+            // target is always resolved server-side from a submitted
+            // user_id, never trusted from the rendered search results
+            // alone.
             Tables\Actions\Action::make('addMember')
                 ->label(__('Add member'))
                 ->icon('heroicon-o-plus')
-                ->disabled()
-                ->tooltip(__('Coming soon'))
-                ->visible(fn () => $this->organization()->isManageableBy(auth()->user())),
+                ->modalHeading(__('Add member'))
+                ->visible(fn () => $this->organization()->isManageableBy(auth()->user()))
+                ->form([
+                    // True server-side search (getSearchResultsUsing), not a
+                    // preloaded options() array like UserOptions elsewhere in
+                    // this app - the candidate pool here is every User in the
+                    // platform, not a bounded project-contributor list, so
+                    // preloading all of them would not scale. Only id/name/
+                    // email ever leave the server - never password, tokens,
+                    // or any other column.
+                    Select::make('user_id')
+                        ->label(__('User'))
+                        ->required()
+                        ->searchable()
+                        ->getSearchResultsUsing(function (string $search) {
+                            $organization = $this->organization();
+
+                            return User::query()
+                                ->select(['id', 'name', 'email'])
+                                ->where(fn (Builder $query) => $query->where('name', 'like', "%{$search}%")
+                                    ->orWhere('email', 'like', "%{$search}%"))
+                                // Excludes only membership in THIS organization
+                                // - a User already belonging to a different
+                                // organization (or none at all) is still a
+                                // valid, selectable candidate.
+                                ->whereDoesntHave('organizations', fn (Builder $query) => $query->whereKey($organization->id))
+                                ->orderBy('name')
+                                ->limit(50)
+                                ->get()
+                                ->mapWithKeys(fn (User $user) => [$user->id => "{$user->name} ({$user->email})"]);
+                        })
+                        ->getOptionLabelUsing(function ($value) {
+                            $user = User::query()->select(['id', 'name', 'email'])->find($value);
+
+                            return $user ? "{$user->name} ({$user->email})" : null;
+                        }),
+                    Select::make('role')
+                        ->label(__('Role'))
+                        ->required()
+                        ->default(fn () => config('system.organizations.affectations.roles.default'))
+                        // Same reuse-the-Policy-to-build-options approach as
+                        // changeRole below: an Admin never even sees "Owner"
+                        // as a choice, rather than only being blocked from it
+                        // after submitting.
+                        ->options(function () {
+                            $organization = $this->organization();
+                            $actor = auth()->user();
+
+                            return collect(config('system.organizations.affectations.roles.list'))
+                                ->filter(fn ($label, $role) => Gate::forUser($actor)
+                                    ->allows('addMember', [$organization, $role]))
+                                ->all();
+                        }),
+                ])
+                ->action(function (array $data): void {
+                    $organization = $this->organization();
+                    $role = $data['role'];
+
+                    // The role in $data is client-controlled state - re-checked
+                    // against the allow-list, the actor's own role, and Owner
+                    // protection every time, never trusting the rendered
+                    // <select>'s options alone (same discipline as changeRole).
+                    Gate::authorize('addMember', [$organization, $role]);
+
+                    // The selected user is client-controlled state too - the
+                    // real User is resolved from the database by id, never
+                    // trusted as a name/email string, and default Eloquent
+                    // querying already excludes soft-deleted users (User uses
+                    // SoftDeletes) without any extra code here.
+                    $target = User::query()->find($data['user_id']);
+
+                    if ($target === null) {
+                        throw ValidationException::withMessages([
+                            'mountedTableActionData.user_id' => __('This user could not be found.'),
+                        ]);
+                    }
+
+                    if ($organization->isAccessibleBy($target)) {
+                        throw ValidationException::withMessages([
+                            'mountedTableActionData.user_id' => __('This user is already a member of this organization.'),
+                        ]);
+                    }
+
+                    try {
+                        $organization->users()->attach($target->id, ['role' => $role]);
+                    } catch (QueryException $exception) {
+                        // The unique(organization_id, user_id) index (present
+                        // since Phase 2) is the real backstop against a race
+                        // between two concurrent "add this user" requests -
+                        // the check above is a friendly fast path, this catch
+                        // is what actually closes the race, exactly like
+                        // CreateOrganization's duplicate-name handling.
+                        if ($exception->getCode() !== '23000') {
+                            throw $exception;
+                        }
+
+                        throw ValidationException::withMessages([
+                            'mountedTableActionData.user_id' => __('This user is already a member of this organization.'),
+                        ]);
+                    }
+
+                    Notification::make()
+                        ->title(__('Member added'))
+                        ->success()
+                        ->send();
+                }),
         ];
     }
 
