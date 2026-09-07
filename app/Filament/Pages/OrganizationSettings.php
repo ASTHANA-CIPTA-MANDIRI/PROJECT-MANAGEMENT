@@ -3,7 +3,9 @@
 namespace App\Filament\Pages;
 
 use App\Models\Organization;
+use App\Models\OrganizationInvitation;
 use App\Models\User;
+use App\Notifications\OrganizationInvitationCreated;
 use App\Support\OrganizationContext;
 use Filament\Forms\Components\Placeholder;
 use Filament\Forms\Components\Section;
@@ -16,8 +18,10 @@ use Filament\Tables;
 use Filament\Tables\Contracts\HasTable;
 use Illuminate\Contracts\Support\Htmlable;
 use Illuminate\Database\Eloquent\Builder;
+use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Database\QueryException;
 use Illuminate\Support\Facades\Gate;
+use Illuminate\Support\Facades\Notification as NotificationFacade;
 use Illuminate\Validation\ValidationException;
 
 /**
@@ -299,7 +303,145 @@ class OrganizationSettings extends AuthorizedPage implements HasForms, HasTable
                         ->success()
                         ->send();
                 }),
+
+            // Phase 5.4. Unlike addMember above, the recipient does not need
+            // to already have an account here - an invitation is addressed
+            // to an email, resolved to a real membership only later, by
+            // App\Http\Livewire\AcceptOrganizationInvitation, and only after
+            // that page independently re-verifies everything below (the
+            // invitation's own validity, and that the accepting identity
+            // matches the invited email) - this action's job ends at
+            // creating + mailing the invitation.
+            Tables\Actions\Action::make('inviteMember')
+                ->label(__('Invite user'))
+                ->icon('heroicon-o-mail')
+                ->modalHeading(__('Invite user'))
+                ->visible(fn () => $this->organization()->isManageableBy(auth()->user()))
+                ->form([
+                    TextInput::make('email')
+                        ->label(__('Email'))
+                        ->email()
+                        ->required()
+                        ->maxLength(255),
+                    Select::make('role')
+                        ->label(__('Role'))
+                        ->required()
+                        ->default(fn () => config('system.organizations.affectations.roles.default'))
+                        // Exact reuse of addMember's authority question: "is
+                        // this actor allowed to grant this role to a new
+                        // member of this organization" is the same question
+                        // whether the membership is created immediately
+                        // (addMember) or after an invitation is accepted -
+                        // no separate/duplicated authorization logic here.
+                        ->options(function () {
+                            $organization = $this->organization();
+                            $actor = auth()->user();
+
+                            return collect(config('system.organizations.affectations.roles.list'))
+                                ->filter(fn ($label, $role) => Gate::forUser($actor)
+                                    ->allows('addMember', [$organization, $role]))
+                                ->all();
+                        }),
+                ])
+                ->action(function (array $data): void {
+                    $organization = $this->organization();
+                    $role = $data['role'];
+
+                    Gate::authorize('addMember', [$organization, $role]);
+
+                    $email = trim((string) $data['email']);
+
+                    // Not an enumeration leak: the actor is already an
+                    // Owner/Admin of THIS organization asking about ITS OWN
+                    // membership/invitations, not an arbitrary requester
+                    // probing the platform (the leak this brief's "Email
+                    // Security" section actually warns against, which
+                    // applies to the accept side, not here).
+                    $existingMember = User::where('email', $email)->first();
+                    if ($existingMember !== null && $organization->isAccessibleBy($existingMember)) {
+                        throw ValidationException::withMessages([
+                            'mountedTableActionData.email' => __('This user is already a member of this organization.'),
+                        ]);
+                    }
+
+                    if ($organization->invitations()->pending()->where('email', $email)->exists()) {
+                        throw ValidationException::withMessages([
+                            'mountedTableActionData.email' => __('An invitation for this email is already pending.'),
+                        ]);
+                    }
+
+                    $plainToken = OrganizationInvitation::generateToken();
+
+                    $invitation = OrganizationInvitation::create([
+                        'organization_id' => $organization->id,
+                        'email' => $email,
+                        'role' => $role,
+                        'token_hash' => OrganizationInvitation::hashToken($plainToken),
+                        'expires_at' => now()->addDays(OrganizationInvitation::LIFETIME_DAYS),
+                        'created_by' => auth()->id(),
+                    ]);
+
+                    // Notification::route(), not $existingMember->notify():
+                    // the recipient may not have an account at all yet, and
+                    // even when they do, an invitation is addressed to the
+                    // email it names, never to whichever account currently
+                    // happens to hold that address.
+                    NotificationFacade::route('mail', $email)
+                        ->notify(new OrganizationInvitationCreated($invitation, $plainToken));
+
+                    Notification::make()
+                        ->title(__('Invitation sent'))
+                        ->success()
+                        ->send();
+                }),
         ];
+    }
+
+    /**
+     * Phase 5.4. Rendered as a plain Blade list (organization-settings.blade.php),
+     * not a second Filament table - a page built on InteractsWithTable only
+     * ever drives one table (the members list above), and a second,
+     * independent listing here does not need the sorting/searching/pagination
+     * machinery a full Filament table brings.
+     */
+    public function pendingInvitations(): Collection
+    {
+        return $this->organization()->invitations()
+            ->pending()
+            ->with('inviter')
+            ->latest()
+            ->get();
+    }
+
+    /**
+     * Cross-organization revocation is closed by construction, not just by
+     * the Gate check below: the lookup itself is scoped to
+     * $this->organization()->invitations() (the actor's OWN current
+     * organization), so an invitation id belonging to a different
+     * organization is never found here at all, regardless of what the
+     * Gate would have said about it.
+     */
+    public function revokeInvitation(int $invitationId): void
+    {
+        $organization = $this->organization();
+
+        Gate::authorize('revokeInvitation', $organization);
+
+        $invitation = $organization->invitations()->whereKey($invitationId)->first();
+
+        if ($invitation === null || ! $invitation->isPending()) {
+            return;
+        }
+
+        OrganizationInvitation::whereKey($invitation->id)
+            ->whereNull('accepted_at')
+            ->whereNull('revoked_at')
+            ->update(['revoked_at' => now()]);
+
+        Notification::make()
+            ->title(__('Invitation revoked'))
+            ->success()
+            ->send();
     }
 
     protected function getTableColumns(): array

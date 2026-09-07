@@ -21,12 +21,18 @@ class PolicyRegistrationTest extends TestCase
 {
     /**
      * Models with no policy of their own. Each is a pivot or child row that is
-     * only ever reached through a guarded parent (Project or Ticket), so its
-     * authorization lives in that parent's policy.
+     * only ever reached through a guarded parent (Project, Ticket, or —
+     * OrganizationInvitation, Phase 5.4 — Organization), so its authorization
+     * lives in that parent's policy: every mutation
+     * (App\Filament\Pages\OrganizationSettings's inviteMember/revokeInvitation
+     * actions) calls Gate::authorize() against OrganizationPolicy /
+     * Organization::isManageableBy(), never against OrganizationInvitation
+     * directly, and it is not exposed through any Filament Resource.
      *
      * @var array<int, string>
      */
     private const UNGUARDED_MODELS = [
+        \App\Models\OrganizationInvitation::class,
         \App\Models\ProjectFavorite::class,
         \App\Models\ProjectUser::class,
         \App\Models\TicketActivity::class,

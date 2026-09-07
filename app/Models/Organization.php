@@ -28,6 +28,16 @@ class Organization extends Model
     }
 
     /**
+     * Phase 5.4 — every invitation ever created for this organization,
+     * pending or not. The Organization Settings "Invitations" list filters
+     * this down with OrganizationInvitation::scopePending().
+     */
+    public function invitations(): HasMany
+    {
+        return $this->hasMany(OrganizationInvitation::class, 'organization_id', 'id');
+    }
+
+    /**
      * Whether this user is a member of the organization at all — the
      * single-instance twin of the membership check OrganizationContext
      * already performs, named to match Project::isAccessibleBy().

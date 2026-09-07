@@ -127,6 +127,20 @@ class OrganizationPolicy
     }
 
     /**
+     * Phase 5.4 — canceling a PENDING invitation. Any Owner/Admin of the
+     * invitation's own Organization may revoke it, regardless of which role
+     * it offers: unlike updateMemberRole()/addMember(), revoking can never
+     * create a new Owner or touch an existing membership at all — it only
+     * ever *removes* a future possibility, so there is no privilege to
+     * protect against here the way "only an Owner touches Owner" protects
+     * addMember()/updateMemberRole().
+     */
+    public function revokeInvitation(User $user, Organization $organization): bool
+    {
+        return $organization->isManageableBy($user);
+    }
+
+    /**
      * An Admin may remove a Member or another Admin, but never an Owner.
      * The sole Owner can never be removed by anyone — the organization must
      * always keep at least one Owner able to manage it.
