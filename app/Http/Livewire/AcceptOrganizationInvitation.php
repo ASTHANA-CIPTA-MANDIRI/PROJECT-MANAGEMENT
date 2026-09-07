@@ -185,6 +185,21 @@ class AcceptOrganizationInvitation extends Component
 
             $invitation->forceFill(['accepted_at' => now()])->save();
             $organization->users()->attach($user->id, ['role' => $invitation->role]);
+
+            // Phase 5.4.2: reaching this branch at all means this email had
+            // no account when the invitation was created (OrganizationSettings
+            // only ever creates an invitation for an email it could not
+            // find - see inviteNewRecipient()), so $user here is always the
+            // brand-new account the recipient just registered to accept it,
+            // never a pre-existing one whose own chosen name would be
+            // overwritten. A null name (an invitation created before this
+            // column existed, Phase 5.4.2's own backward-compatibility
+            // case) leaves whatever the recipient typed at registration
+            // untouched, exactly as before this phase.
+            if ($invitation->name !== null) {
+                $user->forceFill(['name' => $invitation->name])->save();
+            }
+
             $joined = true;
         });
 

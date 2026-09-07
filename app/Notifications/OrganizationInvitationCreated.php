@@ -55,7 +55,9 @@ class OrganizationInvitationCreated extends Notification implements ShouldQueue
 
         return (new MailMessage)
             ->subject(__('You have been invited to join :organization', ['organization' => $organizationName]))
-            ->greeting(__('Hello!'))
+            ->greeting($this->invitation->name !== null
+                ? __('Hello :name!', ['name' => $this->invitation->name])
+                : __('Hello!'))
             ->line(__('You have been invited to join :organization as :role.', [
                 'organization' => $organizationName,
                 'role' => $roleLabel,

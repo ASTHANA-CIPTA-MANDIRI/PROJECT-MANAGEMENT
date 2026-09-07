@@ -211,6 +211,16 @@ class OrganizationSettings extends AuthorizedPage implements HasForms, HasTable
                 ->modalHeading(__('Add member'))
                 ->visible(fn () => $this->organization()->isManageableBy(auth()->user()))
                 ->form([
+                    // Phase 5.4.2. Required for both branches below, but
+                    // only ever actually used for the new-recipient one
+                    // (stored on the invitation, later applied to the
+                    // brand-new account at acceptance) - an existing user's
+                    // own users.name is never touched by this value, no
+                    // matter what is typed here (see addExistingUser()).
+                    TextInput::make('name')
+                        ->label(__('Full name'))
+                        ->required()
+                        ->maxLength(255),
                     TextInput::make('email')
                         ->label(__('Email'))
                         ->email()
@@ -249,7 +259,14 @@ class OrganizationSettings extends AuthorizedPage implements HasForms, HasTable
                     // options alone.
                     Gate::authorize('addMember', [$organization, $role]);
 
+                    $name = trim((string) $data['name']);
                     $email = trim((string) $data['email']);
+
+                    if ($name === '') {
+                        throw ValidationException::withMessages([
+                            'mountedTableActionData.name' => __('The full name must not be blank.'),
+                        ]);
+                    }
 
                     // The default Eloquent query already excludes
                     // soft-deleted users (User uses SoftDeletes) without any
@@ -260,12 +277,14 @@ class OrganizationSettings extends AuthorizedPage implements HasForms, HasTable
                     $existingUser = User::where('email', $email)->first();
 
                     if ($existingUser !== null) {
+                        // $name is deliberately never passed here - see
+                        // addExistingUser()'s own docblock.
                         $this->addExistingUser($organization, $existingUser, $role);
 
                         return;
                     }
 
-                    $this->inviteNewRecipient($organization, $email, $role);
+                    $this->inviteNewRecipient($organization, $name, $email, $role);
                 }),
         ];
     }
@@ -275,6 +294,12 @@ class OrganizationSettings extends AuthorizedPage implements HasForms, HasTable
      * touched or created, notify by email. Split out from the action
      * closure above only for readability - both branches still run inside
      * the same authorized action.
+     *
+     * Phase 5.4.2: deliberately takes no $name parameter at all - whatever
+     * Owner/Admin typed in the "Full name" field is discarded for this
+     * branch, never written to $existingUser->name. An existing account's
+     * name belongs to that account, not to whoever happens to type
+     * something in this form.
      */
     private function addExistingUser(Organization $organization, User $existingUser, string $role): void
     {
@@ -316,8 +341,13 @@ class OrganizationSettings extends AuthorizedPage implements HasForms, HasTable
      * recipient creates their own account (and their own password) later,
      * through the ordinary, untouched registration form, then verifies
      * their email, then opens this same link again to accept.
+     *
+     * Phase 5.4.2: $name is carried on the invitation itself (never
+     * assumed, never re-derived) so App\Http\Livewire\AcceptOrganizationInvitation
+     * can apply it to the brand-new account at the moment membership is
+     * actually created - see that class for exactly when and why.
      */
-    private function inviteNewRecipient(Organization $organization, string $email, string $role): void
+    private function inviteNewRecipient(Organization $organization, string $name, string $email, string $role): void
     {
         if ($organization->invitations()->pending()->where('email', $email)->exists()) {
             throw ValidationException::withMessages([
@@ -329,6 +359,7 @@ class OrganizationSettings extends AuthorizedPage implements HasForms, HasTable
 
         $invitation = OrganizationInvitation::create([
             'organization_id' => $organization->id,
+            'name' => $name,
             'email' => $email,
             'role' => $role,
             'token_hash' => OrganizationInvitation::hashToken($plainToken),

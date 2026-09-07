@@ -18,11 +18,21 @@ class OrganizationInvitationFactory extends Factory
     {
         return [
             'organization_id' => Organization::factory(),
+            'name' => fake()->name(),
             'email' => fake()->unique()->safeEmail(),
             'role' => 'member',
             'token_hash' => OrganizationInvitation::hashToken(OrganizationInvitation::generateToken()),
             'expires_at' => Carbon::now()->addDays(OrganizationInvitation::LIFETIME_DAYS),
         ];
+    }
+
+    /**
+     * Phase 5.4.2 backward-compatibility case: an invitation created before
+     * the `name` column existed.
+     */
+    public function withoutName(): static
+    {
+        return $this->state(fn () => ['name' => null]);
     }
 
     public function expired(): static

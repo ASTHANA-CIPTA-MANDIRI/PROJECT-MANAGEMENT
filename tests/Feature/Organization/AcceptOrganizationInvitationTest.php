@@ -101,6 +101,62 @@ class AcceptOrganizationInvitationTest extends TestCase
         $this->assertNull($invitation->fresh()->accepted_at);
     }
 
+    // ----------------------------------------------------------- Phase 5.4.2: name
+
+    /**
+     * Reaching this branch means the email had no account when the
+     * invitation was created (OrganizationSettings only ever invites an
+     * email it could not find), so $user here is always the brand-new
+     * account just registered to accept it - invitation.name becomes
+     * users.name at the moment membership is actually created.
+     */
+    public function test_a_new_users_account_receives_the_invitations_name(): void
+    {
+        [$invitation, $token] = $this->invitationWithToken(['name' => 'Budi Santoso']);
+        $user = User::factory()->create(['email' => $invitation->email, 'name' => 'Placeholder Name']);
+        $this->actingAs($user);
+
+        Livewire::test(AcceptOrganizationInvitation::class, ['token' => $token])->call('accept');
+
+        $this->assertSame('Budi Santoso', $user->fresh()->name);
+    }
+
+    /**
+     * Backward compatibility (Phase 5.4.2): an invitation created before the
+     * `name` column existed has no name to apply at all - the accepting
+     * user's own name (whatever they typed at registration) is left
+     * completely untouched rather than being blanked out.
+     */
+    public function test_an_invitation_without_a_name_does_not_touch_the_users_name(): void
+    {
+        [$invitation, $token] = $this->invitationWithToken(['name' => null]);
+        $user = User::factory()->create(['email' => $invitation->email, 'name' => 'Self Chosen Name']);
+        $this->actingAs($user);
+
+        Livewire::test(AcceptOrganizationInvitation::class, ['token' => $token])->call('accept');
+
+        $this->assertSame('Self Chosen Name', $user->fresh()->name);
+        $this->assertSame('member', $invitation->organization->fresh()->roleOf($user->fresh()));
+    }
+
+    /**
+     * The name-overwrite only ever applies to the branch that actually
+     * creates a fresh membership - a user who is already a member gets
+     * their invitation consumed (Phase 5.4's existing behavior) without any
+     * of their account fields touched, name included.
+     */
+    public function test_an_already_existing_members_name_is_not_touched_by_accepting_again(): void
+    {
+        [$invitation, $token] = $this->invitationWithToken(['name' => 'Invitation Name']);
+        $user = User::factory()->create(['email' => $invitation->email, 'name' => 'Existing Member Name']);
+        $invitation->organization->users()->attach($user->id, ['role' => 'member']);
+        $this->actingAs($user);
+
+        Livewire::test(AcceptOrganizationInvitation::class, ['token' => $token])->call('accept');
+
+        $this->assertSame('Existing Member Name', $user->fresh()->name);
+    }
+
     // ------------------------------------------------------------- Phase 5.4.1: email verification
 
     /**

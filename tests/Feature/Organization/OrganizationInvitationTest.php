@@ -51,7 +51,7 @@ class OrganizationInvitationTest extends TestCase
         $this->actingAs($owner);
 
         Livewire::test(OrganizationSettings::class)
-            ->callTableAction('addMember', null, data: ['email' => 'invitee@example.test', 'role' => 'member'])
+            ->callTableAction('addMember', null, data: ['name' => 'Invitee Person', 'email' => 'invitee@example.test', 'role' => 'member'])
             ->assertHasNoTableActionErrors();
 
         $this->assertDatabaseHas('organization_invitations', [
@@ -72,7 +72,7 @@ class OrganizationInvitationTest extends TestCase
         $this->actingAs($owner);
 
         Livewire::test(OrganizationSettings::class)
-            ->callTableAction('addMember', null, data: ['email' => 'invitee@example.test', 'role' => 'admin'])
+            ->callTableAction('addMember', null, data: ['name' => 'Invitee Person', 'email' => 'invitee@example.test', 'role' => 'admin'])
             ->assertHasNoTableActionErrors();
 
         $this->assertDatabaseHas('organization_invitations', ['email' => 'invitee@example.test', 'role' => 'admin']);
@@ -86,7 +86,7 @@ class OrganizationInvitationTest extends TestCase
         $this->actingAs($owner);
 
         Livewire::test(OrganizationSettings::class)
-            ->callTableAction('addMember', null, data: ['email' => 'invitee@example.test', 'role' => 'owner'])
+            ->callTableAction('addMember', null, data: ['name' => 'Invitee Person', 'email' => 'invitee@example.test', 'role' => 'owner'])
             ->assertForbidden();
 
         $this->assertDatabaseMissing('organization_invitations', ['email' => 'invitee@example.test']);
@@ -103,7 +103,7 @@ class OrganizationInvitationTest extends TestCase
         $this->actingAs($admin);
 
         Livewire::test(OrganizationSettings::class)
-            ->callTableAction('addMember', null, data: ['email' => 'invitee@example.test', 'role' => 'member'])
+            ->callTableAction('addMember', null, data: ['name' => 'Invitee Person', 'email' => 'invitee@example.test', 'role' => 'member'])
             ->assertHasNoTableActionErrors();
     }
 
@@ -116,7 +116,7 @@ class OrganizationInvitationTest extends TestCase
         $this->actingAs($admin);
 
         Livewire::test(OrganizationSettings::class)
-            ->callTableAction('addMember', null, data: ['email' => 'invitee@example.test', 'role' => 'admin'])
+            ->callTableAction('addMember', null, data: ['name' => 'Invitee Person', 'email' => 'invitee@example.test', 'role' => 'admin'])
             ->assertHasNoTableActionErrors();
     }
 
@@ -130,7 +130,7 @@ class OrganizationInvitationTest extends TestCase
         $this->actingAs($admin);
 
         Livewire::test(OrganizationSettings::class)
-            ->callTableAction('addMember', null, data: ['email' => 'invitee@example.test', 'role' => 'owner'])
+            ->callTableAction('addMember', null, data: ['name' => 'Invitee Person', 'email' => 'invitee@example.test', 'role' => 'owner'])
             ->assertForbidden();
 
         $this->assertDatabaseMissing('organization_invitations', ['email' => 'invitee@example.test']);
@@ -174,7 +174,7 @@ class OrganizationInvitationTest extends TestCase
         $this->actingAs($owner);
 
         Livewire::test(OrganizationSettings::class)
-            ->callTableAction('addMember', null, data: ['email' => 'invitee@example.test', 'role' => 'super_admin'])
+            ->callTableAction('addMember', null, data: ['name' => 'Invitee Person', 'email' => 'invitee@example.test', 'role' => 'super_admin'])
             ->assertForbidden();
 
         $this->assertDatabaseMissing('organization_invitations', ['email' => 'invitee@example.test']);
@@ -200,6 +200,7 @@ class OrganizationInvitationTest extends TestCase
 
         Livewire::test(OrganizationSettings::class)
             ->callTableAction('addMember', null, data: [
+                'name' => 'Invitee Person',
                 'email' => 'invitee@example.test',
                 'role' => 'member',
                 'organization_id' => $organizationB->id,
@@ -228,7 +229,7 @@ class OrganizationInvitationTest extends TestCase
         $this->actingAs($owner);
 
         Livewire::test(OrganizationSettings::class)
-            ->callTableAction('addMember', null, data: ['email' => 'existing@example.test', 'role' => 'admin'])
+            ->callTableAction('addMember', null, data: ['name' => 'Invitee Person', 'email' => 'existing@example.test', 'role' => 'admin'])
             ->assertHasTableActionErrors(['email']);
 
         $this->assertDatabaseMissing('organization_invitations', ['email' => 'existing@example.test']);
@@ -243,14 +244,40 @@ class OrganizationInvitationTest extends TestCase
         $this->actingAs($owner);
 
         Livewire::test(OrganizationSettings::class)
-            ->callTableAction('addMember', null, data: ['email' => 'dup@example.test', 'role' => 'member'])
+            ->callTableAction('addMember', null, data: ['name' => 'Invitee Person', 'email' => 'dup@example.test', 'role' => 'member'])
             ->assertHasNoTableActionErrors();
 
         Livewire::test(OrganizationSettings::class)
-            ->callTableAction('addMember', null, data: ['email' => 'dup@example.test', 'role' => 'admin'])
+            ->callTableAction('addMember', null, data: ['name' => 'Invitee Person', 'email' => 'dup@example.test', 'role' => 'admin'])
             ->assertHasTableActionErrors(['email']);
 
         $this->assertSame(1, OrganizationInvitation::where('email', 'dup@example.test')->count());
+    }
+
+    // ---------------------------------------------------- Phase 5.4.2: name
+
+    public function test_the_invitation_stores_the_submitted_name(): void
+    {
+        Notification::fake();
+        $organization = Organization::factory()->create();
+        $owner = $this->panelUser();
+        $organization->users()->attach($owner->id, ['role' => 'owner']);
+        $this->actingAs($owner);
+
+        Livewire::test(OrganizationSettings::class)
+            ->callTableAction('addMember', null, data: [
+                'name' => 'Budi Santoso',
+                'email' => 'budi@example.test',
+                'role' => 'member',
+            ])
+            ->assertHasNoTableActionErrors();
+
+        $this->assertDatabaseHas('organization_invitations', [
+            'email' => 'budi@example.test',
+            'name' => 'Budi Santoso',
+            'organization_id' => $organization->id,
+            'role' => 'member',
+        ]);
     }
 
     // --------------------------------------------------------------- W, X

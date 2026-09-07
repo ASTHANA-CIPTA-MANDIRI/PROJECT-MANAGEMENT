@@ -23,6 +23,11 @@ use Illuminate\Support\Str;
  * PENDING = neither accepted_at nor revoked_at set, and not yet expired.
  * ACCEPTED/REVOKED/EXPIRED are all just different reasons isPending() is
  * false — see isPending()/isExpired()/isAccepted()/isRevoked() below.
+ *
+ * `name` (Phase 5.4.2) is nullable for backward compatibility with
+ * invitations created before this column existed — see
+ * App\Http\Livewire\AcceptOrganizationInvitation for what a null name
+ * means at acceptance time (nothing is overwritten).
  */
 class OrganizationInvitation extends Model
 {
@@ -30,6 +35,7 @@ class OrganizationInvitation extends Model
 
     protected $fillable = [
         'organization_id',
+        'name',
         'email',
         'role',
         'token_hash',

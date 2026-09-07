@@ -53,6 +53,7 @@
     "Filter": "Saring",
     "Filters": "Filter",
     "Full name": "Nama lengkap",
+    "The full name must not be blank.": "Nama lengkap tidak boleh kosong.",
     "General": "Umum",
     "Hello :name!": "Halo :name!",
     "If checked, this priority will be automatically affected to new tickets": "Jika dicentang, prioritas ini akan otomatis terpengaruh ke Tugas baru",
