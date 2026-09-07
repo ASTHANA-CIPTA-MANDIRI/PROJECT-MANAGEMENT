@@ -38,10 +38,11 @@ class AcceptOrganizationInvitation extends Component
     }
 
     /**
-     * One of: not_found, revoked, expired, accepted, wrong_identity, ready.
-     * The view renders one message/action per state — never more than one
-     * of these is true at a time by construction (isPending() already
-     * excludes accepted/revoked/expired from each other).
+     * One of: not_found, revoked, expired, accepted, wrong_identity,
+     * unverified, ready. The view renders one message/action per state —
+     * never more than one of these is true at a time by construction
+     * (isPending() already excludes accepted/revoked/expired from each
+     * other).
      */
     public function getStatusProperty(): string
     {
@@ -63,6 +64,16 @@ class AcceptOrganizationInvitation extends Component
 
         if (auth()->check() && ! $this->authenticatedEmailMatches()) {
             return 'wrong_identity';
+        }
+
+        // Phase 5.4.1: registration -> email verification -> accept, in
+        // that order, for a brand-new recipient too — this page is the one
+        // gap outside Filament's own panel middleware (which already
+        // requires 'verified' for everything else, config/filament.php)
+        // where an authenticated-but-unverified user could otherwise reach
+        // a mutating action.
+        if (auth()->check() && ! auth()->user()->hasVerifiedEmail()) {
+            return 'unverified';
         }
 
         return 'ready';
@@ -112,6 +123,16 @@ class AcceptOrganizationInvitation extends Component
         // enough — Bob holding Alice's link/token must never be able to
         // accept Alice's invitation just by being logged in as Bob.
         if (! $this->authenticatedEmailMatches()) {
+            abort(403);
+        }
+
+        // Server-side re-check, not just a hidden button: registration must
+        // be followed by real email verification before an invitation can
+        // turn into membership, exactly like every other mutating action in
+        // this app already requires (config/filament.php's 'verified'
+        // middleware) — this route is simply the one place outside that
+        // panel middleware group where the check has to be explicit.
+        if (! $user->hasVerifiedEmail()) {
             abort(403);
         }
 

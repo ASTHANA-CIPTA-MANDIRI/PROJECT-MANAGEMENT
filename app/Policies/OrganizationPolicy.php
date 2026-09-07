@@ -95,35 +95,32 @@ class OrganizationPolicy
     }
 
     /**
-     * Phase 5.3A — adding a brand new membership (not updating an existing
-     * one). $role is client-controlled Livewire/Filament state, validated
-     * against the allow-list first — exactly the same rule
-     * updateMemberRole() applies to its own $role, so a request cannot
-     * smuggle in "super_admin"/"platform_admin"/anything not in
-     * config('system.organizations.affectations.roles.list').
+     * Phase 5.3A, tightened by Phase 5.4.1 — adding a brand new membership,
+     * whether immediately (an existing User attached directly) or via an
+     * invitation accepted later (App\Http\Livewire\AcceptOrganizationInvitation)
+     * — the authority question is identical either way, so both paths share
+     * this one method rather than duplicating it.
      *
-     * An Admin may add a Member or another Admin, but never an Owner — only
-     * an Owner may hand out the Owner role at all, mirroring
-     * updateMemberRole()'s "only an Owner touches Owner" rule for a
-     * brand-new row instead of an existing one. There is no target user's
+     * $role is client-controlled Livewire/Filament state, checked against a
+     * hard-coded allow-list — deliberately NOT
+     * config('system.organizations.affectations.roles.list') (which still
+     * includes 'owner', a role this ability must never grant at all,
+     * regardless of the actor). Owner/admin can add a Member or an Admin;
+     * neither can add an Owner through this ability — Owner assignment is a
+     * separate, not-yet-built feature (ownership transfer), never a
+     * side-effect of onboarding a member. There is no target user's
      * *current* role to check here (they are not a member yet, by
-     * definition of this being an add rather than an update).
+     * definition of this being an add rather than an update — see
+     * updateMemberRole() for changing an existing member's role, which is
+     * unaffected by this restriction).
      */
     public function addMember(User $user, Organization $organization, string $role): bool
     {
-        if (! array_key_exists($role, config('system.organizations.affectations.roles.list'))) {
+        if (! in_array($role, ['admin', 'member'], true)) {
             return false;
         }
 
-        if (! $organization->isManageableBy($user)) {
-            return false;
-        }
-
-        if ($role === 'owner' && ! $organization->isOwnedBy($user)) {
-            return false;
-        }
-
-        return true;
+        return $organization->isManageableBy($user);
     }
 
     /**

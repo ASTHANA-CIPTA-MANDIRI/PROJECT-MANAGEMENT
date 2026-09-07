@@ -101,6 +101,47 @@ class AcceptOrganizationInvitationTest extends TestCase
         $this->assertNull($invitation->fresh()->accepted_at);
     }
 
+    // ------------------------------------------------------------- Phase 5.4.1: email verification
+
+    /**
+     * Registration -> email verification -> accept, in that order: an
+     * authenticated, identity-matched-but-unverified user is blocked from
+     * accepting, both in the status the view reads and server-side in
+     * accept() itself.
+     */
+    public function test_an_unverified_user_cannot_accept(): void
+    {
+        [$invitation, $token] = $this->invitationWithToken();
+        $user = User::factory()->unverified()->create(['email' => $invitation->email]);
+        $this->actingAs($user);
+
+        Livewire::test(AcceptOrganizationInvitation::class, ['token' => $token])
+            ->assertSet('status', 'unverified')
+            ->call('accept')
+            ->assertForbidden();
+
+        $this->assertFalse($invitation->organization->fresh()->isAccessibleBy($user));
+        $this->assertNull($invitation->fresh()->accepted_at);
+    }
+
+    public function test_a_user_can_accept_after_verifying_their_email(): void
+    {
+        [$invitation, $token] = $this->invitationWithToken();
+        $user = User::factory()->unverified()->create(['email' => $invitation->email]);
+        $this->actingAs($user);
+
+        Livewire::test(AcceptOrganizationInvitation::class, ['token' => $token])
+            ->assertSet('status', 'unverified');
+
+        $user->markEmailAsVerified();
+
+        Livewire::test(AcceptOrganizationInvitation::class, ['token' => $token])
+            ->assertSet('status', 'ready')
+            ->call('accept');
+
+        $this->assertSame('member', $invitation->organization->fresh()->roleOf($user->fresh()));
+    }
+
     // ------------------------------------------------------------------- P, Q
 
     public function test_the_correct_authenticated_email_can_accept_and_becomes_a_member(): void

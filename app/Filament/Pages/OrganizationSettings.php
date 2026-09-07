@@ -6,6 +6,7 @@ use App\Models\Organization;
 use App\Models\OrganizationInvitation;
 use App\Models\User;
 use App\Notifications\OrganizationInvitationCreated;
+use App\Notifications\OrganizationMemberAdded;
 use App\Support\OrganizationContext;
 use Filament\Forms\Components\Placeholder;
 use Filament\Forms\Components\Section;
@@ -186,136 +187,28 @@ class OrganizationSettings extends AuthorizedPage implements HasForms, HasTable
         return __('Organization members');
     }
 
+    /**
+     * Phase 5.4.1 — unifies what used to be two separate actions (Phase
+     * 5.3A's "Add member" by user_id search, Phase 5.4's "Invite user" by
+     * email) into the single "+ Tambah Anggota" control the product wants:
+     * Owner/Admin only ever supplies an email and a role, and the server
+     * decides which of the two paths applies — never the UI, and never by
+     * asking the actor to know the difference.
+     *
+     * Owner/Admin NEVER sets a password here, for either path: an existing
+     * User keeps their own password untouched (only a new organization_users
+     * row is written), and a brand-new User only ever gets one by going
+     * through the real, unmodified registration form themselves after
+     * opening the invitation link — this action never creates a User row at
+     * all in the new-recipient case.
+     */
     protected function getTableHeaderActions(): array
     {
         return [
-            // Phase 5.3A. Adding an EXISTING User, never an invitation (no
-            // email/token infrastructure exists or is added here) - the
-            // target is always resolved server-side from a submitted
-            // user_id, never trusted from the rendered search results
-            // alone.
             Tables\Actions\Action::make('addMember')
                 ->label(__('Add member'))
                 ->icon('heroicon-o-plus')
                 ->modalHeading(__('Add member'))
-                ->visible(fn () => $this->organization()->isManageableBy(auth()->user()))
-                ->form([
-                    // True server-side search (getSearchResultsUsing), not a
-                    // preloaded options() array like UserOptions elsewhere in
-                    // this app - the candidate pool here is every User in the
-                    // platform, not a bounded project-contributor list, so
-                    // preloading all of them would not scale. Only id/name/
-                    // email ever leave the server - never password, tokens,
-                    // or any other column.
-                    Select::make('user_id')
-                        ->label(__('User'))
-                        ->required()
-                        ->searchable()
-                        ->getSearchResultsUsing(function (string $search) {
-                            $organization = $this->organization();
-
-                            return User::query()
-                                ->select(['id', 'name', 'email'])
-                                ->where(fn (Builder $query) => $query->where('name', 'like', "%{$search}%")
-                                    ->orWhere('email', 'like', "%{$search}%"))
-                                // Excludes only membership in THIS organization
-                                // - a User already belonging to a different
-                                // organization (or none at all) is still a
-                                // valid, selectable candidate.
-                                ->whereDoesntHave('organizations', fn (Builder $query) => $query->whereKey($organization->id))
-                                ->orderBy('name')
-                                ->limit(50)
-                                ->get()
-                                ->mapWithKeys(fn (User $user) => [$user->id => "{$user->name} ({$user->email})"]);
-                        })
-                        ->getOptionLabelUsing(function ($value) {
-                            $user = User::query()->select(['id', 'name', 'email'])->find($value);
-
-                            return $user ? "{$user->name} ({$user->email})" : null;
-                        }),
-                    Select::make('role')
-                        ->label(__('Role'))
-                        ->required()
-                        ->default(fn () => config('system.organizations.affectations.roles.default'))
-                        // Same reuse-the-Policy-to-build-options approach as
-                        // changeRole below: an Admin never even sees "Owner"
-                        // as a choice, rather than only being blocked from it
-                        // after submitting.
-                        ->options(function () {
-                            $organization = $this->organization();
-                            $actor = auth()->user();
-
-                            return collect(config('system.organizations.affectations.roles.list'))
-                                ->filter(fn ($label, $role) => Gate::forUser($actor)
-                                    ->allows('addMember', [$organization, $role]))
-                                ->all();
-                        }),
-                ])
-                ->action(function (array $data): void {
-                    $organization = $this->organization();
-                    $role = $data['role'];
-
-                    // The role in $data is client-controlled state - re-checked
-                    // against the allow-list, the actor's own role, and Owner
-                    // protection every time, never trusting the rendered
-                    // <select>'s options alone (same discipline as changeRole).
-                    Gate::authorize('addMember', [$organization, $role]);
-
-                    // The selected user is client-controlled state too - the
-                    // real User is resolved from the database by id, never
-                    // trusted as a name/email string, and default Eloquent
-                    // querying already excludes soft-deleted users (User uses
-                    // SoftDeletes) without any extra code here.
-                    $target = User::query()->find($data['user_id']);
-
-                    if ($target === null) {
-                        throw ValidationException::withMessages([
-                            'mountedTableActionData.user_id' => __('This user could not be found.'),
-                        ]);
-                    }
-
-                    if ($organization->isAccessibleBy($target)) {
-                        throw ValidationException::withMessages([
-                            'mountedTableActionData.user_id' => __('This user is already a member of this organization.'),
-                        ]);
-                    }
-
-                    try {
-                        $organization->users()->attach($target->id, ['role' => $role]);
-                    } catch (QueryException $exception) {
-                        // The unique(organization_id, user_id) index (present
-                        // since Phase 2) is the real backstop against a race
-                        // between two concurrent "add this user" requests -
-                        // the check above is a friendly fast path, this catch
-                        // is what actually closes the race, exactly like
-                        // CreateOrganization's duplicate-name handling.
-                        if ($exception->getCode() !== '23000') {
-                            throw $exception;
-                        }
-
-                        throw ValidationException::withMessages([
-                            'mountedTableActionData.user_id' => __('This user is already a member of this organization.'),
-                        ]);
-                    }
-
-                    Notification::make()
-                        ->title(__('Member added'))
-                        ->success()
-                        ->send();
-                }),
-
-            // Phase 5.4. Unlike addMember above, the recipient does not need
-            // to already have an account here - an invitation is addressed
-            // to an email, resolved to a real membership only later, by
-            // App\Http\Livewire\AcceptOrganizationInvitation, and only after
-            // that page independently re-verifies everything below (the
-            // invitation's own validity, and that the accepting identity
-            // matches the invited email) - this action's job ends at
-            // creating + mailing the invitation.
-            Tables\Actions\Action::make('inviteMember')
-                ->label(__('Invite user'))
-                ->icon('heroicon-o-mail')
-                ->modalHeading(__('Invite user'))
                 ->visible(fn () => $this->organization()->isManageableBy(auth()->user()))
                 ->form([
                     TextInput::make('email')
@@ -327,17 +220,19 @@ class OrganizationSettings extends AuthorizedPage implements HasForms, HasTable
                         ->label(__('Role'))
                         ->required()
                         ->default(fn () => config('system.organizations.affectations.roles.default'))
-                        // Exact reuse of addMember's authority question: "is
-                        // this actor allowed to grant this role to a new
-                        // member of this organization" is the same question
-                        // whether the membership is created immediately
-                        // (addMember) or after an invitation is accepted -
-                        // no separate/duplicated authorization logic here.
+                        // Owner is never one of these two options, for
+                        // anyone - OrganizationPolicy::addMember() itself
+                        // rejects it unconditionally now (Phase 5.4.1),
+                        // ownership assignment is a distinct, not-yet-built
+                        // feature. ->only() reads the two labels from the
+                        // existing config rather than hard-coding them here
+                        // a second time.
                         ->options(function () {
                             $organization = $this->organization();
                             $actor = auth()->user();
 
                             return collect(config('system.organizations.affectations.roles.list'))
+                                ->only(['admin', 'member'])
                                 ->filter(fn ($label, $role) => Gate::forUser($actor)
                                     ->allows('addMember', [$organization, $role]))
                                 ->all();
@@ -347,54 +242,110 @@ class OrganizationSettings extends AuthorizedPage implements HasForms, HasTable
                     $organization = $this->organization();
                     $role = $data['role'];
 
+                    // The role in $data is client-controlled state -
+                    // re-checked against the allow-list (admin/member only,
+                    // never owner) and the actor's own manage authority
+                    // every time, never trusting the rendered <select>'s
+                    // options alone.
                     Gate::authorize('addMember', [$organization, $role]);
 
                     $email = trim((string) $data['email']);
 
-                    // Not an enumeration leak: the actor is already an
-                    // Owner/Admin of THIS organization asking about ITS OWN
-                    // membership/invitations, not an arbitrary requester
-                    // probing the platform (the leak this brief's "Email
-                    // Security" section actually warns against, which
-                    // applies to the accept side, not here).
-                    $existingMember = User::where('email', $email)->first();
-                    if ($existingMember !== null && $organization->isAccessibleBy($existingMember)) {
-                        throw ValidationException::withMessages([
-                            'mountedTableActionData.email' => __('This user is already a member of this organization.'),
-                        ]);
+                    // The default Eloquent query already excludes
+                    // soft-deleted users (User uses SoftDeletes) without any
+                    // extra code here - a soft-deleted account's email
+                    // resolves as "not found" below, exactly like a genuine
+                    // new recipient, rather than being silently restored or
+                    // attached.
+                    $existingUser = User::where('email', $email)->first();
+
+                    if ($existingUser !== null) {
+                        $this->addExistingUser($organization, $existingUser, $role);
+
+                        return;
                     }
 
-                    if ($organization->invitations()->pending()->where('email', $email)->exists()) {
-                        throw ValidationException::withMessages([
-                            'mountedTableActionData.email' => __('An invitation for this email is already pending.'),
-                        ]);
-                    }
-
-                    $plainToken = OrganizationInvitation::generateToken();
-
-                    $invitation = OrganizationInvitation::create([
-                        'organization_id' => $organization->id,
-                        'email' => $email,
-                        'role' => $role,
-                        'token_hash' => OrganizationInvitation::hashToken($plainToken),
-                        'expires_at' => now()->addDays(OrganizationInvitation::LIFETIME_DAYS),
-                        'created_by' => auth()->id(),
-                    ]);
-
-                    // Notification::route(), not $existingMember->notify():
-                    // the recipient may not have an account at all yet, and
-                    // even when they do, an invitation is addressed to the
-                    // email it names, never to whichever account currently
-                    // happens to hold that address.
-                    NotificationFacade::route('mail', $email)
-                        ->notify(new OrganizationInvitationCreated($invitation, $plainToken));
-
-                    Notification::make()
-                        ->title(__('Invitation sent'))
-                        ->success()
-                        ->send();
+                    $this->inviteNewRecipient($organization, $email, $role);
                 }),
         ];
+    }
+
+    /**
+     * The existing-user branch: attach immediately, no password of any kind
+     * touched or created, notify by email. Split out from the action
+     * closure above only for readability - both branches still run inside
+     * the same authorized action.
+     */
+    private function addExistingUser(Organization $organization, User $existingUser, string $role): void
+    {
+        if ($organization->isAccessibleBy($existingUser)) {
+            throw ValidationException::withMessages([
+                'mountedTableActionData.email' => __('This user is already a member of this organization.'),
+            ]);
+        }
+
+        try {
+            $organization->users()->attach($existingUser->id, ['role' => $role]);
+        } catch (QueryException $exception) {
+            // The unique(organization_id, user_id) index (present since
+            // Phase 2) is the real backstop against a race between two
+            // concurrent "add this user" requests - the check above is a
+            // friendly fast path, this catch is what actually closes the
+            // race, exactly like CreateOrganization's duplicate-name
+            // handling.
+            if ($exception->getCode() !== '23000') {
+                throw $exception;
+            }
+
+            throw ValidationException::withMessages([
+                'mountedTableActionData.email' => __('This user is already a member of this organization.'),
+            ]);
+        }
+
+        $existingUser->notify(new OrganizationMemberAdded($organization, $role));
+
+        Notification::make()
+            ->title(__('Member added'))
+            ->success()
+            ->send();
+    }
+
+    /**
+     * The new-recipient branch: no User row is ever created here - only an
+     * invitation, exactly Phase 5.4's existing, unmodified mechanism. The
+     * recipient creates their own account (and their own password) later,
+     * through the ordinary, untouched registration form, then verifies
+     * their email, then opens this same link again to accept.
+     */
+    private function inviteNewRecipient(Organization $organization, string $email, string $role): void
+    {
+        if ($organization->invitations()->pending()->where('email', $email)->exists()) {
+            throw ValidationException::withMessages([
+                'mountedTableActionData.email' => __('An invitation for this email is already pending.'),
+            ]);
+        }
+
+        $plainToken = OrganizationInvitation::generateToken();
+
+        $invitation = OrganizationInvitation::create([
+            'organization_id' => $organization->id,
+            'email' => $email,
+            'role' => $role,
+            'token_hash' => OrganizationInvitation::hashToken($plainToken),
+            'expires_at' => now()->addDays(OrganizationInvitation::LIFETIME_DAYS),
+            'created_by' => auth()->id(),
+        ]);
+
+        // Notification::route(), not a User::notify(): there is no User row
+        // for this recipient yet, by definition of reaching this branch at
+        // all.
+        NotificationFacade::route('mail', $email)
+            ->notify(new OrganizationInvitationCreated($invitation, $plainToken));
+
+        Notification::make()
+            ->title(__('Invitation sent'))
+            ->success()
+            ->send();
     }
 
     /**

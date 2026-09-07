@@ -20,6 +20,15 @@
                 'email' => $invitation->email,
             ]) }}
         </p>
+    @elseif ($this->status === 'unverified')
+        <div class="flex flex-col items-center gap-4 text-center">
+            <p class="text-sm">
+                {{ __('Please verify your email address before accepting this invitation.') }}
+            </p>
+            <x-filament::button tag="a" href="{{ route('verification.notice') }}" class="w-full">
+                {{ __('Verify email') }}
+            </x-filament::button>
+        </div>
     @else
         <div class="flex flex-col items-center gap-4 text-center">
             <p class="text-sm">

@@ -496,5 +496,10 @@
     "Accept invitation": "Terima undangan",
     "This invitation is no longer valid.": "Undangan ini sudah tidak berlaku lagi.",
     "You have joined :organization.": "Anda telah bergabung dengan :organization.",
-    "You are already a member of :organization.": "Anda sudah menjadi anggota :organization."
+    "You are already a member of :organization.": "Anda sudah menjadi anggota :organization.",
+    "You have been added to :organization": "Anda telah ditambahkan ke :organization",
+    "You have been added to :organization as :role.": "Anda telah ditambahkan ke :organization sebagai :role.",
+    "Open organization": "Buka organisasi",
+    "Please verify your email address before accepting this invitation.": "Silakan verifikasi alamat email Anda sebelum menerima undangan ini.",
+    "Verify email": "Verifikasi email"
 }
