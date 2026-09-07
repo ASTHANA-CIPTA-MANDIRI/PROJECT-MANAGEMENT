@@ -147,17 +147,35 @@ class Project extends Model implements HasMedia
      * `organization_id === null` (legacy/pre-Organization projects) never
      * reaches this branch — there is no Organization to derive authority
      * from, so those projects keep being governed purely by owner_id/
-     * project_users exactly as before this phase. Called only from inside
-     * isAccessibleBy()/isManageableBy(), both of which already run this
-     * user's project through isWithinOrganizationContext() first — so by the
-     * time this method runs, the project's organization_id is already known
-     * to equal the user's *current* Organization context, the same
-     * discipline every other access path in this class already follows.
+     * project_users exactly as before this phase.
+     *
+     * Public (Phase 5.4.3 fix) and fully self-contained: originally private
+     * and safe only because isAccessibleBy()/isManageableBy() already ran
+     * isWithinOrganizationContext() first, which independently confirms
+     * organization_id equals the user's *current* Organization before this
+     * method is ever reached from there. ProjectPolicy now calls this
+     * directly too (to grant Owner/Admin update/delete/view authority
+     * without also requiring the legacy flat `Update project`/`Delete
+     * project`/`View project` Spatie permission that owner_id/project_users
+     * holders still need) — calling it without that outer guard would have
+     * been a real cross-organization hole: an Owner of Organization A whose
+     * active context is A could otherwise pass this check for a Project
+     * belonging to Organization B, since the old body only asked "is the
+     * user's current org manageable by them", never "does it match *this*
+     * project's org." This version re-verifies that match itself, so it is
+     * safe to call from anywhere, not just from behind another gate.
      */
-    private function isManageableThroughOrganizationBy(User $user): bool
+    public function isManageableThroughOrganizationBy(User $user): bool
     {
-        return $this->organization_id !== null
-            && (OrganizationContext::current($user)?->isManageableBy($user) ?? false);
+        if ($this->organization_id === null) {
+            return false;
+        }
+
+        $currentOrganization = OrganizationContext::current($user);
+
+        return $currentOrganization !== null
+            && $currentOrganization->id === $this->organization_id
+            && $currentOrganization->isManageableBy($user);
     }
 
     /**
