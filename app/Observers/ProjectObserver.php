@@ -35,6 +35,25 @@ class ProjectObserver
     }
 
     /**
+     * Defense-in-depth (Phase 5.3B): nothing in this app ever legitimately
+     * changes a project's Organization after creation — not Filament (no
+     * form field for it), not the API (no request field for it), not this
+     * observer's own creating() above (create-only). This closes that off
+     * explicitly rather than leaving it merely true by omission, so a future
+     * code path cannot silently introduce a cross-organization move. Does
+     * not affect BackfillOrganizations (app/Console/Commands/BackfillOrganizations.php),
+     * which writes via a query-builder ->update() call, bypassing Eloquent
+     * model events entirely — the same reason that command's writes never
+     * touched creating() above either.
+     */
+    public function updating(Project $project): void
+    {
+        if ($project->isDirty('organization_id')) {
+            throw new \LogicException('A project\'s organization cannot be changed once set.');
+        }
+    }
+
+    /**
      * Kept low enough that a project with tens of thousands of tickets never
      * holds more than one chunk's worth of models in memory at once.
      */

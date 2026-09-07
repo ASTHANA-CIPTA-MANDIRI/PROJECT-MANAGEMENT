@@ -30,7 +30,14 @@ class ProjectRequest extends FormRequest
         }
 
         if ($this->isMethod('POST')) {
-            return $user->can('Create project');
+            // `can('create', Project::class)` — the (ability, model-class)
+            // form — routes through ProjectPolicy::create() (Phase 5.3B:
+            // permission + active, manageable Organization). The previous
+            // `can('Create project')` was a bare Spatie permission-name
+            // check that never reached the Policy at all, so the API create
+            // path was not actually gated by ProjectPolicy::create() despite
+            // appearances.
+            return $user->can('create', Project::class);
         }
 
         // An update is judged against the project itself, here rather than in

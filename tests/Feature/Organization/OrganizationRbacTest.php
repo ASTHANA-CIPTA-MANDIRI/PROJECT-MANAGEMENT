@@ -151,7 +151,21 @@ class OrganizationRbacTest extends TestCase
 
     // ----------------------------------------------- G — Project RBAC regression
 
-    public function test_organization_owner_role_does_not_imply_project_management(): void
+    /**
+     * Phase 5.3B deliberately reverses this test's original assertion:
+     * before 5.3B, Organization RBAC and Project RBAC were completely
+     * disconnected axes, so an Organization Owner got nothing extra at the
+     * Project layer. The approved 5.3B architecture explicitly connects
+     * them as a second, independent source of Project authority for
+     * Owner/Admin specifically (never Member — see
+     * OrganizationManagementTest::test_organization_member_gets_no_project_authority_from_membership_alone) —
+     * Project::isManageableBy()/isAccessibleBy()'s new
+     * isManageableThroughOrganizationBy() branch. Still no project_users
+     * row is ever written for the Owner: authority comes purely from
+     * organization_users.role, and project_users.role stays exactly
+     * employee/customer/administrator, untouched.
+     */
+    public function test_organization_owner_role_grants_project_authority_without_project_membership(): void
     {
         $organization = Organization::factory()->create();
         $user = User::factory()->create();
@@ -161,8 +175,12 @@ class OrganizationRbacTest extends TestCase
         // owner_id nor a project_users member at all.
         $project = Project::factory()->create(['organization_id' => $organization->id]);
 
-        $this->assertFalse($project->isManageableBy($user));
-        $this->assertFalse($project->isAccessibleBy($user));
+        $this->assertTrue($project->isManageableBy($user));
+        $this->assertTrue($project->isAccessibleBy($user));
+        $this->assertDatabaseMissing('project_users', [
+            'project_id' => $project->id,
+            'user_id' => $user->id,
+        ]);
     }
 
     // ----------------------------------------------------- H — Policy regression

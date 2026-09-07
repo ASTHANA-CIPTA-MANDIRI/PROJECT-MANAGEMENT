@@ -3,6 +3,7 @@
 namespace Tests\Feature;
 
 use App\Models\Epic;
+use App\Models\Organization;
 use App\Models\Project;
 use App\Models\Sprint;
 use App\Models\Ticket;
@@ -173,6 +174,41 @@ class ProjectWorkflowTest extends TestCase
 
         // Sprint::boot creates one linked epic per sprint.
         $this->assertCount(3, $project->fresh()->epics);
+    }
+
+    // -------------------------------------------------- organization immutability
+
+    /**
+     * Phase 5.3B defense-in-depth (ProjectObserver::updating()): nothing in
+     * this app ever legitimately changes a project's Organization after
+     * creation. `organization_id` is not in Project::$fillable, so a plain
+     * ->update(['organization_id' => ...]) is already silently a no-op —
+     * this test bypasses that guard on purpose (direct attribute
+     * assignment + save(), the way a future, less careful code path might)
+     * to prove the observer itself is a real, independent second guard,
+     * not just an assumption resting on mass-assignment protection alone.
+     */
+    public function test_a_projects_organization_cannot_be_changed_once_set(): void
+    {
+        $organization = Organization::factory()->create();
+        $otherOrganization = Organization::factory()->create();
+        $project = Project::factory()->create(['organization_id' => $organization->id]);
+
+        $this->expectException(\LogicException::class);
+
+        $project->organization_id = $otherOrganization->id;
+        $project->save();
+    }
+
+    public function test_a_legacy_null_organization_project_cannot_be_assigned_one_via_direct_save(): void
+    {
+        $organization = Organization::factory()->create();
+        $project = Project::factory()->create(['organization_id' => null]);
+
+        $this->expectException(\LogicException::class);
+
+        $project->organization_id = $organization->id;
+        $project->save();
     }
 
     // ------------------------------------------------------------ deletion

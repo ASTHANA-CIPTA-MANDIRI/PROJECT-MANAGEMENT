@@ -4,6 +4,7 @@ namespace Tests\Feature;
 
 use App\Filament\Resources\UserResource\Pages\CreateUser;
 use App\Filament\Resources\UserResource\Pages\EditUser;
+use App\Models\Organization;
 use App\Models\Project;
 use App\Models\ProjectStatus;
 use App\Models\User;
@@ -142,9 +143,16 @@ class SoftDeleteUniqueValueTest extends TestCase
         $this->assertNull($old->fresh()->deleted_at);
     }
 
+    /**
+     * Phase 5.3B: Create Project also requires the caller's current
+     * Organization to exist and be one they own/administer — these tests
+     * are about the ticket_prefix validation rule, not authorization, so
+     * this just needs to clear that gate, not exercise it.
+     */
     private function actingWithApi(array $permissions): User
     {
         $user = $this->userWithPermissions($permissions);
+        Organization::factory()->create()->users()->attach($user->id, ['role' => 'owner']);
         $this->actingAs($user);
 
         return $user;

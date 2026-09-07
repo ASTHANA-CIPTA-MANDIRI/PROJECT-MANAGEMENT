@@ -145,6 +145,7 @@
     "Thanks, Rencanakan Team": "Terima kasih, Tim Rencanakan",
     "The language used by the platform.": "Bahasa yang digunakan oleh platform.",
     "The organization name must not be blank.": "Nama organisasi tidak boleh kosong.",
+    "The project owner must be a member of the current organization.": "Pemilik proyek harus merupakan anggota organisasi saat ini.",
     "The status of ticket :ticket has been updated.": "Status Tugas :ticket telah diperbarui.",
     "This is the platform logo (e.g. Used in site favicon)": "Ini adalah logo platform (misalnya Digunakan di favicon situs)",
     "This is the platform name": "Ini adalah nama platformnya",

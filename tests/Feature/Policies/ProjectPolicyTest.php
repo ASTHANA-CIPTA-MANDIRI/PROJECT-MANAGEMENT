@@ -2,7 +2,10 @@
 
 namespace Tests\Feature\Policies;
 
+use App\Models\Organization;
 use App\Models\Project;
+use App\Models\Role;
+use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Tests\InteractsWithPermissions;
 use Tests\TestCase;
@@ -68,15 +71,81 @@ class ProjectPolicyTest extends TestCase
     }
 
     // -------------------------------------------------------------- create
+    //
+    // Phase 5.3B: `create` used to be a flat permission check only, with no
+    // regard for Organization membership at all. It now requires BOTH the
+    // permission AND that the user's *current* Organization
+    // (App\Support\OrganizationContext — never a client-supplied id) exists
+    // and is one they own or administer. Neither half replaces the other.
 
-    public function test_creating_requires_the_create_permission(): void
+    private function organizationManageableBy(User $user, string $role = 'owner'): Organization
     {
-        $this->assertTrue($this->userWithPermissions(['Create project'])->can('create', Project::class));
+        $organization = Organization::factory()->create();
+        $organization->users()->attach($user->id, ['role' => $role]);
+
+        return $organization;
     }
 
+    public function test_creating_requires_the_create_permission_and_organization_authority(): void
+    {
+        $user = $this->userWithPermissions(['Create project']);
+        $this->organizationManageableBy($user, 'owner');
+
+        $this->assertTrue($user->can('create', Project::class));
+    }
+
+    public function test_creating_is_allowed_for_an_organization_admin_too(): void
+    {
+        $user = $this->userWithPermissions(['Create project']);
+        $this->organizationManageableBy($user, 'admin');
+
+        $this->assertTrue($user->can('create', Project::class));
+    }
+
+    /**
+     * The permission alone is no longer sufficient — an Organization Owner
+     * who lacks the flat permission is still denied. Renamed from its
+     * original "without the permission" assertion is kept, but the user now
+     * also holds real Organization Owner authority, proving the permission
+     * check still runs independently rather than being subsumed by it.
+     */
     public function test_creating_is_denied_without_the_permission(): void
     {
-        $this->assertFalse($this->userWithoutPermissions()->can('create', Project::class));
+        $user = $this->userWithoutPermissions();
+        $this->organizationManageableBy($user, 'owner');
+
+        $this->assertFalse($user->can('create', Project::class));
+    }
+
+    public function test_creating_is_denied_with_the_permission_but_no_organization(): void
+    {
+        $user = $this->userWithPermissions(['Create project']);
+
+        $this->assertFalse($user->can('create', Project::class));
+    }
+
+    public function test_creating_is_denied_for_a_plain_organization_member_even_with_the_permission(): void
+    {
+        $user = $this->userWithPermissions(['Create project']);
+        $this->organizationManageableBy($user, 'member');
+
+        $this->assertFalse($user->can('create', Project::class));
+    }
+
+    /**
+     * Super Admin holds every permission (including "Create project") but
+     * gets no Gate::before bypass anywhere in this app — without an active,
+     * manageable Organization, Super Admin is denied exactly like anyone
+     * else. See also Tests\Feature\Organization\ProjectTenantIsolationTest
+     * for the equivalent check against isAccessibleBy().
+     */
+    public function test_creating_is_denied_for_super_admin_without_an_organization(): void
+    {
+        $superAdminRole = Role::create(['name' => 'Super Admin']);
+        $superAdmin = User::factory()->create();
+        $superAdmin->assignRole($superAdminRole);
+
+        $this->assertFalse($superAdmin->can('create', Project::class));
     }
 
     // -------------------------------------------------------------- update

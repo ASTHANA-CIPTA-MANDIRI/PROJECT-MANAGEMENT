@@ -3,6 +3,7 @@
 namespace Tests\Feature\Filament;
 
 use App\Models\Activity;
+use App\Models\Organization;
 use App\Models\Permission;
 use App\Models\Project;
 use App\Models\ProjectStatus;
@@ -71,6 +72,11 @@ class ResourcePagesTest extends TestCase
         $user->syncRoles([$role]);
 
         app(PermissionRegistrar::class)->forgetCachedPermissions();
+
+        // Phase 5.3B: Create Project also requires the actor to be the
+        // Owner/Admin of their current Organization — this fixture is meant
+        // to render every resource's pages successfully, Project's included.
+        Organization::factory()->create()->users()->attach($user->id, ['role' => 'owner']);
 
         return $user->fresh();
     }

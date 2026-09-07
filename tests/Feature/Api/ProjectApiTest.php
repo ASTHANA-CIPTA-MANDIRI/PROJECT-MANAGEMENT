@@ -2,6 +2,7 @@
 
 namespace Tests\Feature\Api;
 
+use App\Models\Organization;
 use App\Models\Permission;
 use App\Models\Project;
 use App\Models\ProjectStatus;
@@ -9,6 +10,7 @@ use App\Models\Role;
 use App\Models\Sprint;
 use App\Models\Ticket;
 use App\Models\User;
+use App\Support\OrganizationContext;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Notification;
 use Laravel\Sanctum\Sanctum;
@@ -39,6 +41,22 @@ class ProjectApiTest extends TestCase
         $user = $user->fresh();
 
         Sanctum::actingAs($user);
+
+        return $user;
+    }
+
+    /**
+     * Phase 5.3B: Create Project also requires the caller's current
+     * Organization (App\Support\OrganizationContext) to exist and be one
+     * they own/administer — a plain permission-holder with no Organization
+     * membership is no longer enough (see ProjectPolicyTest for the Policy
+     * unit coverage). Owner by default since Owner/Admin are equivalent
+     * here (Organization::isManageableBy()).
+     */
+    private function actingWithOrganization(array $permissions = ['Create project'], string $role = 'owner'): User
+    {
+        $user = $this->actingWith($permissions);
+        Organization::factory()->create()->users()->attach($user->id, ['role' => $role]);
 
         return $user;
     }
@@ -144,7 +162,7 @@ class ProjectApiTest extends TestCase
 
     public function test_it_creates_a_project(): void
     {
-        $user = $this->actingWith(['Create project']);
+        $user = $this->actingWithOrganization();
         $status = ProjectStatus::factory()->create();
 
         $payload = [
@@ -166,7 +184,7 @@ class ProjectApiTest extends TestCase
 
     public function test_creating_ignores_a_spoofed_owner_id(): void
     {
-        $user = $this->actingWith(['Create project']);
+        $user = $this->actingWithOrganization();
         $status = ProjectStatus::factory()->create();
         $victim = User::factory()->create();
 
@@ -198,7 +216,7 @@ class ProjectApiTest extends TestCase
 
     public function test_it_validates_the_payload(): void
     {
-        $this->actingWith(['Create project']);
+        $this->actingWithOrganization();
 
         $this->postJson('/api/v1/projects', [])
             ->assertStatus(422)
@@ -207,13 +225,89 @@ class ProjectApiTest extends TestCase
 
     public function test_it_rejects_a_too_long_prefix(): void
     {
-        $this->actingWith(['Create project']);
+        $this->actingWithOrganization();
         $status = ProjectStatus::factory()->create();
 
         $this->postJson('/api/v1/projects', [
             'name' => 'X', 'ticket_prefix' => 'TOOLONG',
             'status_id' => $status->id, 'type' => 'kanban', 'status_type' => 'default',
         ])->assertStatus(422)->assertJsonValidationErrors(['ticket_prefix']);
+    }
+
+    // --------------------------------------------------- Phase 5.3B: Organization authority
+
+    public function test_creating_is_denied_without_an_organization_even_with_the_permission(): void
+    {
+        $this->actingWith(['Create project']); // permission, but no Organization at all
+        $status = ProjectStatus::factory()->create();
+
+        $this->postJson('/api/v1/projects', [
+            'name' => 'Nope', 'ticket_prefix' => 'NOP',
+            'status_id' => $status->id, 'type' => 'kanban', 'status_type' => 'default',
+        ])->assertForbidden();
+
+        $this->assertDatabaseMissing('projects', ['name' => 'Nope']);
+    }
+
+    public function test_creating_is_denied_for_a_plain_organization_member_even_with_the_permission(): void
+    {
+        $user = $this->actingWithOrganization(['Create project'], 'member');
+        $status = ProjectStatus::factory()->create();
+
+        $this->postJson('/api/v1/projects', [
+            'name' => 'Nope', 'ticket_prefix' => 'NOP',
+            'status_id' => $status->id, 'type' => 'kanban', 'status_type' => 'default',
+        ])->assertForbidden();
+
+        $this->assertDatabaseMissing('projects', ['name' => 'Nope']);
+    }
+
+    public function test_creating_is_allowed_for_an_organization_admin(): void
+    {
+        $this->actingWithOrganization(['Create project'], 'admin');
+        $status = ProjectStatus::factory()->create();
+
+        $this->postJson('/api/v1/projects', [
+            'name' => 'Admin Made', 'ticket_prefix' => 'ADM',
+            'status_id' => $status->id, 'type' => 'kanban', 'status_type' => 'default',
+        ])->assertCreated();
+    }
+
+    /**
+     * organization_id is never a request field at all (Phase 5.3B) — it is
+     * always resolved server-side from OrganizationContext::current() inside
+     * ProjectObserver::creating(). Proven here by actually switching context
+     * mid-test and asserting the created project always lands in whichever
+     * Organization was active, never in the other one the user also belongs
+     * to and never influenced by any payload key.
+     */
+    public function test_creating_always_uses_the_active_organization_context_never_a_payload_value(): void
+    {
+        $user = $this->actingWith(['Create project']);
+        $organizationA = Organization::factory()->create();
+        $organizationB = Organization::factory()->create();
+        $organizationA->users()->attach($user->id, ['role' => 'owner']);
+        $organizationB->users()->attach($user->id, ['role' => 'owner']);
+        $status = ProjectStatus::factory()->create();
+
+        OrganizationContext::switch($user, $organizationA->id);
+
+        $this->postJson('/api/v1/projects', [
+            'name' => 'Into A', 'ticket_prefix' => 'INA',
+            'status_id' => $status->id, 'type' => 'kanban', 'status_type' => 'default',
+            'organization_id' => $organizationB->id, // ignored — not a real field
+        ])->assertCreated();
+
+        $this->assertDatabaseHas('projects', ['name' => 'Into A', 'organization_id' => $organizationA->id]);
+
+        OrganizationContext::switch($user, $organizationB->id);
+
+        $this->postJson('/api/v1/projects', [
+            'name' => 'Into B', 'ticket_prefix' => 'INB',
+            'status_id' => $status->id, 'type' => 'kanban', 'status_type' => 'default',
+        ])->assertCreated();
+
+        $this->assertDatabaseHas('projects', ['name' => 'Into B', 'organization_id' => $organizationB->id]);
     }
 
     // -------------------------------------------------------------- show

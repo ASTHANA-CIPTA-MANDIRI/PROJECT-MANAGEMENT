@@ -4,6 +4,7 @@ namespace App\Policies;
 
 use App\Models\Project;
 use App\Models\User;
+use App\Support\OrganizationContext;
 use Illuminate\Auth\Access\HandlesAuthorization;
 
 class ProjectPolicy
@@ -33,11 +34,26 @@ class ProjectPolicy
     /**
      * Determine whether the user can create models.
      *
+     * Phase 5.3B: the flat `Create project` permission alone used to be the
+     * entire gate, with zero regard for Organization membership — meaning a
+     * permission-holder with no Organization at all (or only a Member role
+     * in one) could create a project, while an actual Organization Owner/
+     * Admin without that flat permission could not. Organization role does
+     * not replace the platform permission system (both are still required,
+     * same as every other ability in this Policy pairs a permission with an
+     * object-level check) — it adds the missing tenant-authority half: the
+     * user's *current* Organization (OrganizationContext — never a
+     * client-supplied id) must exist and be one they own or administer.
+     *
      * @return \Illuminate\Auth\Access\Response|bool
      */
     public function create(User $user)
     {
-        return $user->can('Create project');
+        $organization = OrganizationContext::current($user);
+
+        return $user->can('Create project')
+            && $organization !== null
+            && $organization->isManageableBy($user);
     }
 
     /**

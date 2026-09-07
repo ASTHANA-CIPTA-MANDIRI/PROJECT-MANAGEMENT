@@ -2,9 +2,12 @@
 
 namespace App\Filament\Resources\ProjectResource\Forms;
 
+use App\Models\Organization;
 use App\Models\Project;
 use App\Models\ProjectStatus;
 use App\Support\Colors;
+use App\Support\OrganizationContext;
+use App\Support\OrganizationMemberRule;
 use App\Support\UniqueAmongTrashedRule;
 use App\Support\UserOptions;
 use Filament\Forms;
@@ -94,8 +97,22 @@ class ProjectForm
                 Forms\Components\Select::make('owner_id')
                     ->label(__('Project owner'))
                     ->searchable()
-                    ->options(fn () => UserOptions::visible())
+                    ->options(fn ($record) => UserOptions::forOrganization(
+                        self::ownerOrganization($record),
+                        $record?->owner_id
+                    ))
                     ->default(fn () => auth()->user()->id)
+                    // The options list above is a UI convenience only - a
+                    // crafted payload can submit any id regardless of what
+                    // was rendered, so the actual gate is this rule
+                    // (Phase 5.3B): the owner must be a real member of the
+                    // project's Organization. A legacy project with no
+                    // Organization (record's own organization is null) keeps
+                    // the pre-5.3B, ungated behavior instead.
+                    ->rule(fn ($record) => OrganizationMemberRule::make(
+                        self::ownerOrganization($record),
+                        __('The project owner must be a member of the current organization.')
+                    ))
                     ->required(),
 
                 Forms\Components\Select::make('status_id')
@@ -125,6 +142,21 @@ class ProjectForm
         return Forms\Components\RichEditor::make('description')
             ->label(__('Project description'))
             ->columnSpan(3);
+    }
+
+    /**
+     * The Organization the owner_id picker should be scoped to (Phase 5.3B):
+     * an existing record's own Organization on Edit (never the editor's
+     * *current* context — those already coincide by the time this page is
+     * reachable at all, since ProjectResource's tenant-scoped query 404s a
+     * foreign-org project before this form ever renders, but a legacy
+     * null-organization record must keep resolving to null here, not to
+     * whatever Organization the editor happens to be in right now), or the
+     * creator's current Organization context on Create (no record yet).
+     */
+    private static function ownerOrganization(?Project $record): ?Organization
+    {
+        return $record ? $record->organization : OrganizationContext::current(auth()->user());
     }
 
     private static function typeSelect(): Forms\Components\Select

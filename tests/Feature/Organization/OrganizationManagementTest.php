@@ -220,17 +220,42 @@ class OrganizationManagementTest extends TestCase
         $this->assertFalse(Gate::forUser($member)->allows('view', $organization->fresh()));
     }
 
-    // ------------------------------------------------------- 13: Project RBAC regression
+    // ------------------------------------------------------- 13: Project RBAC (Phase 5.3B)
 
-    public function test_organization_management_does_not_grant_project_access(): void
+    /**
+     * Phase 5.3B deliberately reverses this test's original name/assertion:
+     * an Organization Owner/Admin now DOES get Project authority within
+     * their own Organization, without ever being attached to project_users
+     * (Project::isManageableBy()'s new Organization-authority branch). A
+     * plain Member still gets nothing extra — see the test right below.
+     */
+    public function test_organization_owner_and_admin_can_manage_project_without_project_membership(): void
     {
         $organization = Organization::factory()->create();
         $owner = User::factory()->create();
+        $admin = User::factory()->create();
         $this->attach($organization, $owner, 'owner');
+        $this->attach($organization, $admin, 'admin');
         $project = Project::factory()->create(['organization_id' => $organization->id]);
 
-        $this->assertFalse($project->isAccessibleBy($owner));
-        $this->assertFalse($project->isManageableBy($owner));
+        $this->assertTrue($project->isAccessibleBy($owner));
+        $this->assertTrue($project->isManageableBy($owner));
+        $this->assertTrue($project->isAccessibleBy($admin));
+        $this->assertTrue($project->isManageableBy($admin));
+
+        $this->assertDatabaseMissing('project_users', ['project_id' => $project->id, 'user_id' => $owner->id]);
+        $this->assertDatabaseMissing('project_users', ['project_id' => $project->id, 'user_id' => $admin->id]);
+    }
+
+    public function test_organization_member_gets_no_project_authority_from_membership_alone(): void
+    {
+        $organization = Organization::factory()->create();
+        $member = User::factory()->create();
+        $this->attach($organization, $member, 'member');
+        $project = Project::factory()->create(['organization_id' => $organization->id]);
+
+        $this->assertFalse($project->isAccessibleBy($member));
+        $this->assertFalse($project->isManageableBy($member));
     }
 
     // ------------------------------------------------------- 14: Super Admin

@@ -67,8 +67,11 @@ class Project extends Model implements HasMedia
 
     /**
      * Projects the given user owns or is a member of, within their current
-     * Organization context. The single source of truth for "does this user
-     * have access to this project" query logic, usable standalone
+     * Organization context — plus, Phase 5.3B, every project belonging to
+     * that Organization at all when the user is its Owner/Admin, even one
+     * they own no `project_users` row on (isManageableThroughOrganizationBy()'s
+     * query-level twin). The single source of truth for "does this user have
+     * access to this project" query logic, usable standalone
      * (Project::accessibleBy($user)) or nested inside a whereHas('project', ...)
      * closure on a related model.
      *
@@ -81,11 +84,18 @@ class Project extends Model implements HasMedia
      */
     public function scopeAccessibleBy(Builder $query, User $user): Builder
     {
+        $currentOrganization = OrganizationContext::current($user);
+        $organizationGrantsManagement = $currentOrganization?->isManageableBy($user) ?? false;
+
         return $query
             ->where(fn (Builder $query) => $query->where('owner_id', $user->id)
-                ->orWhereHas('users', fn (Builder $query) => $query->where('users.id', $user->id)))
+                ->orWhereHas('users', fn (Builder $query) => $query->where('users.id', $user->id))
+                ->when(
+                    $organizationGrantsManagement,
+                    fn (Builder $query) => $query->orWhere('organization_id', $currentOrganization->id)
+                ))
             ->where(fn (Builder $query) => $query->whereNull('organization_id')
-                ->orWhere('organization_id', OrganizationContext::current($user)?->id));
+                ->orWhere('organization_id', $currentOrganization?->id));
     }
 
     /**
@@ -104,13 +114,15 @@ class Project extends Model implements HasMedia
     {
         return $this->isWithinOrganizationContext($user)
             && ($this->owner_id === $user->id
-                || $this->users()->whereKey($user->id)->exists());
+                || $this->users()->whereKey($user->id)->exists()
+                || $this->isManageableThroughOrganizationBy($user));
     }
 
     /**
      * Whether this user may change the project itself, and everything planned
-     * under it: its owner, or a member holding the managing project role —
-     * gated by the same Organization context as isAccessibleBy() above.
+     * under it: its owner, a member holding the managing project role, or —
+     * Phase 5.3B — the Owner/Admin of the Organization this project belongs
+     * to — gated by the same Organization context as isAccessibleBy() above.
      */
     public function isManageableBy(User $user): bool
     {
@@ -119,7 +131,33 @@ class Project extends Model implements HasMedia
                 || $this->users()
                     ->whereKey($user->id)
                     ->wherePivot('role', config('system.projects.affectations.roles.can_manage'))
-                    ->exists());
+                    ->exists()
+                || $this->isManageableThroughOrganizationBy($user));
+    }
+
+    /**
+     * Phase 5.3B — Organization Owner/Admin authority over a Project they
+     * belong to no `project_users` row for. Deliberately NOT a
+     * `project_users` attach or a new "project_manager"/"owner" role: this
+     * is a second, independent source of Project authority (Organization
+     * membership/role), never written into `project_users.role`, which stays
+     * exactly `employee`/`customer`/`administrator` as before (ADR 0001 —
+     * Organization RBAC and Project RBAC stay two separate axes).
+     *
+     * `organization_id === null` (legacy/pre-Organization projects) never
+     * reaches this branch — there is no Organization to derive authority
+     * from, so those projects keep being governed purely by owner_id/
+     * project_users exactly as before this phase. Called only from inside
+     * isAccessibleBy()/isManageableBy(), both of which already run this
+     * user's project through isWithinOrganizationContext() first — so by the
+     * time this method runs, the project's organization_id is already known
+     * to equal the user's *current* Organization context, the same
+     * discipline every other access path in this class already follows.
+     */
+    private function isManageableThroughOrganizationBy(User $user): bool
+    {
+        return $this->organization_id !== null
+            && (OrganizationContext::current($user)?->isManageableBy($user) ?? false);
     }
 
     /**
