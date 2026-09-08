@@ -2,7 +2,6 @@
 
 use App\Http\Controllers\MediaController;
 use App\Http\Controllers\RoadMap\DataController;
-use App\Http\Livewire\AcceptOrganizationInvitation;
 use App\Models\Ticket;
 use App\Models\User;
 use Filament\Http\Middleware\DispatchServingFilamentEvent;
@@ -39,8 +38,15 @@ Route::get('/validate-account/{user:creation_token}', function (User $user) {
 
 // Accept an organization invitation (public, throttled to 60/min per IP -
 // the token itself is the only thing this route trusts; see
-// App\Http\Livewire\AcceptOrganizationInvitation).
-Route::get('/organizations/invitations/{token}', AcceptOrganizationInvitation::class)
+// App\Http\Livewire\AcceptOrganizationInvitation). A plain view wrapper,
+// not the Livewire component class directly (Phase 5.4.4C): Livewire's
+// full-page-component feature would otherwise wrap the render in its
+// default `layouts.app`, which this Filament-based app never has -
+// exactly the same reason validate-account above returns a view instead
+// of using ValidateAccount::class as the route target.
+Route::get('/organizations/invitations/{token}', function (string $token) {
+    return view('organization-invitations.accept', compact('token'));
+})
     ->name('organization-invitations.accept')
     ->middleware([
         'web',

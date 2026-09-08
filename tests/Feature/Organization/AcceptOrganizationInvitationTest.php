@@ -379,4 +379,69 @@ class AcceptOrganizationInvitationTest extends TestCase
 
         $this->assertTrue(OrganizationContext::current($user)->is($existingOrganization));
     }
+
+    // ---------------------------------------------- Phase 5.4.4C: real HTTP route + Filament layout
+
+    /**
+     * Every test above exercises AcceptOrganizationInvitation through
+     * Livewire::test(), which mounts the component directly in memory and
+     * never touches routing at all - so none of them would ever have
+     * caught the real bug this section covers: the route used to register
+     * the Livewire component class itself as its target, which made
+     * Livewire's full-page-component feature look for a `layouts.app`
+     * view this Filament app never has (InvalidArgumentException: View
+     * [layouts.app] not found - it only has Filament's own namespaced
+     * `x-filament::layouts.*` components). These tests hit the actual
+     * named route over real HTTP instead, the same way a recipient
+     * clicking the link in their email would.
+     */
+    public function test_the_invitation_route_renders_successfully_over_http(): void
+    {
+        [$invitation, $token] = $this->invitationWithToken();
+
+        $response = $this->get(route('organization-invitations.accept', $token));
+
+        $response->assertOk();
+        $response->assertViewIs('organization-invitations.accept');
+        $response->assertSeeLivewire('accept-organization-invitation');
+        $response->assertSee($invitation->organization->name);
+    }
+
+    public function test_an_invalid_token_is_rejected_over_http(): void
+    {
+        $response = $this->get(route('organization-invitations.accept', 'not-a-real-token'));
+
+        $response->assertOk();
+        $response->assertSee(__('This invitation link is invalid.'));
+    }
+
+    public function test_an_expired_invitation_is_rejected_over_http(): void
+    {
+        [, $token] = $this->invitationWithToken(['expires_at' => now()->subDay()]);
+
+        $response = $this->get(route('organization-invitations.accept', $token));
+
+        $response->assertOk();
+        $response->assertSee(__('This invitation has expired.'));
+    }
+
+    public function test_a_revoked_invitation_is_rejected_over_http(): void
+    {
+        [, $token] = $this->invitationWithToken(['revoked_at' => now()]);
+
+        $response = $this->get(route('organization-invitations.accept', $token));
+
+        $response->assertOk();
+        $response->assertSee(__('This invitation has been revoked.'));
+    }
+
+    public function test_an_already_accepted_invitation_is_handled_over_http(): void
+    {
+        [, $token] = $this->invitationWithToken(['accepted_at' => now()]);
+
+        $response = $this->get(route('organization-invitations.accept', $token));
+
+        $response->assertOk();
+        $response->assertSee(__('This invitation has already been accepted.'));
+    }
 }
