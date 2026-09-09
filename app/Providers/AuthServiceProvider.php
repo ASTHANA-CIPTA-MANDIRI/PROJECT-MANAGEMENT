@@ -34,9 +34,12 @@ use App\Policies\TicketPriorityPolicy;
 use App\Policies\TicketStatusPolicy;
 use App\Policies\TicketTypePolicy;
 use App\Policies\UserPolicy;
+use App\Support\OrganizationContext;
+use App\Support\TrialGate;
 use Filament\Resources\RelationManagers\RelationManager;
 use Filament\Resources\Resource;
 use Illuminate\Foundation\Support\Providers\AuthServiceProvider as ServiceProvider;
+use Illuminate\Support\Facades\Gate;
 
 class AuthServiceProvider extends ServiceProvider
 {
@@ -71,6 +74,25 @@ class AuthServiceProvider extends ServiceProvider
     ];
 
     /**
+     * Fase 6 — the models a locked-out Organization (trial expired, not
+     * subscribed) loses every ability on, read and write alike, regardless
+     * of what the underlying Policy would otherwise decide. Deliberately
+     * excludes Organization itself: a locked-out Owner must still be able
+     * to reach the Organization/billing pages to subscribe and unlock
+     * everything else — see denyIfOrganizationLocked() below.
+     *
+     * @var array<int, class-string>
+     */
+    private const TRIAL_GATED_MODELS = [
+        Project::class,
+        Ticket::class,
+        Sprint::class,
+        Epic::class,
+        TicketComment::class,
+        TicketHour::class,
+    ];
+
+    /**
      * Register any authentication / authorization services.
      *
      * @return void
@@ -89,5 +111,36 @@ class AuthServiceProvider extends ServiceProvider
         // abilities the panel actually asks for to real policy methods.
         Resource::authorizeWithGate();
         RelationManager::authorizeWithGate();
+
+        Gate::before(fn (User $user, string $ability, array $arguments = []) => $this->denyIfOrganizationLocked($user, $arguments));
+    }
+
+    /**
+     * Fase 6 enforcement. Runs before every Policy check in the app —
+     * including raw permission-string checks like $user->can('View project'),
+     * which arrive here with an empty $arguments array and are skipped, same
+     * as any ability on a model outside TRIAL_GATED_MODELS. Returning null
+     * (not true) lets the real Policy decide exactly as it did before this
+     * phase; only a genuinely locked Organization ever returns false here.
+     */
+    private function denyIfOrganizationLocked(User $user, array $arguments): ?bool
+    {
+        $target = $arguments[0] ?? null;
+        $targetClass = is_string($target) ? $target : ($target !== null ? get_class($target) : null);
+
+        if ($targetClass === null || ! in_array($targetClass, self::TRIAL_GATED_MODELS, true)) {
+            return null;
+        }
+
+        // No Organization in play at all (a legacy/grandfathered user with
+        // no membership, or Super Admin acting outside any Organization) —
+        // nothing to gate; unchanged from before this phase.
+        $organization = OrganizationContext::current($user);
+
+        if ($organization === null) {
+            return null;
+        }
+
+        return TrialGate::active($organization) ? null : false;
     }
 }

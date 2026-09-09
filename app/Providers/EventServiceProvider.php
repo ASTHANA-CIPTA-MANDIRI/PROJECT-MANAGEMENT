@@ -4,6 +4,8 @@ namespace App\Providers;
 
 use App\Listeners\AssignDefaultRole;
 use App\Listeners\NotifyAdminsOfRegistration;
+use App\Listeners\ProvisionOrganizationOnRegistration;
+use App\Listeners\ProvisionOrganizationOnSocialRegistration;
 use App\Listeners\SocialRegistration;
 use App\Models\Project;
 use App\Models\ProjectStatus;
@@ -40,9 +42,11 @@ class EventServiceProvider extends ServiceProvider
             SendEmailVerificationNotification::class,
             AssignDefaultRole::class,
             NotifyAdminsOfRegistration::class,
+            ProvisionOrganizationOnRegistration::class,
         ],
         SocialRegistered::class => [
             SocialRegistration::class,
+            ProvisionOrganizationOnSocialRegistration::class,
         ],
     ];
 

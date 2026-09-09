@@ -83,6 +83,23 @@ class SocialLoginTest extends TestCase
         $this->assertTrue($user->canAccessFilament());
     }
 
+    /**
+     * Fase 6 — social sign-up is a self-serve path just like the ordinary
+     * registration form, so it gets the same automatic Organization/trial.
+     */
+    public function test_a_new_social_user_gets_a_personal_organization_on_trial(): void
+    {
+        $this->mockProviderUser('12345', 'Fajar Hero', 'orgsocial@example.com');
+
+        $this->hitCallback('github');
+
+        $user = User::where('email', 'orgsocial@example.com')->first();
+        $organization = $user->organizations()->sole();
+
+        $this->assertSame('owner', $organization->roleOf($user));
+        $this->assertTrue($organization->trial_ends_at->isFuture());
+    }
+
     public function test_a_new_social_user_is_never_auto_granted_the_super_admin_role(): void
     {
         $superAdminRole = Role::create(['name' => 'Super Admin']);

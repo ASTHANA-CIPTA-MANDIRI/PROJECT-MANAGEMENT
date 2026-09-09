@@ -18,4 +18,16 @@ class OrganizationFactory extends Factory
             'name' => fake()->unique()->company(),
         ];
     }
+
+    /** Trial still running (Fase 6). */
+    public function onTrial(): static
+    {
+        return $this->state(fn () => ['trial_ends_at' => now()->addDays(7)]);
+    }
+
+    /** Trial window has passed and no subscription exists (Fase 6). */
+    public function trialExpired(): static
+    {
+        return $this->state(fn () => ['trial_ends_at' => now()->subDay()]);
+    }
 }

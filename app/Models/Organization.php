@@ -13,6 +13,11 @@ class Organization extends Model
 
     protected $fillable = [
         'name',
+        'trial_ends_at',
+    ];
+
+    protected $casts = [
+        'trial_ends_at' => 'datetime',
     ];
 
     public function users(): BelongsToMany
@@ -89,5 +94,19 @@ class Organization extends Model
     public function ownerCount(): int
     {
         return $this->users()->wherePivot('role', 'owner')->count();
+    }
+
+    /**
+     * Whether this organization has a paid subscription active. Always
+     * false today — Fase 7 (Subscription/Payment/Billing) is the only
+     * phase allowed to change this, once a real gateway/plan exists.
+     * App\Support\TrialGate reads this alongside trial_ends_at, so this
+     * stub is what makes "trial expired but subscribed" already a
+     * meaningful (if currently unreachable) state rather than a TODO
+     * scattered across every call site.
+     */
+    public function isSubscribed(): bool
+    {
+        return false;
     }
 }
