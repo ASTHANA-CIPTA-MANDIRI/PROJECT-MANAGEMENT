@@ -172,7 +172,16 @@ class OrganizationCreationTest extends TestCase
 
     // ---------------------------------------------------------------- I
 
-    public function test_multi_organization_user_can_create_another_organization_without_touching_existing_ones(): void
+    /**
+     * Phase 5.4.4F (Option B), CASE 5 of the 5.4.4E audit: a multi-org user
+     * (Owner of two organizations, Member of a third) is no longer allowed
+     * to create yet another one - "zero memberships" now means zero, not
+     * "regardless of how many organizations you already have." Previously
+     * this asserted the opposite (successful creation with existing
+     * memberships left untouched); the untouched-memberships guarantee is
+     * still proven here, just via denial leaving nothing to touch at all.
+     */
+    public function test_multi_organization_user_cannot_create_another_organization(): void
     {
         $this->seed(PermissionsSeeder::class);
         $this->seed(EmployeeRoleSeeder::class);
@@ -185,14 +194,9 @@ class OrganizationCreationTest extends TestCase
 
         $this->actingAs($multi);
 
-        Livewire::test(CreateOrganization::class)
-            ->fillForm(['name' => 'Organization Epsilon'])
-            ->call('create')
-            ->assertHasNoFormErrors();
+        Livewire::test(CreateOrganization::class)->assertForbidden();
 
-        $epsilon = Organization::where('name', 'Organization Epsilon')->firstOrFail();
-
-        $this->assertSame('owner', $epsilon->roleOf($multi));
+        $this->assertDatabaseMissing('organizations', ['name' => 'Organization Epsilon']);
         // Untouched, exactly as documented by OrganizationDemoSeeder.
         $this->assertSame('member', $alpha->fresh()->roleOf($multi));
         $this->assertSame('owner', $beta->fresh()->roleOf($multi));
@@ -203,10 +207,12 @@ class OrganizationCreationTest extends TestCase
 
     public function test_current_organization_context_switches_to_the_new_organization(): void
     {
+        // Phase 5.4.4F (Option B): the actor must have zero organization
+        // memberships to be allowed to create at all, so this test no
+        // longer pre-attaches them to an unrelated organization first -
+        // its purpose (verifying OrganizationContext::switch() after a
+        // successful create) is unaffected by that setup change.
         $user = $this->panelUser();
-        $other = Organization::factory()->create();
-        $other->users()->attach($user->id, ['role' => 'member']);
-        OrganizationContext::switch($user, $other->id);
         $this->actingAs($user);
 
         Livewire::test(CreateOrganization::class)
@@ -248,5 +254,105 @@ class OrganizationCreationTest extends TestCase
         $user = User::factory()->create();
 
         $this->assertTrue(Gate::forUser($user)->allows('create', Organization::class));
+    }
+
+    // -------------------------------------- Phase 5.4.4F — Option B, CASE 2-8
+
+    /**
+     * CASE 2 of the 5.4.4E audit: an Organization Owner may manage the
+     * organization they own, but that authority does not extend to
+     * spinning up a second, unrelated one.
+     */
+    public function test_user_already_owning_an_organization_cannot_create_another(): void
+    {
+        $user = User::factory()->create();
+        $organization = Organization::factory()->create();
+        $organization->users()->attach($user->id, ['role' => 'owner']);
+
+        $this->assertFalse(Gate::forUser($user)->allows('create', Organization::class));
+
+        $this->actingAs($user);
+        Livewire::test(CreateOrganization::class)->assertForbidden();
+    }
+
+    /**
+     * CASE 3 of the 5.4.4E audit: same rule for an Admin as for an Owner -
+     * Option B is membership-count-based, not role-based, so it does not
+     * matter which manageable role the user already holds.
+     */
+    public function test_an_organization_admin_cannot_create_another_organization(): void
+    {
+        $user = User::factory()->create();
+        $organization = Organization::factory()->create();
+        $organization->users()->attach($user->id, ['role' => 'admin']);
+
+        $this->assertFalse(Gate::forUser($user)->allows('create', Organization::class));
+    }
+
+    /**
+     * CASE 4 of the 5.4.4E audit — the "after" version of the baseline this
+     * phase captured before OrganizationPolicy::create() changed (a pure
+     * Member, never Owner/Admin anywhere, was the one persona the audit
+     * found no isolated test for at all).
+     */
+    public function test_a_pure_member_without_any_owner_or_admin_role_cannot_create_another_organization(): void
+    {
+        $user = User::factory()->create();
+        $organization = Organization::factory()->create();
+        $organization->users()->attach($user->id, ['role' => 'member']);
+
+        $this->assertFalse(Gate::forUser($user)->allows('create', Organization::class));
+
+        $this->actingAs($user);
+        Livewire::test(CreateOrganization::class)->assertForbidden();
+    }
+
+    /**
+     * CASE 6 of the 5.4.4E audit: being a plain Member of two organizations
+     * is still one-or-more memberships - the rule is "zero or not zero",
+     * never a count/role distinction.
+     */
+    public function test_a_member_of_two_organizations_cannot_create_another_organization(): void
+    {
+        $user = User::factory()->create();
+        Organization::factory()->create()->users()->attach($user->id, ['role' => 'member']);
+        Organization::factory()->create()->users()->attach($user->id, ['role' => 'member']);
+
+        $this->assertFalse(Gate::forUser($user)->allows('create', Organization::class));
+    }
+
+    /**
+     * CASE 7 of the 5.4.4E audit: Platform Super Admin gets no special
+     * treatment in either direction - OrganizationPolicy::create() never
+     * inspects Spatie roles at all, so a Super Admin with zero organization
+     * memberships is allowed through exactly like anyone else in the same
+     * position. This is a regression guard against ever adding a Super
+     * Admin bypass here (hard rule for this phase).
+     */
+    public function test_super_admin_without_an_organization_can_still_create_one(): void
+    {
+        $superAdminRole = Role::create(['name' => 'Super Admin']);
+        $superAdmin = User::factory()->create();
+        $superAdmin->assignRole($superAdminRole);
+
+        $this->assertTrue(Gate::forUser($superAdmin)->allows('create', Organization::class));
+    }
+
+    /**
+     * CASE 8 of the 5.4.4E audit: Super Admin status does not exempt a user
+     * from Option B either - once they hold any organization membership
+     * (here, Owner), the same "zero memberships only" rule applies with no
+     * bypass, exactly as CASE 7's sibling proves the absence of a bypass in
+     * the other direction.
+     */
+    public function test_super_admin_who_already_owns_an_organization_cannot_create_another(): void
+    {
+        $superAdminRole = Role::create(['name' => 'Super Admin']);
+        $superAdmin = User::factory()->create();
+        $superAdmin->assignRole($superAdminRole);
+        $organization = Organization::factory()->create();
+        $organization->users()->attach($superAdmin->id, ['role' => 'owner']);
+
+        $this->assertFalse(Gate::forUser($superAdmin)->allows('create', Organization::class));
     }
 }

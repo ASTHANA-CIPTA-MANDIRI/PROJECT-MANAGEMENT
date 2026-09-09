@@ -26,17 +26,23 @@ class OrganizationPolicy
     }
 
     /**
-     * Phase 5.2 — anyone who can reach the panel at all may create their
-     * own organization; there is no Spatie permission for this (same reason
-     * none of this Policy's other abilities have one) and no membership to
-     * check yet, since the organization doesn't exist until after this
-     * passes. Still a real Policy method — not a bypass — so
-     * CreateOrganization's create() action has a single, testable gate to
-     * call, the same as every other write in this app.
+     * Phase 5.4.4F (Option B) — only a user with zero organization
+     * memberships may create a new organization, aligning with the
+     * self-serve "one active organization per user" trial direction. A
+     * user who is already Owner, Admin, or Member of ANY organization must
+     * join/manage through that path instead of spinning up another tenant.
+     * Phase 5.2's original "anyone who can reach the panel may create"
+     * rule (a deliberate choice at the time, per commit 9bab9a0) is
+     * superseded by this explicit product decision (Phase 5.4.4E audit —
+     * the ADR never defined this, so it was never a settled invariant to
+     * begin with). There is still no Spatie permission for this ability
+     * (same reason none of this Policy's other abilities have one) — the
+     * check is purely membership-count-based, read straight from
+     * organization_users via User::organizations(), never from client input.
      */
     public function create(User $user): bool
     {
-        return true;
+        return $user->organizations()->doesntExist();
     }
 
     public function view(User $user, Organization $organization): bool

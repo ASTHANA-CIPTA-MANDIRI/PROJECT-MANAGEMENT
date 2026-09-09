@@ -29,12 +29,17 @@
         </div>
     @endif
 
-    {{-- Always offered, regardless of how many organizations the user
-         already belongs to (0, 1, or several) — Phase 5.2. --}}
-    <a
-        href="{{ route('filament.pages.create-organization') }}"
-        class="text-xs font-medium text-primary-600 hover:text-primary-500 dark:text-primary-400"
-    >
-        + {{ __('Create organization') }}
-    </a>
+    {{-- Phase 5.4.4F (Option B): only offered to a user with zero
+         organization memberships — OrganizationPolicy::create() denies
+         everyone else, so hiding this link for them keeps the UI honest
+         about what the backend actually allows, rather than offering a
+         link that always 403s for an existing member/owner/admin. --}}
+    @can('create', \App\Models\Organization::class)
+        <a
+            href="{{ route('filament.pages.create-organization') }}"
+            class="text-xs font-medium text-primary-600 hover:text-primary-500 dark:text-primary-400"
+        >
+            + {{ __('Create organization') }}
+        </a>
+    @endcan
 </div>
