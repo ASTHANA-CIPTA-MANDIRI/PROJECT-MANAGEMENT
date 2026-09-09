@@ -245,13 +245,19 @@ class ProjectPolicyTest extends TestCase
         $this->assertTrue($user->can('update', $project));
     }
 
-    public function test_an_organization_admin_can_update_a_project_with_no_permission_and_no_project_users_row(): void
+    /**
+     * Fase 6b: Organization Admin authority over a project's *settings* is
+     * narrowed to Owner only — was assertTrue before this phase (see
+     * Project::isOwnerManageableThroughOrganizationBy()'s docblock for the
+     * reasoning). Admin still gets full view/create authority, unaffected.
+     */
+    public function test_an_organization_admin_cannot_update_a_project_through_organization_authority_alone(): void
     {
         $user = $this->userWithoutPermissions();
         $organization = $this->organizationManageableBy($user, 'admin');
         $project = Project::factory()->create(['organization_id' => $organization->id]);
 
-        $this->assertTrue($user->can('update', $project));
+        $this->assertFalse($user->can('update', $project));
     }
 
     public function test_a_plain_organization_member_cannot_update_a_project_through_organization_authority(): void
@@ -348,13 +354,17 @@ class ProjectPolicyTest extends TestCase
         $this->assertTrue($user->can('delete', $project));
     }
 
-    public function test_an_organization_admin_can_delete_a_project_with_no_permission_and_no_project_users_row(): void
+    /**
+     * Fase 6b: same narrowing as update() above, applied to delete — was
+     * assertTrue before this phase.
+     */
+    public function test_an_organization_admin_cannot_delete_a_project_through_organization_authority_alone(): void
     {
         $user = $this->userWithoutPermissions();
         $organization = $this->organizationManageableBy($user, 'admin');
         $project = Project::factory()->create(['organization_id' => $organization->id]);
 
-        $this->assertTrue($user->can('delete', $project));
+        $this->assertFalse($user->can('delete', $project));
     }
 
     public function test_a_plain_organization_member_cannot_delete_a_project_through_organization_authority(): void

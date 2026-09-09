@@ -55,9 +55,18 @@ class OrganizationPolicy
         return $organization->isManageableBy($user);
     }
 
+    /**
+     * Fase 6b — Owner only, not Admin. Deleting the organization itself is
+     * the most destructive action in this entire axis (every project loses
+     * its organization_id — see Project migration's nullOnDelete — and
+     * every membership/invitation is cascade-deleted); it belongs in the
+     * same "Admin/Agent must not" bucket as Project delete/settings, not
+     * the broader Owner+Admin "manage the organization" bucket update()
+     * above still uses.
+     */
     public function delete(User $user, Organization $organization): bool
     {
-        return $organization->isManageableBy($user);
+        return $organization->isOwnedBy($user);
     }
 
     /**

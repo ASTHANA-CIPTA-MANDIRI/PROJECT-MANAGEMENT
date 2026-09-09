@@ -83,16 +83,23 @@ class ProjectPolicy
     /**
      * Determine whether the user can update the model.
      *
-     * Phase 5.4.3: same OR-shape as view() above — Organization Owner/Admin
-     * authority is a second, sufficient path alongside the existing
-     * permission-gated owner_id/project_users path, which is untouched.
+     * Phase 5.4.3: same OR-shape as view() above — Organization authority
+     * is a second, sufficient path alongside the existing permission-gated
+     * owner_id/project_users path, which is untouched.
+     *
+     * Fase 6b: narrowed from isManageableThroughOrganizationBy() (Owner+
+     * Admin) to isOwnerManageableThroughOrganizationBy() (Owner only) —
+     * changing a project's settings is exactly the "Admin/Agent must not"
+     * authority subscription-model-direction.md calls out. An Admin who is
+     * also a project_users member with the manage role still updates it
+     * through the unchanged first branch, same as before.
      *
      * @return \Illuminate\Auth\Access\Response|bool
      */
     public function update(User $user, Project $project)
     {
         return ($user->can('Update project') && $project->isManageableBy($user))
-            || $project->isManageableThroughOrganizationBy($user);
+            || $project->isOwnerManageableThroughOrganizationBy($user);
     }
 
     /**
@@ -100,12 +107,15 @@ class ProjectPolicy
      *
      * Phase 5.4.3: same OR-shape as update() above.
      *
+     * Fase 6b: same narrowing as update() above — deleting a project is the
+     * clearest "Admin/Agent must not" case of all.
+     *
      * @return \Illuminate\Auth\Access\Response|bool
      */
     public function delete(User $user, Project $project)
     {
         return ($user->can('Delete project') && $project->isManageableBy($user))
-            || $project->isManageableThroughOrganizationBy($user);
+            || $project->isOwnerManageableThroughOrganizationBy($user);
     }
 
     /**

@@ -179,6 +179,34 @@ class Project extends Model implements HasMedia
     }
 
     /**
+     * Fase 6b — narrower sibling of isManageableThroughOrganizationBy()
+     * above: only the Organization's Owner (not Admin) gets destructive/
+     * settings authority over a project through organization membership
+     * alone. ProjectPolicy::update()/delete() call this instead of the
+     * broader method; ::view() and ::create() are deliberately unaffected
+     * and keep using the Owner+Admin version, since an Admin still needs
+     * to see every project in the organization to manage the team and may
+     * still create new ones — subscription-model-direction.md's
+     * Admin/Agent principle is specifically "no authority to delete a
+     * project or change its settings/billing", not "no authority at all."
+     * Same organization-match re-verification as the method above, for the
+     * same reason: safe to call from anywhere, not just from behind
+     * another guard.
+     */
+    public function isOwnerManageableThroughOrganizationBy(User $user): bool
+    {
+        if ($this->organization_id === null) {
+            return false;
+        }
+
+        $currentOrganization = OrganizationContext::current($user);
+
+        return $currentOrganization !== null
+            && $currentOrganization->id === $this->organization_id
+            && $currentOrganization->isOwnedBy($user);
+    }
+
+    /**
      * Whether the user's current Organization context (see
      * App\Support\OrganizationContext) matches this project's organization —
      * or the project has none, in which case there is nothing to match
