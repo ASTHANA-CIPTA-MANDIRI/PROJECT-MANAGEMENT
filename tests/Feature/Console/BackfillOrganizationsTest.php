@@ -71,6 +71,53 @@ class BackfillOrganizationsTest extends TestCase
         }
     }
 
+    // A project's owner_id is backfilled as Organization 'owner', not the
+    // organization_users.role column's 'member' default — a plain
+    // project_users member (never an owner_id anywhere) stays 'member'.
+    public function test_project_owner_is_backfilled_as_organization_owner_not_plain_member(): void
+    {
+        $owner = User::factory()->create();
+        $member = User::factory()->create();
+
+        $project = Project::factory()->create(['owner_id' => $owner->id]);
+        $this->attachMember($project, $member);
+
+        $this->artisan('organizations:backfill')->assertSuccessful();
+
+        $organization = Organization::where('name', 'Default Organization')->firstOrFail();
+
+        $this->assertDatabaseHas('organization_users', [
+            'organization_id' => $organization->id,
+            'user_id' => $owner->id,
+            'role' => 'owner',
+        ]);
+        $this->assertDatabaseHas('organization_users', [
+            'organization_id' => $organization->id,
+            'user_id' => $member->id,
+            'role' => 'member',
+        ]);
+    }
+
+    // A user who owns one project but is only a plain member of another
+    // still ends up 'owner' overall — owning any project is enough.
+    public function test_user_who_owns_one_project_and_is_member_of_another_is_backfilled_as_owner(): void
+    {
+        $user = User::factory()->create();
+        $ownedProject = Project::factory()->create(['owner_id' => $user->id]);
+        $otherProject = Project::factory()->create();
+        $this->attachMember($otherProject, $user);
+
+        $this->artisan('organizations:backfill')->assertSuccessful();
+
+        $organization = Organization::where('name', 'Default Organization')->firstOrFail();
+
+        $this->assertDatabaseHas('organization_users', [
+            'organization_id' => $organization->id,
+            'user_id' => $user->id,
+            'role' => 'owner',
+        ]);
+    }
+
     // Unrelated user (no project ownership/membership) must NOT be enrolled.
     public function test_user_unrelated_to_any_project_is_not_enrolled(): void
     {

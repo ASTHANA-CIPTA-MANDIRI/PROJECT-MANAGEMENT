@@ -121,10 +121,23 @@ class BackfillOrganizations extends Command
      */
     private function targetUserIds(): Collection
     {
-        $ownerIds = Project::withTrashed()->whereNotNull('owner_id')->pluck('owner_id');
         $memberIds = DB::table('project_users')->pluck('user_id');
 
-        return $ownerIds->merge($memberIds)->unique()->values();
+        return $this->ownerUserIds()->merge($memberIds)->unique()->values();
+    }
+
+    /**
+     * Ids of every user who owns at least one project (including
+     * soft-deleted projects/owners). Backfilled as Organization 'owner'
+     * instead of the organization_users.role column's 'member' default, so
+     * a former project owner does not silently lose the authority
+     * ProjectPolicy grants Organization Owners/Admins the moment this
+     * command runs — the column has no way to express "no role yet" that
+     * write() could leave for a caller to fill in later.
+     */
+    private function ownerUserIds(): Collection
+    {
+        return Project::withTrashed()->whereNotNull('owner_id')->pluck('owner_id')->unique()->values();
     }
 
     private function printReport(
@@ -173,14 +186,17 @@ class BackfillOrganizations extends Command
                 });
             });
 
-        $usersRequiringMembership->chunk(self::CHUNK_SIZE)->each(function (Collection $chunk) use ($organization) {
-            DB::transaction(function () use ($chunk, $organization) {
+        $ownerIds = $this->ownerUserIds();
+
+        $usersRequiringMembership->chunk(self::CHUNK_SIZE)->each(function (Collection $chunk) use ($organization, $ownerIds) {
+            DB::transaction(function () use ($chunk, $organization, $ownerIds) {
                 $now = now();
 
                 DB::table('organization_users')->insert(
                     $chunk->map(fn ($userId) => [
                         'organization_id' => $organization->id,
                         'user_id' => $userId,
+                        'role' => $ownerIds->contains($userId) ? 'owner' : 'member',
                         'created_at' => $now,
                         'updated_at' => $now,
                     ])->all()
