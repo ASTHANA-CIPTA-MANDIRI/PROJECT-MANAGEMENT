@@ -5,6 +5,7 @@ namespace App\Listeners\Concerns;
 use App\Models\Organization;
 use App\Models\User;
 use Illuminate\Database\QueryException;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
 
 /**
@@ -28,31 +29,55 @@ trait ProvisionsPersonalOrganization
      * between account creation and this handler running) is left alone —
      * Option B already limits a user to one Organization at a time, so
      * provisioning a second one here would violate that rule itself.
+     *
+     * Audit finding (2026-09-09): the exists() check alone is a
+     * check-then-act race — two near-simultaneous Registered dispatches
+     * for the same brand-new user could both pass it before either
+     * commits, since organization_users has no unique index on user_id
+     * alone (only on the (organization_id, user_id) pair), so a plain
+     * DB-level unique-violation catch cannot close this the way
+     * candidateOrganizationName()'s collision retry does for the name.
+     * Cache::lock() serializes concurrent callers for this user id
+     * instead — it works across PHP-FPM/queue workers regardless of cache
+     * driver (including 'file', via real flock()), unlike an in-process
+     * mutex which only protects a single request.
      */
     private function provisionPersonalOrganization(User $user): void
     {
-        if ($user->organizations()->exists()) {
+        $lock = Cache::lock("provision-organization:{$user->id}", 10);
+
+        if (! $lock->get()) {
+            // Another process is already provisioning this exact user —
+            // nothing more to do here rather than waiting/retrying.
             return;
         }
 
-        for ($attempt = 0; $attempt < 5; $attempt++) {
-            try {
-                DB::transaction(function () use ($user, $attempt) {
-                    $organization = Organization::create([
-                        'name' => $this->candidateOrganizationName($user, $attempt),
-                        'trial_ends_at' => now()->addDays(7),
-                    ]);
-                    $organization->users()->attach($user->id, ['role' => 'owner']);
-                });
-
+        try {
+            if ($user->organizations()->exists()) {
                 return;
-            } catch (QueryException $exception) {
-                // organizations.name is unique — collide, try the next
-                // candidate name rather than leaving the user org-less.
-                if ($exception->getCode() !== '23000') {
-                    throw $exception;
+            }
+
+            for ($attempt = 0; $attempt < 5; $attempt++) {
+                try {
+                    DB::transaction(function () use ($user, $attempt) {
+                        $organization = Organization::create([
+                            'name' => $this->candidateOrganizationName($user, $attempt),
+                            'trial_ends_at' => now()->addDays(7),
+                        ]);
+                        $organization->users()->attach($user->id, ['role' => 'owner']);
+                    });
+
+                    return;
+                } catch (QueryException $exception) {
+                    // organizations.name is unique — collide, try the next
+                    // candidate name rather than leaving the user org-less.
+                    if ($exception->getCode() !== '23000') {
+                        throw $exception;
+                    }
                 }
             }
+        } finally {
+            $lock->release();
         }
     }
 

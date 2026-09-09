@@ -3,6 +3,7 @@
 namespace App\Listeners;
 
 use App\Listeners\Concerns\ProvisionsPersonalOrganization;
+use App\Models\User;
 use DutchCodingCompany\FilamentSocialite\Events\Registered;
 
 /**
@@ -14,8 +15,15 @@ class ProvisionOrganizationOnSocialRegistration
 {
     use ProvisionsPersonalOrganization;
 
+    /**
+     * $event->socialiteUser->user is typed Model|null — the instanceof
+     * narrows it instead of adding a PHPStan baseline entry, same
+     * reasoning as ProvisionOrganizationOnRegistration::handle().
+     */
     public function handle(Registered $event): void
     {
-        $this->provisionPersonalOrganization($event->socialiteUser->user);
+        if ($event->socialiteUser->user instanceof User) {
+            $this->provisionPersonalOrganization($event->socialiteUser->user);
+        }
     }
 }
