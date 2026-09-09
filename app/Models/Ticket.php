@@ -3,6 +3,8 @@
 namespace App\Models;
 
 use App\Support\HtmlSanitizer;
+use App\Support\OrganizationContext;
+use App\Support\TrialGate;
 use Carbon\CarbonInterval;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Casts\Attribute;
@@ -59,12 +61,32 @@ class Ticket extends Model implements HasMedia
      * Tickets the given user may see: the ones they own or are responsible
      * for, plus every ticket of a project they own or belong to. Mirrors the
      * filter the dashboard tables use, so aggregations agree with listings.
+     *
+     * Fase 6 audit (2026-09-09): the owner_id/responsible_id branches are a
+     * path to a ticket that bypasses Project::scopeAccessibleBy() entirely
+     * (a ticket's owner isn't necessarily a project_users member), so fixing
+     * that scope alone does not close this one — a trial-locked
+     * Organization's tickets could still surface here through plain
+     * ownership. The second whereHas below applies the same
+     * "organization_id null OR = usable current org" rule scopeAccessibleBy()
+     * uses, as an independent AND-condition covering all three branches
+     * uniformly, since every ticket has exactly one project (project_id is
+     * required) and therefore exactly one Organization to check.
      */
     public function scopeVisibleTo(Builder $query, User $user): Builder
     {
-        return $query->where(fn (Builder $query) => $query->where('owner_id', $user->id)
-            ->orWhere('responsible_id', $user->id)
-            ->orWhereHas('project', fn ($query) => $query->accessibleBy($user)));
+        $currentOrganization = OrganizationContext::current($user);
+        $currentOrganizationUsable = $currentOrganization !== null && TrialGate::active($currentOrganization);
+
+        return $query
+            ->where(fn (Builder $query) => $query->where('owner_id', $user->id)
+                ->orWhere('responsible_id', $user->id)
+                ->orWhereHas('project', fn ($query) => $query->accessibleBy($user)))
+            ->whereHas('project', fn (Builder $query) => $query->whereNull('organization_id')
+                ->when(
+                    $currentOrganizationUsable,
+                    fn (Builder $query) => $query->orWhere('organization_id', $currentOrganization->id)
+                ));
     }
 
     public function owner(): BelongsTo

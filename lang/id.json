@@ -280,6 +280,7 @@
     "Jira tickets": "Tugas Jira",
     "Username": "Nama belakang",
     "Password": "Kata sandi",
+    "Your organization's trial has ended. Contact the organization Owner to subscribe.": "Masa uji coba organisasi Anda sudah berakhir. Hubungi Owner organisasi untuk berlangganan.",
     "Your jira account username": "Nama pengguna akun jira Anda",
     "Your jira account password": "Kata sandi akun jira Anda",
     "Important: Your jira credentials are only used to communicate with jira REST API, and will not be stored in this application": "Penting: Kredensial jira Anda hanya digunakan untuk berkomunikasi dengan jira REST API, dan tidak akan disimpan dalam aplikasi ini",

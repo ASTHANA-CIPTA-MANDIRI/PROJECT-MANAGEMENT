@@ -38,6 +38,7 @@ use App\Support\OrganizationContext;
 use App\Support\TrialGate;
 use Filament\Resources\RelationManagers\RelationManager;
 use Filament\Resources\Resource;
+use Illuminate\Auth\Access\Response;
 use Illuminate\Foundation\Support\Providers\AuthServiceProvider as ServiceProvider;
 use Illuminate\Support\Facades\Gate;
 
@@ -120,15 +121,36 @@ class AuthServiceProvider extends ServiceProvider
      * including raw permission-string checks like $user->can('View project'),
      * which arrive here with an empty $arguments array and are skipped, same
      * as any ability on a model outside TRIAL_GATED_MODELS. Returning null
-     * (not true) lets the real Policy decide exactly as it did before this
-     * phase; only a genuinely locked Organization ever returns false here.
+     * (not true/Response::allow()) lets the real Policy decide exactly as it
+     * did before this phase; only a genuinely locked Organization ever
+     * returns a deny Response here.
+     *
+     * @return \Illuminate\Auth\Access\Response|null
      */
-    private function denyIfOrganizationLocked(User $user, array $arguments): ?bool
+    private function denyIfOrganizationLocked(User $user, array $arguments)
     {
         $target = $arguments[0] ?? null;
         $targetClass = is_string($target) ? $target : ($target !== null ? get_class($target) : null);
 
         if ($targetClass === null || ! in_array($targetClass, self::TRIAL_GATED_MODELS, true)) {
+            return null;
+        }
+
+        // Audit finding (2026-09-09): a legacy/pre-tenant Project
+        // (organization_id === null) must never be gated by this check no
+        // matter what the acting user's own active Organization is doing —
+        // Project::isWithinOrganizationContext() already documents this
+        // guarantee at the Policy layer, and this Gate::before ran in
+        // front of it unconditionally before this fix, which could wrongly
+        // lock a user out of a project that has nothing to do with
+        // whichever Organization they currently have selected. Checked
+        // directly off the instance (already-loaded attribute, no extra
+        // query) rather than resolved generically for every gated model —
+        // the other five models reach their Organization only through a
+        // `project` relation that usually isn't eager-loaded on this path,
+        // and would turn this single Gate callback into an N+1 on every
+        // ticket/sprint/epic/comment/hour ability check.
+        if ($target instanceof Project && $target->organization_id === null) {
             return null;
         }
 
@@ -141,6 +163,10 @@ class AuthServiceProvider extends ServiceProvider
             return null;
         }
 
-        return TrialGate::active($organization) ? null : false;
+        if (TrialGate::active($organization)) {
+            return null;
+        }
+
+        return Response::deny(__('Your organization\'s trial has ended. Contact the organization Owner to subscribe.'));
     }
 }

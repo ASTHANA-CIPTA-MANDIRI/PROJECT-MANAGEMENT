@@ -3,6 +3,7 @@
 namespace App\Models;
 
 use App\Support\OrganizationContext;
+use App\Support\TrialGate;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Casts\Attribute;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
@@ -81,11 +82,22 @@ class Project extends Model implements HasMedia
      * visibility stays governed purely by the owner/project_users rule below,
      * exactly as it was before Organization existed (ADR 0001, "must not
      * become an escape hatch" — nothing gains new visibility this way).
+     *
+     * Fase 6 audit (2026-09-09): a trial-expired, unsubscribed Organization
+     * makes itself entirely unusable here too — $currentOrganizationUsable
+     * gates BOTH the organization-management visibility branch and the
+     * final organization_id match, so a locked-out user's own dashboard/
+     * widget/export/search queries (none of which call Gate::authorize()
+     * directly, unlike ProjectController et al.) stop surfacing that
+     * Organization's projects the same moment Gate::before() would already
+     * deny a direct authorize('view', $project) call — one rule instead of
+     * requiring every future read path to remember to check TrialGate itself.
      */
     public function scopeAccessibleBy(Builder $query, User $user): Builder
     {
         $currentOrganization = OrganizationContext::current($user);
-        $organizationGrantsManagement = $currentOrganization?->isManageableBy($user) ?? false;
+        $currentOrganizationUsable = $currentOrganization !== null && TrialGate::active($currentOrganization);
+        $organizationGrantsManagement = $currentOrganizationUsable && $currentOrganization->isManageableBy($user);
 
         return $query
             ->where(fn (Builder $query) => $query->where('owner_id', $user->id)
@@ -95,7 +107,10 @@ class Project extends Model implements HasMedia
                     fn (Builder $query) => $query->orWhere('organization_id', $currentOrganization->id)
                 ))
             ->where(fn (Builder $query) => $query->whereNull('organization_id')
-                ->orWhere('organization_id', $currentOrganization?->id));
+                ->when(
+                    $currentOrganizationUsable,
+                    fn (Builder $query) => $query->orWhere('organization_id', $currentOrganization->id)
+                ));
     }
 
     /**
@@ -175,6 +190,7 @@ class Project extends Model implements HasMedia
 
         return $currentOrganization !== null
             && $currentOrganization->id === $this->organization_id
+            && TrialGate::active($currentOrganization)
             && $currentOrganization->isManageableBy($user);
     }
 
@@ -203,6 +219,7 @@ class Project extends Model implements HasMedia
 
         return $currentOrganization !== null
             && $currentOrganization->id === $this->organization_id
+            && TrialGate::active($currentOrganization)
             && $currentOrganization->isOwnedBy($user);
     }
 
@@ -211,11 +228,24 @@ class Project extends Model implements HasMedia
      * App\Support\OrganizationContext) matches this project's organization —
      * or the project has none, in which case there is nothing to match
      * against and the check is skipped entirely (see scopeAccessibleBy()).
+     *
+     * Fase 6 audit (2026-09-09): also requires that Organization to still be
+     * usable (TrialGate::active()) — this is the single-instance twin of
+     * scopeAccessibleBy()'s $currentOrganizationUsable, and the reason
+     * isAccessibleBy()/isManageableBy() (both call this first) stay correct
+     * even when reached from a path that never went through Gate::before().
      */
     private function isWithinOrganizationContext(User $user): bool
     {
-        return $this->organization_id === null
-            || $this->organization_id === OrganizationContext::current($user)?->id;
+        if ($this->organization_id === null) {
+            return true;
+        }
+
+        $currentOrganization = OrganizationContext::current($user);
+
+        return $currentOrganization !== null
+            && $currentOrganization->id === $this->organization_id
+            && TrialGate::active($currentOrganization);
     }
 
     public function tickets(): HasMany
