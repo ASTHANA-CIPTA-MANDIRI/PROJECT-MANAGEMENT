@@ -3,10 +3,12 @@
 namespace Tests\Feature\Organization;
 
 use App\Filament\Pages\CreateOrganization;
+use App\Models\Activity;
 use App\Models\Organization;
 use App\Models\Role;
 use App\Models\User;
 use App\Support\OrganizationContext;
+use Database\Seeders\ActivitySeeder;
 use Database\Seeders\EmployeeRoleSeeder;
 use Database\Seeders\OrganizationDemoSeeder;
 use Database\Seeders\PermissionsSeeder;
@@ -51,6 +53,29 @@ class OrganizationCreationTest extends TestCase
         $organization = Organization::where('name', 'Fresh Organization')->firstOrFail();
 
         $this->assertSame('owner', $organization->roleOf($user));
+    }
+
+    /**
+     * Fase 3B — the manual creation path gets the same reference-data
+     * starter set as auto-provisioning (App\Support\OrganizationDefaults is
+     * the single call site both share).
+     */
+    public function test_creating_an_organization_seeds_its_own_activity_starter_set(): void
+    {
+        $user = $this->panelUser();
+        $this->actingAs($user);
+
+        Livewire::test(CreateOrganization::class)
+            ->fillForm(['name' => 'Fresh Organization'])
+            ->call('create')
+            ->assertHasNoFormErrors();
+
+        $organization = Organization::where('name', 'Fresh Organization')->firstOrFail();
+
+        $this->assertSame(
+            count(ActivitySeeder::defaults()),
+            Activity::where('organization_id', $organization->id)->count()
+        );
     }
 
     // ---------------------------------------------------------------- C

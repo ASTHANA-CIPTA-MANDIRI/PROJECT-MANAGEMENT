@@ -23,11 +23,17 @@ class ActivityPolicy
     /**
      * Determine whether the user can view the model.
      *
+     * Fase 3B: also requires the Activity to belong to no Organization
+     * (legacy) or to the user's own current Organization — see
+     * App\Models\Concerns\BelongsToOrganization::isAccessibleBy(). Without
+     * this, the flat permission alone let any user view/edit/delete any
+     * Organization's Activity by id.
+     *
      * @return \Illuminate\Auth\Access\Response|bool
      */
     public function view(User $user, Activity $activity)
     {
-        return $user->can('View activity');
+        return $user->can('View activity') && $activity->isAccessibleBy($user);
     }
 
     /**
@@ -47,7 +53,7 @@ class ActivityPolicy
      */
     public function update(User $user, Activity $activity)
     {
-        return $user->can('Update activity');
+        return $user->can('Update activity') && $activity->isAccessibleBy($user);
     }
 
     /**
@@ -57,7 +63,7 @@ class ActivityPolicy
      */
     public function delete(User $user, Activity $activity)
     {
-        return $user->can('Delete activity');
+        return $user->can('Delete activity') && $activity->isAccessibleBy($user);
     }
 
     /**

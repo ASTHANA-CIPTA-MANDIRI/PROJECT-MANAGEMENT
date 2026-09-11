@@ -78,7 +78,7 @@ class TimesheetResource extends Resource
                             ->searchable()
                             ->reactive()
                             ->options(function ($get, $set) {
-                                return Activity::query()->pluck('name', 'id')->toArray();
+                                return Activity::query()->visibleTo(auth()->user())->pluck('name', 'id')->toArray();
                             }),
                         TextInput::make('value')
                             ->label(__('Time to log'))

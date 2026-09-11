@@ -2,8 +2,10 @@
 
 namespace Tests\Feature\Organization;
 
+use App\Models\Activity;
 use App\Models\Organization;
 use App\Models\User;
+use Database\Seeders\ActivitySeeder;
 use Illuminate\Auth\Events\Registered;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Tests\TestCase;
@@ -83,5 +85,23 @@ class OrganizationProvisioningTest extends TestCase
         event(new Registered($user));
 
         $this->assertSame(1, $user->fresh()->organizations()->count());
+    }
+
+    /**
+     * Fase 3B — the newly provisioned Organization also gets its own
+     * reference-data starter set (Activity so far), not just an empty shell.
+     */
+    public function test_the_provisioned_organization_gets_its_own_activity_starter_set(): void
+    {
+        $user = User::factory()->create();
+
+        event(new Registered($user));
+
+        $organization = $user->fresh()->organizations()->sole();
+
+        $this->assertSame(
+            count(ActivitySeeder::defaults()),
+            Activity::where('organization_id', $organization->id)->count()
+        );
     }
 }

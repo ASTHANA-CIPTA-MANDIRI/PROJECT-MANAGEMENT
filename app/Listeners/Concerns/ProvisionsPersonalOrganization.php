@@ -4,6 +4,7 @@ namespace App\Listeners\Concerns;
 
 use App\Models\Organization;
 use App\Models\User;
+use App\Support\OrganizationDefaults;
 use Illuminate\Database\QueryException;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
@@ -65,6 +66,7 @@ trait ProvisionsPersonalOrganization
                             'trial_ends_at' => now()->addDays(7),
                         ]);
                         $organization->users()->attach($user->id, ['role' => 'owner']);
+                        OrganizationDefaults::seed($organization);
                     });
 
                     return;

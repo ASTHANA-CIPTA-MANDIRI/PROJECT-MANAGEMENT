@@ -4,6 +4,7 @@ namespace App\Filament\Pages;
 
 use App\Models\Organization;
 use App\Support\OrganizationContext;
+use App\Support\OrganizationDefaults;
 use Filament\Forms\Components\Section;
 use Filament\Forms\Components\TextInput;
 use Filament\Forms\Concerns\InteractsWithForms;
@@ -104,6 +105,7 @@ class CreateOrganization extends AuthorizedPage implements HasForms
             $organization = DB::transaction(function () use ($name) {
                 $organization = Organization::create(['name' => $name]);
                 $organization->users()->attach(auth()->id(), ['role' => 'owner']);
+                OrganizationDefaults::seed($organization);
 
                 return $organization;
             });
