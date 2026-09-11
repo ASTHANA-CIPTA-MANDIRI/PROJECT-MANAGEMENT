@@ -42,8 +42,8 @@ class IssueForm extends Component implements HasForms
             'project_id' => $this->project?->id ?? null,
             'owner_id' => auth()->user()->id,
             'status_id' => $defaultStatus,
-            'type_id' => TicketType::where('is_default', true)->first()?->id,
-            'priority_id' => TicketPriority::where('is_default', true)->first()?->id,
+            'type_id' => TicketType::visibleTo(auth()->user())->where('is_default', true)->first()?->id,
+            'priority_id' => TicketPriority::visibleTo(auth()->user())->where('is_default', true)->first()?->id,
         ]);
     }
 
@@ -146,13 +146,13 @@ class IssueForm extends Component implements HasForms
                             Forms\Components\Select::make('type_id')
                                 ->label(__('Ticket type'))
                                 ->searchable()
-                                ->options(fn () => TicketType::query()->pluck('name', 'id')->toArray())
+                                ->options(fn () => TicketType::query()->visibleTo(auth()->user())->pluck('name', 'id')->toArray())
                                 ->required(),
 
                             Forms\Components\Select::make('priority_id')
                                 ->label(__('Ticket priority'))
                                 ->searchable()
-                                ->options(fn () => TicketPriority::query()->pluck('name', 'id')->toArray())
+                                ->options(fn () => TicketPriority::query()->visibleTo(auth()->user())->pluck('name', 'id')->toArray())
                                 ->required(),
                         ]),
                 ]),

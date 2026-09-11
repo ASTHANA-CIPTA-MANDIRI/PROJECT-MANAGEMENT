@@ -4,6 +4,8 @@ namespace Tests\Feature\Console;
 
 use App\Models\Activity;
 use App\Models\Organization;
+use App\Models\TicketPriority;
+use App\Models\TicketType;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Tests\TestCase;
 
@@ -65,5 +67,22 @@ class BackfillLookupDataTest extends TestCase
         $this->artisan('lookup-data:backfill', ['--dry-run' => true])->assertSuccessful();
 
         $this->assertNull($activity->fresh()->organization_id);
+    }
+
+    /**
+     * Fase 3B — TicketType and TicketPriority joined MODELS alongside
+     * Activity; one pass over the same command backfills all three, not
+     * just the first model that was wired.
+     */
+    public function test_ticket_types_and_priorities_are_backfilled_in_the_same_pass(): void
+    {
+        $organization = Organization::factory()->create(['name' => 'Default Organization']);
+        $type = TicketType::factory()->create(['organization_id' => null]);
+        $priority = TicketPriority::factory()->create(['organization_id' => null]);
+
+        $this->artisan('lookup-data:backfill')->assertSuccessful();
+
+        $this->assertSame($organization->id, $type->fresh()->organization_id);
+        $this->assertSame($organization->id, $priority->fresh()->organization_id);
     }
 }

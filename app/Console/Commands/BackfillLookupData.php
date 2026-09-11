@@ -4,6 +4,8 @@ namespace App\Console\Commands;
 
 use App\Models\Activity;
 use App\Models\Organization;
+use App\Models\TicketPriority;
+use App\Models\TicketType;
 use Illuminate\Console\Command;
 
 /**
@@ -40,6 +42,8 @@ class BackfillLookupData extends Command
     /** @var array<int, class-string> */
     private const MODELS = [
         Activity::class,
+        TicketType::class,
+        TicketPriority::class,
     ];
 
     public function handle(): int

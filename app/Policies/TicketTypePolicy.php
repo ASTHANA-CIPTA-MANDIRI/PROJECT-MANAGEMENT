@@ -23,11 +23,14 @@ class TicketTypePolicy
     /**
      * Determine whether the user can view the model.
      *
+     * Fase 3B: also requires isAccessibleBy() — see ActivityPolicy::view()'s
+     * docblock for the reasoning, identical here.
+     *
      * @return \Illuminate\Auth\Access\Response|bool
      */
     public function view(User $user, TicketType $ticketType)
     {
-        return $user->can('View ticket type');
+        return $user->can('View ticket type') && $ticketType->isAccessibleBy($user);
     }
 
     /**
@@ -47,7 +50,7 @@ class TicketTypePolicy
      */
     public function update(User $user, TicketType $ticketType)
     {
-        return $user->can('Update ticket type');
+        return $user->can('Update ticket type') && $ticketType->isAccessibleBy($user);
     }
 
     /**
@@ -57,7 +60,7 @@ class TicketTypePolicy
      */
     public function delete(User $user, TicketType $ticketType)
     {
-        return $user->can('Delete ticket type');
+        return $user->can('Delete ticket type') && $ticketType->isAccessibleBy($user);
     }
 
     /**

@@ -4,6 +4,8 @@ namespace App\Support;
 
 use App\Models\Organization;
 use Database\Seeders\ActivitySeeder;
+use Database\Seeders\TicketPrioritySeeder;
+use Database\Seeders\TicketTypeSeeder;
 
 /**
  * Fase 3B — the starter set of reference data (TicketType, TicketPriority,
@@ -17,7 +19,7 @@ use Database\Seeders\ActivitySeeder;
  * through auto-provisioning). One shared call site so the two paths can
  * never silently drift apart.
  *
- * Only Activity is wired so far; TicketType/TicketPriority/Label/
+ * Activity, TicketType, and TicketPriority are wired so far; Label/
  * ProjectStatus join this list as Fase 3B extends to them.
  */
 class OrganizationDefaults
@@ -25,5 +27,7 @@ class OrganizationDefaults
     public static function seed(Organization $organization): void
     {
         ActivitySeeder::seedFor($organization);
+        TicketTypeSeeder::seedFor($organization);
+        TicketPrioritySeeder::seedFor($organization);
     }
 }

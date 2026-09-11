@@ -35,9 +35,18 @@ abstract class TicketsGroupedByChartWidget extends DoughnutChartWidget
         // Only count tickets the viewer may see, like the dashboard tables do;
         // an unscoped count would expose other tenants' volumes. Cached for one
         // hour: counts change slowly relative to dashboard views.
-        $data = $this->remember('counts', fn () => $model::withCount([
-            'tickets' => fn (Builder $query) => $query->visibleTo(auth()->user()),
-        ])
+        //
+        // Fase 3B audit finding: the base $model query itself needs the same
+        // visibleTo() scope, not just the nested `tickets` relation count -
+        // without it, another Organization's TicketType/TicketPriority NAME
+        // still rendered in this chart's labels (with a correctly-zero
+        // count, since the ticket count was already scoped), just an
+        // existence leak rather than a volume leak.
+        $data = $this->remember('counts', fn () => $model::query()
+            ->visibleTo(auth()->user())
+            ->withCount([
+                'tickets' => fn (Builder $query) => $query->visibleTo(auth()->user()),
+            ])
             ->get(['id', 'name'])
             ->pluck('tickets_count', 'name'));
 

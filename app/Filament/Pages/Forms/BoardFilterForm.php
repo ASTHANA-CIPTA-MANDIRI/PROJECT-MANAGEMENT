@@ -41,12 +41,12 @@ class BoardFilterForm
                     Select::make('types')
                         ->label(__('Ticket types'))
                         ->multiple()
-                        ->options(TicketType::query()->pluck('name', 'id')),
+                        ->options(TicketType::query()->visibleTo(auth()->user())->pluck('name', 'id')),
 
                     Select::make('priorities')
                         ->label(__('Ticket priorities'))
                         ->multiple()
-                        ->options(TicketPriority::query()->pluck('name', 'id')),
+                        ->options(TicketPriority::query()->visibleTo(auth()->user())->pluck('name', 'id')),
 
                     Select::make('labels')
                         ->label(__('Labels'))

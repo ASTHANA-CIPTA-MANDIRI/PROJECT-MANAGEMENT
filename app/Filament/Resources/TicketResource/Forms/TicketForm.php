@@ -141,15 +141,15 @@ class TicketForm
                 Forms\Components\Select::make('type_id')
                     ->label(__('Ticket type'))
                     ->searchable()
-                    ->options(fn () => TicketType::query()->pluck('name', 'id')->toArray())
-                    ->default(fn () => TicketType::where('is_default', true)->first()?->id)
+                    ->options(fn () => TicketType::query()->visibleTo(auth()->user())->pluck('name', 'id')->toArray())
+                    ->default(fn () => TicketType::visibleTo(auth()->user())->where('is_default', true)->first()?->id)
                     ->required(),
 
                 Forms\Components\Select::make('priority_id')
                     ->label(__('Ticket priority'))
                     ->searchable()
-                    ->options(fn () => TicketPriority::query()->pluck('name', 'id')->toArray())
-                    ->default(fn () => TicketPriority::where('is_default', true)->first()?->id)
+                    ->options(fn () => TicketPriority::query()->visibleTo(auth()->user())->pluck('name', 'id')->toArray())
+                    ->default(fn () => TicketPriority::visibleTo(auth()->user())->where('is_default', true)->first()?->id)
                     ->required(),
             ]);
     }

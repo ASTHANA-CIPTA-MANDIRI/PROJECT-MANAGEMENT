@@ -37,6 +37,26 @@ trait BelongsToOrganization
     }
 
     /**
+     * Rows belonging to no Organization (legacy) or to the given Organization
+     * id — the lower-level primitive scopeVisibleTo() below builds on.
+     * Useful directly wherever the caller already has a concrete
+     * organization_id to match against instead of a User to resolve one
+     * from — e.g. a queued job scoping to the Project it was given rather
+     * than resolving "current Organization" from session/ambient state,
+     * which ADR 0001's Jobs guidance rules out for exactly this reason
+     * (App\Jobs\ImportJiraTicketsJob already carries its target explicitly,
+     * never `auth()`, since a queue worker has no session to read one from).
+     */
+    public function scopeVisibleToOrganization(Builder $query, ?int $organizationId): Builder
+    {
+        return $query->where(fn (Builder $query) => $query->whereNull('organization_id')
+            ->when(
+                $organizationId !== null,
+                fn (Builder $query) => $query->orWhere('organization_id', $organizationId)
+            ));
+    }
+
+    /**
      * Rows visible to this user: the Organization-less legacy rows, plus
      * this user's own current Organization's rows. The single source of
      * truth for every listing/dropdown built on this model — mirrors
@@ -44,13 +64,13 @@ trait BelongsToOrganization
      */
     public function scopeVisibleTo(Builder $query, User $user): Builder
     {
-        $currentOrganization = OrganizationContext::current($user);
-
-        return $query->where(fn (Builder $query) => $query->whereNull('organization_id')
-            ->when(
-                $currentOrganization !== null,
-                fn (Builder $query) => $query->orWhere('organization_id', $currentOrganization->id)
-            ));
+        // A direct method call, not $query->visibleToOrganization(...) -
+        // Eloquent's magic scope-forwarding works fine at runtime either
+        // way, but PHPStan cannot resolve a scope-calling-a-sibling-scope
+        // through the generic Builder parameter type from inside the trait
+        // itself (unlike calling a scope from outside on a concrete Model
+        // query, which Larastan does understand).
+        return $this->scopeVisibleToOrganization($query, OrganizationContext::current($user)?->id);
     }
 
     /**

@@ -182,8 +182,12 @@ class ImportJiraTicketsJob implements ShouldQueue
             'owner_id' => $this->user->id,
             'status_id' => $this->defaultStatusId($project),
             'project_id' => $project->id,
-            'type_id' => TicketType::where('is_default', true)->firstOrFail()->id,
-            'priority_id' => TicketPriority::where('is_default', true)->firstOrFail()->id,
+            // Scoped to the project's own organization_id directly, never
+            // auth()/OrganizationContext - this runs in a queue worker with
+            // no session to read a "current" Organization from (ADR 0001's
+            // Jobs guidance).
+            'type_id' => TicketType::visibleToOrganization($project->organization_id)->where('is_default', true)->firstOrFail()->id,
+            'priority_id' => TicketPriority::visibleToOrganization($project->organization_id)->where('is_default', true)->firstOrFail()->id,
         ];
 
         return Validator::make($data, TicketRequest::rulesFor($data))->validate();

@@ -27,7 +27,7 @@ class TicketPriorityPolicy
      */
     public function view(User $user, TicketPriority $ticketPriority)
     {
-        return $user->can('View ticket priority');
+        return $user->can('View ticket priority') && $ticketPriority->isAccessibleBy($user);
     }
 
     /**
@@ -47,7 +47,7 @@ class TicketPriorityPolicy
      */
     public function update(User $user, TicketPriority $ticketPriority)
     {
-        return $user->can('Update ticket priority');
+        return $user->can('Update ticket priority') && $ticketPriority->isAccessibleBy($user);
     }
 
     /**
@@ -57,7 +57,7 @@ class TicketPriorityPolicy
      */
     public function delete(User $user, TicketPriority $ticketPriority)
     {
-        return $user->can('Delete ticket priority');
+        return $user->can('Delete ticket priority') && $ticketPriority->isAccessibleBy($user);
     }
 
     /**
