@@ -20,8 +20,15 @@ use Database\Seeders\TicketTypeSeeder;
  * through auto-provisioning). One shared call site so the two paths can
  * never silently drift apart.
  *
- * Activity, TicketType, TicketPriority, and ProjectStatus are wired so
- * far; Label joins this list as Fase 3B's last model.
+ * Activity, TicketType, TicketPriority, and ProjectStatus are wired here.
+ * Label — Fase 3B's fifth and last isolated model — deliberately has no
+ * entry: unlike the other four, it never had a seeded starter set (no
+ * is_default column, nothing required by a NOT NULL foreign key elsewhere)
+ * — a Label is purely user-created tagging, so a fresh Organization simply
+ * starts with zero and users create their own via the inline
+ * createOptionForm on TicketForm. Label's own organization_id isolation is
+ * still fully wired (LabelObserver, LabelPolicy, ListLabels scope) — it
+ * just has nothing to copy here.
  */
 class OrganizationDefaults
 {

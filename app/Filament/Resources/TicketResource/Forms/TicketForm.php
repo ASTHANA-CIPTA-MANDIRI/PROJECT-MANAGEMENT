@@ -167,7 +167,10 @@ class TicketForm
         return Forms\Components\Select::make('labels')
             ->label(__('Labels'))
             ->multiple()
-            ->relationship('labels', 'name')
+            // Fase 3B: the third relationship() argument scopes both the
+            // preloaded options query and the search-results query - see
+            // Filament\Forms\Components\Select::relationship().
+            ->relationship('labels', 'name', fn ($query) => $query->visibleTo(auth()->user()))
             ->preload()
             ->searchable()
             ->columnSpan(2)

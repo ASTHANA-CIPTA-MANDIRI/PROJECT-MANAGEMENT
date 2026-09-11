@@ -3,11 +3,14 @@
 namespace App\Console\Commands;
 
 use App\Models\Activity;
+use App\Models\Label;
 use App\Models\Organization;
 use App\Models\ProjectStatus;
 use App\Models\TicketPriority;
 use App\Models\TicketType;
 use Illuminate\Console\Command;
+use Illuminate\Database\Eloquent\Builder;
+use Illuminate\Database\Eloquent\SoftDeletes;
 
 /**
  * Fase 3B (Tenant Isolation) backfill — see
@@ -30,6 +33,11 @@ use Illuminate\Console\Command;
  * TicketType/TicketPriority/Label/ProjectStatus join it as Fase 3B extends
  * organization_id to them, at which point this command needs no further
  * changes beyond adding their class names here.
+ *
+ * Label is the one model in MODELS without SoftDeletes (no deleted_at
+ * column at all) - query() branches on that per model rather than calling
+ * withTrashed() unconditionally, which would throw a BadMethodCallException
+ * for Label.
  */
 class BackfillLookupData extends Command
 {
@@ -46,6 +54,7 @@ class BackfillLookupData extends Command
         TicketType::class,
         TicketPriority::class,
         ProjectStatus::class,
+        Label::class,
     ];
 
     public function handle(): int
@@ -54,7 +63,7 @@ class BackfillLookupData extends Command
 
         $counts = [];
         foreach (self::MODELS as $modelClass) {
-            $counts[$modelClass] = $modelClass::withTrashed()->whereNull('organization_id')->count();
+            $counts[$modelClass] = $this->query($modelClass)->whereNull('organization_id')->count();
         }
 
         $this->printReport($counts);
@@ -82,7 +91,7 @@ class BackfillLookupData extends Command
         }
 
         foreach (self::MODELS as $modelClass) {
-            $updated = $modelClass::withTrashed()
+            $updated = $this->query($modelClass)
                 ->whereNull('organization_id')
                 ->update(['organization_id' => $organization->id]);
 
@@ -90,6 +99,19 @@ class BackfillLookupData extends Command
         }
 
         return self::SUCCESS;
+    }
+
+    /**
+     * @param  class-string  $modelClass
+     */
+    private function query(string $modelClass): Builder
+    {
+        $usesSoftDeletes = in_array(SoftDeletes::class, class_uses_recursive($modelClass), true);
+
+        /** @var Builder $query */
+        $query = $usesSoftDeletes ? $modelClass::withTrashed() : $modelClass::query();
+
+        return $query;
     }
 
     /**

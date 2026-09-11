@@ -17,7 +17,7 @@ class LabelPolicy
 
     public function view(User $user, Label $label)
     {
-        return $user->can('View label');
+        return $user->can('View label') && $label->isAccessibleBy($user);
     }
 
     public function create(User $user)
@@ -27,12 +27,12 @@ class LabelPolicy
 
     public function update(User $user, Label $label)
     {
-        return $user->can('Update label');
+        return $user->can('Update label') && $label->isAccessibleBy($user);
     }
 
     public function delete(User $user, Label $label)
     {
-        return $user->can('Delete label');
+        return $user->can('Delete label') && $label->isAccessibleBy($user);
     }
 
     public function deleteAny(User $user)

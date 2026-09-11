@@ -51,7 +51,7 @@ class BoardFilterForm
                     Select::make('labels')
                         ->label(__('Labels'))
                         ->multiple()
-                        ->options(Label::query()->pluck('name', 'id')),
+                        ->options(Label::query()->visibleTo(auth()->user())->pluck('name', 'id')),
 
                     Toggle::make('includeNotAffectedTickets')
                         ->label(__('Show only not affected tickets'))

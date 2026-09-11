@@ -3,6 +3,7 @@
 namespace Tests\Feature\Console;
 
 use App\Models\Activity;
+use App\Models\Label;
 use App\Models\Organization;
 use App\Models\ProjectStatus;
 use App\Models\TicketPriority;
@@ -99,5 +100,20 @@ class BackfillLookupDataTest extends TestCase
         $this->artisan('lookup-data:backfill')->assertSuccessful();
 
         $this->assertSame($organization->id, $status->fresh()->organization_id);
+    }
+
+    /**
+     * Fase 3B — Label is the one model in MODELS without SoftDeletes; this
+     * confirms the command's query() helper branches correctly instead of
+     * calling withTrashed() unconditionally (which would throw for Label).
+     */
+    public function test_labels_are_backfilled_despite_having_no_soft_deletes(): void
+    {
+        $organization = Organization::factory()->create(['name' => 'Default Organization']);
+        $label = Label::factory()->create(['organization_id' => null]);
+
+        $this->artisan('lookup-data:backfill')->assertSuccessful();
+
+        $this->assertSame($organization->id, $label->fresh()->organization_id);
     }
 }

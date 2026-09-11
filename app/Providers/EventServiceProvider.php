@@ -8,6 +8,7 @@ use App\Listeners\ProvisionOrganizationOnRegistration;
 use App\Listeners\ProvisionOrganizationOnSocialRegistration;
 use App\Listeners\SocialRegistration;
 use App\Models\Activity;
+use App\Models\Label;
 use App\Models\Project;
 use App\Models\ProjectStatus;
 use App\Models\Sprint;
@@ -18,6 +19,7 @@ use App\Models\TicketStatus;
 use App\Models\TicketType;
 use App\Models\User;
 use App\Observers\ActivityObserver;
+use App\Observers\LabelObserver;
 use App\Observers\ProjectObserver;
 use App\Observers\ProjectStatusObserver;
 use App\Observers\SprintObserver;
@@ -68,6 +70,7 @@ class EventServiceProvider extends ServiceProvider
         TicketType::observe(TicketTypeObserver::class);
         TicketPriority::observe(TicketPriorityObserver::class);
         Activity::observe(ActivityObserver::class);
+        Label::observe(LabelObserver::class);
         User::observe(UserObserver::class);
     }
 
