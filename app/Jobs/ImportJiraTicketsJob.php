@@ -108,7 +108,13 @@ class ImportJiraTicketsJob implements ShouldQueue
         $project = Project::create([
             'name' => $name,
             'description' => __('Project imported from Jira, project key:').($projectDetails->key ?? ''),
-            'status_id' => ProjectStatus::where('is_default', true)->firstOrFail()->id,
+            // Fase 3B: the project itself doesn't exist yet, so there is no
+            // $project->organization_id to scope by. ProjectObserver::creating()
+            // only stamps organization_id from ambient auth(), which is never
+            // present in a queued job - the project below always lands with
+            // organization_id === null, so the default status must be
+            // resolved from that same null-scoped set to match.
+            'status_id' => ProjectStatus::visibleToOrganization(null)->where('is_default', true)->firstOrFail()->id,
             'owner_id' => $this->user->id,
             'ticket_prefix' => $this->ticketPrefix($projectDetails->key ?? null, $name),
         ]);

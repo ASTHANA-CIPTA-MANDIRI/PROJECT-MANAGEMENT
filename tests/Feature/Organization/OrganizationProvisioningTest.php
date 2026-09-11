@@ -4,10 +4,12 @@ namespace Tests\Feature\Organization;
 
 use App\Models\Activity;
 use App\Models\Organization;
+use App\Models\ProjectStatus;
 use App\Models\TicketPriority;
 use App\Models\TicketType;
 use App\Models\User;
 use Database\Seeders\ActivitySeeder;
+use Database\Seeders\ProjectStatusSeeder;
 use Database\Seeders\TicketPrioritySeeder;
 use Database\Seeders\TicketTypeSeeder;
 use Illuminate\Auth\Events\Registered;
@@ -128,6 +130,24 @@ class OrganizationProvisioningTest extends TestCase
         $this->assertSame(
             count(TicketPrioritySeeder::defaults()),
             TicketPriority::where('organization_id', $organization->id)->count()
+        );
+    }
+
+    /**
+     * Fase 3B — ProjectStatus joins Activity/TicketType/TicketPriority in
+     * OrganizationDefaults::seed().
+     */
+    public function test_the_provisioned_organization_gets_its_own_project_status_starter_set(): void
+    {
+        $user = User::factory()->create();
+
+        event(new Registered($user));
+
+        $organization = $user->fresh()->organizations()->sole();
+
+        $this->assertSame(
+            count(ProjectStatusSeeder::defaults()),
+            ProjectStatus::where('organization_id', $organization->id)->count()
         );
     }
 }

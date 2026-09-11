@@ -118,8 +118,8 @@ class ProjectForm
                 Forms\Components\Select::make('status_id')
                     ->label(__('Project status'))
                     ->searchable()
-                    ->options(fn () => ProjectStatus::all()->pluck('name', 'id')->toArray())
-                    ->default(fn () => ProjectStatus::where('is_default', true)->first()?->id)
+                    ->options(fn () => ProjectStatus::query()->visibleTo(auth()->user())->pluck('name', 'id')->toArray())
+                    ->default(fn () => ProjectStatus::query()->visibleTo(auth()->user())->where('is_default', true)->first()?->id)
                     ->required()
                     // Let users add a status inline instead of leaving the form.
                     ->createOptionForm([

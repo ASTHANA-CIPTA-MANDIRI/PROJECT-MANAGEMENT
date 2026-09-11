@@ -140,7 +140,7 @@ class ProjectResource extends Resource
                 Tables\Filters\SelectFilter::make('status_id')
                     ->label(__('Status'))
                     ->multiple()
-                    ->options(fn () => ProjectStatus::all()->pluck('name', 'id')->toArray()),
+                    ->options(fn () => ProjectStatus::query()->visibleTo(auth()->user())->pluck('name', 'id')->toArray()),
 
                 Tables\Filters\TrashedFilter::make(),
             ])

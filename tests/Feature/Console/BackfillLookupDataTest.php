@@ -4,6 +4,7 @@ namespace Tests\Feature\Console;
 
 use App\Models\Activity;
 use App\Models\Organization;
+use App\Models\ProjectStatus;
 use App\Models\TicketPriority;
 use App\Models\TicketType;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -84,5 +85,19 @@ class BackfillLookupDataTest extends TestCase
 
         $this->assertSame($organization->id, $type->fresh()->organization_id);
         $this->assertSame($organization->id, $priority->fresh()->organization_id);
+    }
+
+    /**
+     * Fase 3B — ProjectStatus joins MODELS alongside Activity, TicketType,
+     * and TicketPriority.
+     */
+    public function test_project_statuses_are_backfilled_in_the_same_pass(): void
+    {
+        $organization = Organization::factory()->create(['name' => 'Default Organization']);
+        $status = ProjectStatus::factory()->create(['organization_id' => null]);
+
+        $this->artisan('lookup-data:backfill')->assertSuccessful();
+
+        $this->assertSame($organization->id, $status->fresh()->organization_id);
     }
 }

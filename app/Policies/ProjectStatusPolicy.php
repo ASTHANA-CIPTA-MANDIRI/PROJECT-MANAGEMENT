@@ -27,7 +27,7 @@ class ProjectStatusPolicy
      */
     public function view(User $user, ProjectStatus $projectStatus)
     {
-        return $user->can('View project status');
+        return $user->can('View project status') && $projectStatus->isAccessibleBy($user);
     }
 
     /**
@@ -47,7 +47,7 @@ class ProjectStatusPolicy
      */
     public function update(User $user, ProjectStatus $projectStatus)
     {
-        return $user->can('Update project status');
+        return $user->can('Update project status') && $projectStatus->isAccessibleBy($user);
     }
 
     /**
@@ -57,7 +57,7 @@ class ProjectStatusPolicy
      */
     public function delete(User $user, ProjectStatus $projectStatus)
     {
-        return $user->can('Delete project status');
+        return $user->can('Delete project status') && $projectStatus->isAccessibleBy($user);
     }
 
     /**

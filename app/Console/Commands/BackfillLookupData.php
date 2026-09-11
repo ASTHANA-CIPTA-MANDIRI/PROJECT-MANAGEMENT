@@ -4,6 +4,7 @@ namespace App\Console\Commands;
 
 use App\Models\Activity;
 use App\Models\Organization;
+use App\Models\ProjectStatus;
 use App\Models\TicketPriority;
 use App\Models\TicketType;
 use Illuminate\Console\Command;
@@ -44,6 +45,7 @@ class BackfillLookupData extends Command
         Activity::class,
         TicketType::class,
         TicketPriority::class,
+        ProjectStatus::class,
     ];
 
     public function handle(): int

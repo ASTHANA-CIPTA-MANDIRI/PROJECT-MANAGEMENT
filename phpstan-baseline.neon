@@ -176,16 +176,6 @@ parameters:
 			path: app/Filament/Pages/TimesheetExport.php
 
 		-
-			message: "#^Called 'pluck' on Laravel collection, but could have been retrieved as a query\\.$#"
-			count: 1
-			path: app/Filament/Resources/ProjectResource.php
-
-		-
-			message: "#^Called 'pluck' on Laravel collection, but could have been retrieved as a query\\.$#"
-			count: 1
-			path: app/Filament/Resources/ProjectResource/Forms/ProjectForm.php
-
-		-
 			message: "#^Access to an undefined property Illuminate\\\\Database\\\\Eloquent\\\\Model\\:\\:\\$type\\.$#"
 			count: 1
 			path: app/Filament/Resources/ProjectResource/RelationManagers/SprintsRelationManager.php

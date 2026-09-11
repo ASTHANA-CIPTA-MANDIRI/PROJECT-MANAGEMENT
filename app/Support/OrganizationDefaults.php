@@ -4,6 +4,7 @@ namespace App\Support;
 
 use App\Models\Organization;
 use Database\Seeders\ActivitySeeder;
+use Database\Seeders\ProjectStatusSeeder;
 use Database\Seeders\TicketPrioritySeeder;
 use Database\Seeders\TicketTypeSeeder;
 
@@ -19,8 +20,8 @@ use Database\Seeders\TicketTypeSeeder;
  * through auto-provisioning). One shared call site so the two paths can
  * never silently drift apart.
  *
- * Activity, TicketType, and TicketPriority are wired so far; Label/
- * ProjectStatus join this list as Fase 3B extends to them.
+ * Activity, TicketType, TicketPriority, and ProjectStatus are wired so
+ * far; Label joins this list as Fase 3B's last model.
  */
 class OrganizationDefaults
 {
@@ -29,5 +30,6 @@ class OrganizationDefaults
         ActivitySeeder::seedFor($organization);
         TicketTypeSeeder::seedFor($organization);
         TicketPrioritySeeder::seedFor($organization);
+        ProjectStatusSeeder::seedFor($organization);
     }
 }
