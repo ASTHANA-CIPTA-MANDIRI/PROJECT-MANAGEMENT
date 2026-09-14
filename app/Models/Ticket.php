@@ -89,6 +89,24 @@ class Ticket extends Model implements HasMedia
                 ));
     }
 
+    /**
+     * The single-instance twin of scopeVisibleTo() above — same two-part
+     * shape (is this the right person, AND is the project's Organization
+     * context valid), kept as one real method instead of being
+     * re-implemented ad hoc at each call site. Added for
+     * routes/channels.php's ticket.{ticket} broadcast authorization, which
+     * used to check owner_id/responsible_id directly and never reached
+     * Project::isWithinOrganizationContext() through that shortcut - see
+     * that method's docblock.
+     */
+    public function isAccessibleBy(User $user): bool
+    {
+        return $this->project->isWithinOrganizationContext($user)
+            && ($this->owner_id === $user->id
+                || $this->responsible_id === $user->id
+                || $this->project->isAccessibleBy($user));
+    }
+
     public function owner(): BelongsTo
     {
         return $this->belongsTo(User::class, 'owner_id', 'id');

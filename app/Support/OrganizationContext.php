@@ -41,9 +41,12 @@ class OrganizationContext
     /**
      * Explicitly select the active organization. Verifies membership before
      * persisting — a claimed organization id is never taken on faith, per
-     * ADR 0001's Organization Context rule. No production UI calls this yet
-     * (no switcher exists in Phase 3A); it exists so tests can exercise a
-     * genuine multi-organization context switch.
+     * ADR 0001's Organization Context rule. Called by the real Organization
+     * switcher (App\Http\Livewire\OrganizationSwitcher, Phase 3C - rendered
+     * on every Filament page's sidebar) and by AcceptOrganizationInvitation
+     * once a user accepts an invite into a second Organization, as well as
+     * by tests that need to exercise a genuine multi-organization context
+     * switch without going through either of those.
      */
     public static function switch(User $user, int $organizationId): bool
     {

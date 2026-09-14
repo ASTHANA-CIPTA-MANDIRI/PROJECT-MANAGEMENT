@@ -4,11 +4,13 @@ namespace Tests\Feature;
 
 use App\Events\TicketCommentPosted;
 use App\Events\TicketStatusChanged;
+use App\Models\Organization;
 use App\Models\Project;
 use App\Models\Ticket;
 use App\Models\TicketComment;
 use App\Models\TicketStatus;
 use App\Models\User;
+use App\Support\OrganizationContext;
 use Illuminate\Broadcasting\PrivateChannel;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Event;
@@ -175,6 +177,28 @@ class BroadcastingTest extends TestCase
 
         $callback = $this->channelCallback('ticket.{ticket}');
         $this->assertTrue((bool) $callback($member, $ticket));
+    }
+
+    /**
+     * Audit finding (pre-Fase 7): the owner_id/responsible_id checks used
+     * to run inline in routes/channels.php and short-circuit before ever
+     * reaching the project's Organization/trial context - a ticket's owner
+     * could keep listening on this channel after their Organization's
+     * trial ended. Now delegates to Ticket::isAccessibleBy(), which
+     * applies that check regardless of which branch would otherwise match.
+     */
+    public function test_the_tickets_owner_is_rejected_once_their_organizations_trial_has_ended(): void
+    {
+        $owner = User::factory()->create();
+        $organization = Organization::factory()->create(['trial_ends_at' => now()->subDay()]);
+        $organization->users()->attach($owner->id, ['role' => 'owner']);
+        OrganizationContext::switch($owner, $organization->id);
+
+        $project = Project::factory()->create(['organization_id' => $organization->id, 'owner_id' => $owner->id]);
+        $ticket = Ticket::factory()->create(['project_id' => $project->id, 'owner_id' => $owner->id]);
+
+        $callback = $this->channelCallback('ticket.{ticket}');
+        $this->assertFalse((bool) $callback($owner, $ticket));
     }
 
     /**

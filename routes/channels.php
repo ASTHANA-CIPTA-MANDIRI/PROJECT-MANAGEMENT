@@ -28,9 +28,13 @@ Broadcast::channel('project.{project}', function ($user, Project $project) {
 });
 
 // A user may listen on a ticket's channel if they can access the ticket:
-// its owner/responsible, or a member/owner of its project.
+// its owner/responsible, or a member/owner of its project. Delegates to
+// Ticket::isAccessibleBy() (audit finding, pre-Fase 7: the owner_id/
+// responsible_id checks used to run inline here and short-circuit before
+// ever checking the project's Organization/trial context — a ticket's
+// owner could keep listening on this channel after their Organization's
+// trial ended, the same class of gap scopeVisibleTo() already closed for
+// the query version of this check).
 Broadcast::channel('ticket.{ticket}', function ($user, Ticket $ticket) {
-    return $ticket->owner_id === $user->id
-        || $ticket->responsible_id === $user->id
-        || $ticket->project->isAccessibleBy($user);
+    return $ticket->isAccessibleBy($user);
 });

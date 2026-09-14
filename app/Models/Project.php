@@ -234,8 +234,16 @@ class Project extends Model implements HasMedia
      * scopeAccessibleBy()'s $currentOrganizationUsable, and the reason
      * isAccessibleBy()/isManageableBy() (both call this first) stay correct
      * even when reached from a path that never went through Gate::before().
+     *
+     * Public (audit finding, pre-Fase 7): Ticket::isAccessibleBy() needs
+     * this exact same AND-gate applied regardless of which owner_id/
+     * responsible_id/project-membership branch matches — mirroring
+     * Ticket::scopeVisibleTo()'s own two-part where()+whereHas() shape,
+     * which routes/channels.php's ticket.{ticket} broadcast authorization
+     * had drifted from by checking owner_id/responsible_id directly
+     * without it.
      */
-    private function isWithinOrganizationContext(User $user): bool
+    public function isWithinOrganizationContext(User $user): bool
     {
         if ($this->organization_id === null) {
             return true;
