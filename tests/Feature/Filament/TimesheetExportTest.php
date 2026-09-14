@@ -3,12 +3,14 @@
 namespace Tests\Feature\Filament;
 
 use App\Filament\Pages\TimesheetExport;
+use App\Models\Organization;
 use App\Models\Permission;
 use App\Models\Project;
 use App\Models\Role;
 use App\Models\Ticket;
 use App\Models\TicketHour;
 use App\Models\User;
+use App\Support\OrganizationContext;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Notification;
 use Livewire\Livewire;
@@ -126,5 +128,47 @@ class TimesheetExportTest extends TestCase
             ->fillForm(['start_date' => '2026-08-20', 'end_date' => '2026-08-20'])
             ->call('create')
             ->assertHasNoFormErrors();
+    }
+
+    // ------------------------------------------------------- trial gating
+
+    /**
+     * Audit finding (pre-Fase 7): this page was only gated by the flat
+     * 'List timesheet data' permission, invisible to Gate::before()'s
+     * TRIAL_GATED_MODELS matching (no model argument) - a locked-out
+     * Organization could still export their timesheet CSV indefinitely.
+     * ->instance()->create() calls the method directly on the mounted
+     * component so the actual return value (null vs a real download) can
+     * be asserted - Livewire's call() helper does not expose it.
+     */
+    public function test_export_is_blocked_when_the_organizations_trial_has_ended(): void
+    {
+        $organization = Organization::factory()->create(['trial_ends_at' => now()->subDay()]);
+        $organization->users()->attach($this->user->id, ['role' => 'owner']);
+        OrganizationContext::switch($this->user, $organization->id);
+
+        $component = Livewire::test(TimesheetExport::class)
+            ->fillForm(['start_date' => '2026-08-20', 'end_date' => '2026-08-20']);
+
+        $this->assertNull($component->instance()->create());
+    }
+
+    /**
+     * The mirror image: an active (non-expired) trial must not be blocked -
+     * proves the check is a real gate, not one that always denies.
+     */
+    public function test_export_still_works_during_an_active_trial(): void
+    {
+        $organization = Organization::factory()->create(['trial_ends_at' => now()->addDays(3)]);
+        $organization->users()->attach($this->user->id, ['role' => 'owner']);
+        OrganizationContext::switch($this->user, $organization->id);
+
+        $component = Livewire::test(TimesheetExport::class)
+            ->fillForm(['start_date' => '2026-08-20', 'end_date' => '2026-08-20']);
+
+        $this->assertInstanceOf(
+            \Symfony\Component\HttpFoundation\BinaryFileResponse::class,
+            $component->instance()->create()
+        );
     }
 }

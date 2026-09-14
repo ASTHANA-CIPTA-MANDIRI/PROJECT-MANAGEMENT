@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace App\Filament\Pages;
 
+use App\Support\OrganizationContext;
+use App\Support\TrialGate;
 use Closure;
 use Filament\Forms\Components\Card;
 use Filament\Forms\Components\DatePicker;
@@ -57,8 +59,22 @@ class TimesheetExport extends AuthorizedPage implements HasForms
         ];
     }
 
-    public function create(): BinaryFileResponse
+    public function create(): ?BinaryFileResponse
     {
+        // Audit finding (pre-Fase 7): this page is only gated by the flat
+        // 'List timesheet data' permission (AuthorizesPageAccess::boot()
+        // calls auth()->user()?->can($permission) with no model argument),
+        // which Gate::before()'s TRIAL_GATED_MODELS matching never sees -
+        // a locked-out Organization could still export their timesheet CSV
+        // indefinitely. Mirrors JiraImport::import()'s identical fix.
+        $organization = OrganizationContext::current(auth()->user());
+
+        if ($organization !== null && ! TrialGate::active($organization)) {
+            $this->notify('danger', __('Your organization\'s trial has ended. Contact the organization Owner to subscribe.'));
+
+            return null;
+        }
+
         $data = $this->form->getState();
 
         return Excel::download(
