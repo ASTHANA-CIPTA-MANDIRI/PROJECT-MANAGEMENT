@@ -2,6 +2,7 @@
 
 namespace Tests\Feature\Filament;
 
+use App\Models\Organization;
 use App\Models\Permission;
 use App\Models\Project;
 use App\Models\Role;
@@ -107,6 +108,30 @@ class WidgetsTest extends TestCase
         $this->seedActivity();
 
         Livewire::test(\App\Filament\Widgets\FavoriteProjects::class)->assertSuccessful();
+    }
+
+    /**
+     * Audit finding (pre-Fase 7): favoriting a project writes a plain
+     * project_favorites pivot row with no lifecycle tied to the access it
+     * was favorited under. Simulates the stale-favorite case directly (the
+     * project belongs to an Organization the user was never part of) rather
+     * than walking through revoking membership, since the bug is in the
+     * widget's own query, not in how the row got there.
+     */
+    public function test_the_favorite_projects_widget_hides_a_project_the_user_can_no_longer_access(): void
+    {
+        $this->seedActivity();
+
+        $otherOrganization = Organization::factory()->create();
+        $foreignProject = Project::factory()->create([
+            'organization_id' => $otherOrganization->id,
+            'name' => 'Secret Foreign Project',
+        ]);
+        $this->user->favoriteProjects()->attach($foreignProject->id);
+
+        Livewire::test(\App\Filament\Widgets\FavoriteProjects::class)
+            ->assertSuccessful()
+            ->assertDontSee('Secret Foreign Project');
     }
 
     public function test_the_latest_projects_widget_renders(): void

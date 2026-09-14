@@ -28,9 +28,18 @@ class FavoriteProjects extends BaseWidget
 
     protected function getCards(): array
     {
+        // Audit finding (pre-Fase 7): favoriting a project writes a plain
+        // project_favorites pivot row that outlives the access it was
+        // favorited under - a revoked project membership, an organization
+        // switch, or the organization's trial ending none of them clear it.
+        // ->accessibleBy() (the same scope every other project listing in
+        // this app uses) re-checks real access on every render instead of
+        // trusting that a favorite still means "can see this project".
+        //
         // Eager load everything the cards read (ticket count, contributors via
         // users+owner, and the cover media) to avoid a query per project.
         $favoriteProjects = auth()->user()->favoriteProjects()
+            ->accessibleBy(auth()->user())
             ->withCount('tickets')
             ->with(['users', 'owner', 'media'])
             ->get();
