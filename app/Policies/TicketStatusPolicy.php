@@ -2,6 +2,7 @@
 
 namespace App\Policies;
 
+use App\Models\Project;
 use App\Models\TicketStatus;
 use App\Models\User;
 use Illuminate\Auth\Access\HandlesAuthorization;
@@ -27,7 +28,7 @@ class TicketStatusPolicy
      */
     public function view(User $user, TicketStatus $ticketStatus)
     {
-        return $user->can('View ticket status');
+        return $user->can('View ticket status') && $this->belongsToAnAccessibleProject($user, $ticketStatus);
     }
 
     /**
@@ -47,7 +48,7 @@ class TicketStatusPolicy
      */
     public function update(User $user, TicketStatus $ticketStatus)
     {
-        return $user->can('Update ticket status');
+        return $user->can('Update ticket status') && $this->belongsToAnAccessibleProject($user, $ticketStatus);
     }
 
     /**
@@ -57,7 +58,31 @@ class TicketStatusPolicy
      */
     public function delete(User $user, TicketStatus $ticketStatus)
     {
-        return $user->can('Delete ticket status');
+        return $user->can('Delete ticket status') && $this->belongsToAnAccessibleProject($user, $ticketStatus);
+    }
+
+    /**
+     * A TicketStatus with no project_id is the shared, global default set
+     * (TicketStatusSeeder, status_type='default' projects) - visible to
+     * anyone holding the flat permission, the same "legacy/shared" rule
+     * every other lookup model in this app uses for a null tenant scope.
+     * A TicketStatus WITH a project_id is that one project's own custom set
+     * (StatusesRelationManager, status_type='custom') and must never be
+     * reachable by guessing/enumerating its id through TicketStatusResource's
+     * own view/edit/delete pages unless the caller can actually reach that
+     * project - mirrors EpicPolicy::belongsToAnAccessibleProject() exactly,
+     * the same "no permissions of its own, delegate to the parent Project"
+     * shape.
+     */
+    private function belongsToAnAccessibleProject(User $user, TicketStatus $ticketStatus): bool
+    {
+        if ($ticketStatus->project_id === null) {
+            return true;
+        }
+
+        return Project::accessibleBy($user)
+            ->whereKey($ticketStatus->project_id)
+            ->exists();
     }
 
     /**
