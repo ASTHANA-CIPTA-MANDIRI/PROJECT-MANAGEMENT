@@ -3,7 +3,10 @@
 namespace Tests\Feature;
 
 use App\Models\Organization;
+use App\Models\Project;
+use App\Models\Ticket;
 use App\Models\User;
+use App\Support\OrganizationContext;
 use Database\Seeders\EmployeeRoleSeeder;
 use Database\Seeders\OrganizationDemoSeeder;
 use Database\Seeders\PermissionsSeeder;
@@ -40,6 +43,8 @@ class OrganizationDemoSeederTest extends TestCase
 
         $this->assertDatabaseMissing('users', ['email' => 'owner@example.test']);
         $this->assertDatabaseMissing('organizations', ['name' => 'Organization Alpha']);
+        $this->assertDatabaseMissing('projects', ['ticket_prefix' => 'AWS']);
+        $this->assertSame(0, Ticket::count());
     }
 
     public function test_it_seeds_the_documented_membership_matrix(): void
@@ -122,5 +127,117 @@ class OrganizationDemoSeederTest extends TestCase
         $owner = User::where('email', 'owner@example.test')->firstOrFail();
 
         $this->assertTrue($owner->canAccessFilament());
+    }
+
+    // ------------------------------------------------------ demo projects
+
+    public function test_it_seeds_three_demo_projects_scoped_to_their_organizations(): void
+    {
+        $this->seed(OrganizationDemoSeeder::class);
+
+        $alpha = Organization::where('name', 'Organization Alpha')->firstOrFail();
+        $beta = Organization::where('name', 'Organization Beta')->firstOrFail();
+
+        $this->assertDatabaseHas('projects', ['ticket_prefix' => 'AWS', 'organization_id' => $alpha->id]);
+        $this->assertDatabaseHas('projects', ['ticket_prefix' => 'AHR', 'organization_id' => $alpha->id]);
+        $this->assertDatabaseHas('projects', ['ticket_prefix' => 'BMA', 'organization_id' => $beta->id]);
+    }
+
+    /**
+     * The whole point of this seeder: member@example.test is a real member
+     * of Alpha, is explicitly added to "Company Website" (AWS), and is NOT
+     * added to "Internal HR Tool" (AHR) - so they must see the former and
+     * not the latter, purely through Project::accessibleBy(), the same
+     * scope the real Filament ProjectResource list query uses.
+     */
+    public function test_a_plain_member_only_sees_the_project_they_were_explicitly_added_to(): void
+    {
+        $this->seed(OrganizationDemoSeeder::class);
+
+        $member = User::where('email', 'member@example.test')->firstOrFail();
+        $alpha = Organization::where('name', 'Organization Alpha')->firstOrFail();
+        OrganizationContext::switch($member, $alpha->id);
+
+        $visible = Project::where('ticket_prefix', 'AWS')->firstOrFail();
+        $hidden = Project::where('ticket_prefix', 'AHR')->firstOrFail();
+
+        $this->assertTrue(Project::accessibleBy($member)->whereKey($visible->id)->exists());
+        $this->assertFalse(Project::accessibleBy($member)->whereKey($hidden->id)->exists());
+    }
+
+    /**
+     * The Organization Admin's mirror image: sees every project in Alpha
+     * (org authority), including the one member@example.test cannot see -
+     * but per Fase 6b cannot delete either of them.
+     */
+    public function test_an_organization_admin_sees_every_project_but_cannot_delete_them(): void
+    {
+        $this->seed(PermissionsSeeder::class);
+        $this->seed(EmployeeRoleSeeder::class);
+        $this->seed(OrganizationDemoSeeder::class);
+
+        $admin = User::where('email', 'admin@example.test')->firstOrFail();
+        $alpha = Organization::where('name', 'Organization Alpha')->firstOrFail();
+        OrganizationContext::switch($admin, $alpha->id);
+
+        $visible = Project::where('ticket_prefix', 'AWS')->firstOrFail();
+        $hidden = Project::where('ticket_prefix', 'AHR')->firstOrFail();
+
+        $this->assertTrue(Project::accessibleBy($admin)->whereKey($visible->id)->exists());
+        $this->assertTrue(Project::accessibleBy($admin)->whereKey($hidden->id)->exists());
+        $this->assertFalse($admin->can('delete', $hidden));
+    }
+
+    public function test_it_seeds_several_tickets_per_demo_project(): void
+    {
+        $this->seed(OrganizationDemoSeeder::class);
+
+        // 5 on Company Website, 3 on Internal HR Tool, 4 on Mobile App Revamp.
+        $this->assertSame(12, Ticket::count());
+        $this->assertSame(5, Ticket::whereHas('project', fn ($q) => $q->where('ticket_prefix', 'AWS'))->count());
+        $this->assertSame(3, Ticket::whereHas('project', fn ($q) => $q->where('ticket_prefix', 'AHR'))->count());
+        $this->assertSame(4, Ticket::whereHas('project', fn ($q) => $q->where('ticket_prefix', 'BMA'))->count());
+    }
+
+    /**
+     * Every demo project gets at least one Epic (Roadmap draws its timeline
+     * from Epic::starts_at/ends_at), so the Road Map page always has
+     * something to show without the user having to build it by hand first.
+     */
+    public function test_each_demo_project_gets_at_least_one_dated_epic(): void
+    {
+        $this->seed(OrganizationDemoSeeder::class);
+
+        foreach (['AWS', 'AHR', 'BMA'] as $prefix) {
+            $project = Project::where('ticket_prefix', $prefix)->firstOrFail();
+
+            $this->assertGreaterThan(0, $project->epics()->count(), "{$prefix} should have at least one Epic");
+        }
+    }
+
+    /**
+     * Company Website and Mobile App Revamp are the two projects built to
+     * show a live board (Kanban/Scrum board queries Project::currentSprint) -
+     * Internal HR Tool deliberately stays lighter (see populateHrTool()'s
+     * docblock), so it is excluded here on purpose, not an oversight.
+     */
+    public function test_the_two_fuller_demo_projects_have_an_active_sprint(): void
+    {
+        $this->seed(OrganizationDemoSeeder::class);
+
+        foreach (['AWS', 'BMA'] as $prefix) {
+            $project = Project::where('ticket_prefix', $prefix)->firstOrFail();
+
+            $this->assertNotNull($project->currentSprint, "{$prefix} should have an active Sprint");
+        }
+    }
+
+    public function test_re_running_does_not_duplicate_demo_projects_or_tickets(): void
+    {
+        $this->seed(OrganizationDemoSeeder::class);
+        $this->seed(OrganizationDemoSeeder::class);
+
+        $this->assertSame(3, Project::whereIn('ticket_prefix', ['AWS', 'AHR', 'BMA'])->count());
+        $this->assertSame(12, Ticket::count());
     }
 }
