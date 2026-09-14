@@ -65,6 +65,22 @@ use Illuminate\Support\Carbon;
  * be a real member of Alpha, and still not see it — that is the CORRECT
  * result, not a bug. Run `php artisan db:seed --class=OrganizationDemoSeeder`
  * and read the table it prints at the end for the full breakdown.
+ *
+ * ---------------------------------------------------------------------
+ * SECOND THING WORTH KNOWING: a real Organization switcher exists.
+ * ---------------------------------------------------------------------
+ * App\Http\Livewire\OrganizationSwitcher (Phase 3C), rendered at the top
+ * of every Filament page's sidebar via the `sidebar.start` render hook
+ * (AppServiceProvider::configureOrganizationSwitcher()) - a dropdown of
+ * every Organization the logged-in user belongs to. A user with only one
+ * membership just sees that name as plain text (no dropdown needed).
+ * OrganizationContext::current() only picks the FIRST membership as a
+ * *fallback* for when nothing has been explicitly selected yet - once a
+ * demo account uses the switcher once, every subsequent page reflects
+ * that choice until they switch again. This is why owner@example.test
+ * owning both Alpha and Delta, and multi@example.test owning both Beta
+ * and Gamma, needs no special handling: just log in and use the
+ * dropdown to reach the other one.
  */
 class OrganizationDemoSeeder extends Seeder
 {
@@ -400,7 +416,7 @@ class OrganizationDemoSeeder extends Seeder
                 [
                     'owner@example.test',
                     'Alpha: Owner · Delta: Owner',
-                    'Semua project Alpha (Company Website, Internal HR Tool)',
+                    'Semua project Alpha (Company Website, Internal HR Tool) - pindah ke Delta lewat switcher untuk lihat "organisasi kosong"',
                     'Ya, semua project Alpha (Owner selalu bisa)',
                 ],
                 [
@@ -418,7 +434,7 @@ class OrganizationDemoSeeder extends Seeder
                 [
                     'multi@example.test',
                     'Beta: Owner · Gamma: Owner · Alpha: Member',
-                    'Di Beta: "Mobile App Revamp" (dia Owner Beta) — Di Alpha: TIDAK ada, cuma "member" biasa di sana',
+                    'Di Beta: "Mobile App Revamp" (dia Owner Beta, dan Beta yang otomatis kepilih login) - pindah ke Gamma lewat switcher untuk lihat "organisasi kosong" — Di Alpha: TIDAK ada, cuma "member" biasa di sana',
                     'Ya, tapi cuma project Beta miliknya',
                 ],
                 [
@@ -438,6 +454,11 @@ class OrganizationDemoSeeder extends Seeder
         $this->command->comment(
             'Tiap project demo sudah ada Sprint aktif + Epic bertanggal + beberapa Task tersebar di Todo/In progress/Done, '
             .'jadi papan Kanban/Scrum dan halaman Road Map langsung ada isinya, tidak perlu dibuat manual dulu.'
+        );
+        $this->command->line('');
+        $this->command->comment(
+            'Akun yang jadi anggota lebih dari satu organisasi (owner@, admin@, multi@) otomatis login ke organisasi pertamanya - '
+            .'pakai dropdown "Organization" di sidebar (App\\Http\\Livewire\\OrganizationSwitcher) untuk pindah ke organisasi lainnya.'
         );
     }
 }

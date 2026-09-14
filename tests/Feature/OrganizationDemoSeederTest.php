@@ -77,6 +77,27 @@ class OrganizationDemoSeederTest extends TestCase
         $this->assertSame(1, $delta->users()->count());
     }
 
+    /**
+     * A real Organization switcher exists (App\Http\Livewire\
+     * OrganizationSwitcher, Phase 3C) - a user belonging to more than one
+     * Organization (owner@ owns Alpha and Delta; multi@ owns Beta and
+     * Gamma) is never stuck: OrganizationContext::current() only picks the
+     * first membership as the *default* before anyone has switched, not a
+     * hard limit. This proves the raw membership is there for the
+     * switcher's dropdown to list, independent of which one happens to be
+     * current right now.
+     */
+    public function test_owner_and_multi_organization_users_are_real_members_of_every_organization_they_are_listed_for(): void
+    {
+        $this->seed(OrganizationDemoSeeder::class);
+
+        $owner = User::where('email', 'owner@example.test')->firstOrFail();
+        $multi = User::where('email', 'multi@example.test')->firstOrFail();
+
+        $this->assertSame(2, $owner->organizations()->count());
+        $this->assertSame(3, $multi->organizations()->count());
+    }
+
     public function test_the_no_organization_user_has_zero_memberships(): void
     {
         $this->seed(OrganizationDemoSeeder::class);
