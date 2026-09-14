@@ -3,6 +3,7 @@
 namespace Tests\Feature\Filament;
 
 use App\Jobs\ImportJiraTicketsJob;
+use App\Models\Organization;
 use App\Models\Project;
 use App\Models\ProjectStatus;
 use App\Models\Ticket;
@@ -10,6 +11,7 @@ use App\Models\TicketPriority;
 use App\Models\TicketStatus;
 use App\Models\TicketType;
 use App\Models\User;
+use App\Support\OrganizationDefaults;
 use Filament\Notifications\DatabaseNotification;
 use Illuminate\Database\Eloquent\ModelNotFoundException;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -224,5 +226,58 @@ class JiraImportJobTest extends TestCase
         (new ImportJiraTicketsJob([$this->jiraTicket('Alpha', 'ALP', 'First')], $importer))->handle();
 
         $this->assertSame($own->id, Ticket::sole()->status_id);
+    }
+
+    // -------------------------------------------------------- organization
+
+    /**
+     * Audit finding (pre-Fase 7): before organizationId was carried into
+     * this job, every Jira-imported Project landed with organization_id
+     * always null, permanently exempting it from Organization/trial
+     * gating - see Project::isWithinOrganizationContext()'s "null is
+     * legacy, not an escape hatch" rule. Uses org-scoped ProjectStatus/
+     * TicketType/TicketPriority (not just the global set from
+     * seedDefaults()) so the default lookups themselves prove the
+     * organization scoping is threaded through end to end, not just the
+     * Project row.
+     */
+    public function test_the_created_project_gets_the_importers_organization(): void
+    {
+        $organization = Organization::factory()->create();
+        OrganizationDefaults::seed($organization);
+        // TicketStatus is not part of OrganizationDefaults (see its
+        // docblock - it isn't one of Fase 3B's isolated models, still a
+        // project_id-scoped global/custom set), so the global default
+        // still needs seeding directly here.
+        TicketStatus::factory()->default()->create();
+        $importer = User::factory()->create();
+        $organization->users()->attach($importer->id, ['role' => 'owner']);
+
+        (new ImportJiraTicketsJob([$this->jiraTicket('Alpha', 'ALP', 'First')], $importer, $organization->id))->handle();
+
+        $project = Project::sole();
+        $this->assertSame($organization->id, $project->organization_id);
+
+        $ticket = Ticket::sole();
+        $this->assertSame($organization->id, $ticket->type->organization_id);
+        $this->assertSame($organization->id, $ticket->priority->organization_id);
+    }
+
+    /**
+     * No Organization in play at all (importer is grandfathered/has no
+     * membership) - the created Project stays legacy (organization_id
+     * null), exactly as it would if they created it by hand in the same
+     * state. Not a regression of the pre-fix behavior, just the one case
+     * where "no organization_id passed" is the correct, deliberate result
+     * rather than a bug.
+     */
+    public function test_a_project_created_with_no_organization_context_stays_legacy(): void
+    {
+        $this->seedDefaults();
+        $importer = User::factory()->create();
+
+        (new ImportJiraTicketsJob([$this->jiraTicket('Alpha', 'ALP', 'First')], $importer, null))->handle();
+
+        $this->assertNull(Project::sole()->organization_id);
     }
 }

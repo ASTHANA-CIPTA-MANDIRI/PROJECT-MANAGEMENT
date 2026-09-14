@@ -29,15 +29,28 @@ class ImportJiraTicketsJob implements ShouldQueue
 
     private $user;
 
+    private $organizationId;
+
     /**
      * Create a new job instance.
      *
+     * $organizationId is resolved from OrganizationContext::current() at
+     * dispatch time (JiraImport::import(), a real request with a session) and
+     * carried explicitly, never re-resolved with auth()/OrganizationContext
+     * inside handle() - a queue worker has no session to read a "current"
+     * Organization from (ADR 0001's Jobs guidance). null means the importer
+     * had no Organization at all when they started the import (grandfathered/
+     * no membership), and every Project this job creates stays legacy
+     * (organization_id null) to match, exactly as it would if they created
+     * that project by hand in the same state.
+     *
      * @return void
      */
-    public function __construct($tickets, $user)
+    public function __construct($tickets, $user, ?int $organizationId = null)
     {
         $this->tickets = $tickets;
         $this->user = $user;
+        $this->organizationId = $organizationId;
     }
 
     /**
@@ -105,18 +118,26 @@ class ImportJiraTicketsJob implements ShouldQueue
             return $project;
         }
 
-        $project = Project::create([
+        // organization_id is deliberately not mass-assignable on Project (see
+        // ProjectObserver::creating()/updating() - it is only ever stamped
+        // from an authenticated request's OrganizationContext, and can never
+        // be changed after the fact once set). That Observer would leave it
+        // null here regardless, since auth()->check() is always false in a
+        // queued job - forceCreate() sets it directly from
+        // $this->organizationId (resolved at dispatch time, see the
+        // constructor's docblock) instead of relying on that Observer.
+        // Audit finding (pre-Fase 7): before this fix every Jira-imported
+        // Project landed with organization_id === null unconditionally,
+        // permanently exempting it from Organization/trial gating - see
+        // Project::isWithinOrganizationContext()'s "null is legacy, not an
+        // escape hatch" rule, which this fix stops from being defeated here.
+        $project = Project::forceCreate([
             'name' => $name,
             'description' => __('Project imported from Jira, project key:').($projectDetails->key ?? ''),
-            // Fase 3B: the project itself doesn't exist yet, so there is no
-            // $project->organization_id to scope by. ProjectObserver::creating()
-            // only stamps organization_id from ambient auth(), which is never
-            // present in a queued job - the project below always lands with
-            // organization_id === null, so the default status must be
-            // resolved from that same null-scoped set to match.
-            'status_id' => ProjectStatus::visibleToOrganization(null)->where('is_default', true)->firstOrFail()->id,
+            'status_id' => ProjectStatus::visibleToOrganization($this->organizationId)->where('is_default', true)->firstOrFail()->id,
             'owner_id' => $this->user->id,
             'ticket_prefix' => $this->ticketPrefix($projectDetails->key ?? null, $name),
+            'organization_id' => $this->organizationId,
         ]);
 
         ProjectUser::create([

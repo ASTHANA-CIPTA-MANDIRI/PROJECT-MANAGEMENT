@@ -5,6 +5,8 @@ namespace App\Filament\Pages;
 use App\Filament\Pages\Forms\JiraImportForm;
 use App\Jobs\ImportJiraTicketsJob;
 use App\Services\JiraImportService;
+use App\Support\OrganizationContext;
+use App\Support\TrialGate;
 use Filament\Forms\Concerns\InteractsWithForms;
 use Filament\Forms\Contracts\HasForms;
 use Illuminate\Contracts\Support\Htmlable;
@@ -111,6 +113,23 @@ class JiraImport extends AuthorizedPage implements HasForms
 
     public function import(JiraImportService $jira): void
     {
+        // Audit finding (pre-Fase 7): this page is only gated by the flat
+        // 'Import from Jira' permission (AuthorizesPageAccess::boot() calls
+        // auth()->user()?->can($permission) with no model argument), which
+        // Gate::before()'s TRIAL_GATED_MODELS matching never sees - a
+        // locked-out Organization could otherwise keep creating new
+        // Projects/Tickets through this page forever. Mirrors
+        // AuthServiceProvider::denyIfOrganizationLocked()'s own final
+        // branch exactly (no Organization in play at all -> nothing to
+        // gate, same as every other TRIAL_GATED_MODELS check).
+        $organization = OrganizationContext::current(auth()->user());
+
+        if ($organization !== null && ! TrialGate::active($organization)) {
+            $this->notify('danger', __('Your organization\'s trial has ended. Contact the organization Owner to subscribe.'));
+
+            return;
+        }
+
         if ($this->data && count($this->data)) {
             $tickets = [];
             $unreadable = 0;
@@ -146,7 +165,7 @@ class JiraImport extends AuthorizedPage implements HasForms
                 return;
             }
 
-            dispatch(new ImportJiraTicketsJob($tickets, auth()->user()));
+            dispatch(new ImportJiraTicketsJob($tickets, auth()->user(), $organization?->id));
             $this->notify(
                 $unreadable ? 'warning' : 'success',
                 $unreadable

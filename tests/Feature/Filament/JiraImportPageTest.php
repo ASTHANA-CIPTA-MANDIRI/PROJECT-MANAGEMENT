@@ -4,10 +4,12 @@ namespace Tests\Feature\Filament;
 
 use App\Filament\Pages\JiraImport;
 use App\Jobs\ImportJiraTicketsJob;
+use App\Models\Organization;
 use App\Models\Permission;
 use App\Models\Role;
 use App\Models\User;
 use App\Services\JiraImportService;
+use App\Support\OrganizationContext;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Queue;
 use Livewire\Livewire;
@@ -141,6 +143,75 @@ class JiraImportPageTest extends TestCase
             ->assertSuccessful();
 
         Queue::assertNothingPushed();
+    }
+
+    // ------------------------------------------------------- trial gating
+
+    /**
+     * Audit finding (pre-Fase 7): this page was only gated by the flat
+     * 'Import from Jira' permission, invisible to Gate::before()'s
+     * TRIAL_GATED_MODELS matching (no model argument) - a locked-out
+     * Organization could keep creating new Projects/Tickets through Jira
+     * import forever. The service is never even reached once the trial
+     * check fails, so no mock expectation is set here.
+     */
+    public function test_import_is_blocked_when_the_organizations_trial_has_ended(): void
+    {
+        Queue::fake();
+
+        $organization = Organization::factory()->create(['trial_ends_at' => now()->subDay()]);
+        $organization->users()->attach($this->user->id, ['role' => 'owner']);
+        OrganizationContext::switch($this->user, $organization->id);
+
+        Livewire::test(JiraImport::class)
+            ->set('host', 'https://example.atlassian.net')
+            ->set('username', 'user@example.com')
+            ->set('token', 'secret')
+            ->set('data', ['alp_alp_1' => true])
+            ->set('ticketsDataApi', ['alp_alp_1' => 'https://example.atlassian.net/rest/api/2/issue/10001'])
+            ->call('import')
+            ->assertSuccessful();
+
+        Queue::assertNothingPushed();
+    }
+
+    /**
+     * The mirror image: an active (non-expired) trial must not be blocked -
+     * proves the check is a real gate, not one that always denies.
+     */
+    public function test_import_still_works_during_an_active_trial(): void
+    {
+        Queue::fake();
+
+        $organization = Organization::factory()->create(['trial_ends_at' => now()->addDays(3)]);
+        $organization->users()->attach($this->user->id, ['role' => 'owner']);
+        OrganizationContext::switch($this->user, $organization->id);
+
+        $service = Mockery::mock(JiraImportService::class);
+        $service->shouldReceive('fetchTicketDetails')->once()->andReturn((object) ['key' => 'ALP-1']);
+        $this->app->instance(JiraImportService::class, $service);
+
+        Livewire::test(JiraImport::class)
+            ->set('host', 'https://example.atlassian.net')
+            ->set('username', 'user@example.com')
+            ->set('token', 'secret')
+            ->set('data', ['alp_alp_1' => true])
+            ->set('ticketsDataApi', ['alp_alp_1' => 'https://example.atlassian.net/rest/api/2/issue/10001'])
+            ->call('import')
+            ->assertSuccessful();
+
+        Queue::assertPushed(
+            ImportJiraTicketsJob::class,
+            fn (ImportJiraTicketsJob $job) => $this->jobOrganizationId($job) === $organization->id
+        );
+    }
+
+    private function jobOrganizationId(ImportJiraTicketsJob $job): ?int
+    {
+        $property = new \ReflectionProperty($job, 'organizationId');
+        $property->setAccessible(true);
+
+        return $property->getValue($job);
     }
 
     /**
