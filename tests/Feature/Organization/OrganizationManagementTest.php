@@ -294,7 +294,7 @@ class OrganizationManagementTest extends TestCase
         $this->actingAs($admin);
 
         Livewire::test(OrganizationSettings::class)
-            ->callTableAction('changeRole', $member, data: ['role' => 'owner'])
+            ->callTableAction('changeRole', $member, data: ['access_role_id' => Role::firstOrCreate(['name' => 'Owner'])->id])
             ->assertForbidden();
 
         $this->assertDatabaseHas('organization_users', [
@@ -336,7 +336,7 @@ class OrganizationManagementTest extends TestCase
         $this->actingAs($owner);
 
         Livewire::test(OrganizationSettings::class)
-            ->callTableAction('changeRole', $member, data: ['role' => 'admin']);
+            ->callTableAction('changeRole', $member, data: ['access_role_id' => Role::firstOrCreate(['name' => 'Admin'])->id]);
 
         $this->assertDatabaseHas('organization_users', [
             'organization_id' => $organization->id,
@@ -366,11 +366,15 @@ class OrganizationManagementTest extends TestCase
         $this->actingAs($owner);
 
         Livewire::test(OrganizationSettings::class)
-            ->callTableAction('changeRole', $member, data: ['role' => 'admin', 'access_role_id' => $newRole->id]);
+            ->callTableAction('changeRole', $member, data: ['access_role_id' => $newRole->id]);
 
         $member = $member->fresh();
         $this->assertTrue($member->hasRole($newRole->name));
         $this->assertFalse($member->hasRole($oldRole->name));
+        // $newRole is named "Admin", one of the three tier names
+        // organizationRoleFor() maps directly - proves the Organization
+        // authority tier is derived from it, not left untouched.
+        $this->assertSame('admin', $organization->fresh()->roleOf($member));
     }
 
     /**
@@ -396,7 +400,9 @@ class OrganizationManagementTest extends TestCase
 
     /**
      * The Super Admin role must never be handed out through this action
-     * either, even if submitted directly.
+     * either, even if submitted directly - resolveAccessRole() rejects it,
+     * which now blocks the whole action (there is no other role field to
+     * fall back to) rather than silently ignoring just that part.
      */
     public function test_changing_a_role_never_grants_the_super_admin_access_role(): void
     {
@@ -409,9 +415,11 @@ class OrganizationManagementTest extends TestCase
         $this->actingAs($owner);
 
         Livewire::test(OrganizationSettings::class)
-            ->callTableAction('changeRole', $member, data: ['role' => 'admin', 'access_role_id' => $superAdminRole->id]);
+            ->callTableAction('changeRole', $member, data: ['access_role_id' => $superAdminRole->id])
+            ->assertHasTableActionErrors(['access_role_id']);
 
         $this->assertFalse($member->fresh()->isSuperAdmin());
+        $this->assertSame('member', $organization->fresh()->roleOf($member));
     }
 
     /**

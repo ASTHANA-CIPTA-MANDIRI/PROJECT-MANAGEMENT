@@ -23,6 +23,14 @@ use Tests\TestCase;
  * outcome and the shared authorization matrix; the new-recipient/invitation
  * outcome is covered in OrganizationInvitationTest, and accepting one in
  * AcceptOrganizationInvitationTest.
+ *
+ * Second revision: the form's own "Role" field IS access_role_id now - see
+ * OrganizationSettings::organizationRoleFor() - there is no free-text
+ * 'role' field to submit anymore, only a Role (Spatie) id. Every
+ * data: [...] payload below reflects that: the Organization authority
+ * tier (owner/admin/member) is always derived from whichever seeded Role
+ * ("Owner"/"Admin"/"Member" - accessRoleId() below firstOrCreate()'s them
+ * on demand, mirroring OrganizationAccessRoleSeeder's naming) is submitted.
  */
 class OrganizationAddMemberTest extends TestCase
 {
@@ -42,6 +50,18 @@ class OrganizationAddMemberTest extends TestCase
         $organization->users()->attach($user->id, ['role' => $role]);
     }
 
+    /**
+     * A seeded Role named exactly "Owner"/"Admin"/"Member" - the only
+     * names OrganizationSettings::organizationRoleFor() maps back to an
+     * Organization authority tier. firstOrCreate() rather than a real
+     * OrganizationAccessRoleSeeder run: this file only needs the name to
+     * exist, not its full permission set.
+     */
+    private function accessRoleId(string $name): int
+    {
+        return Role::firstOrCreate(['name' => $name])->id;
+    }
+
     // ---------------------------------------------------- Phase 5.4.2: name
 
     public function test_the_name_field_is_required(): void
@@ -52,7 +72,7 @@ class OrganizationAddMemberTest extends TestCase
         $this->actingAs($owner);
 
         Livewire::test(OrganizationSettings::class)
-            ->callTableAction('addMember', null, data: ['email' => 'nobody@example.test', 'role' => 'member'])
+            ->callTableAction('addMember', null, data: ['email' => 'nobody@example.test', 'access_role_id' => $this->accessRoleId('Member')])
             ->assertHasTableActionErrors(['name']);
     }
 
@@ -67,7 +87,7 @@ class OrganizationAddMemberTest extends TestCase
             ->callTableAction('addMember', null, data: [
                 'name' => '   ',
                 'email' => 'nobody@example.test',
-                'role' => 'member',
+                'access_role_id' => $this->accessRoleId('Member'),
             ])
             ->assertHasTableActionErrors(['name']);
 
@@ -86,7 +106,7 @@ class OrganizationAddMemberTest extends TestCase
             ->callTableAction('addMember', null, data: [
                 'name' => '  Muhammad Fajar Hermawan  ',
                 'email' => 'fajar@example.test',
-                'role' => 'member',
+                'access_role_id' => $this->accessRoleId('Member'),
             ])
             ->assertHasNoTableActionErrors();
 
@@ -110,7 +130,7 @@ class OrganizationAddMemberTest extends TestCase
         $this->actingAs($owner);
 
         Livewire::test(OrganizationSettings::class)
-            ->callTableAction('addMember', null, data: ['name' => 'Budi S.', 'email' => $target->email, 'role' => 'admin'])
+            ->callTableAction('addMember', null, data: ['name' => 'Budi S.', 'email' => $target->email, 'access_role_id' => $this->accessRoleId('Admin')])
             ->assertHasNoTableActionErrors();
 
         $this->assertSame('Budi Santoso', $target->fresh()->name);
@@ -129,7 +149,7 @@ class OrganizationAddMemberTest extends TestCase
         $this->actingAs($owner);
 
         Livewire::test(OrganizationSettings::class)
-            ->callTableAction('addMember', null, data: ['name' => 'Test User', 'email' => $target->email, 'role' => 'member'])
+            ->callTableAction('addMember', null, data: ['name' => 'Test User', 'email' => $target->email, 'access_role_id' => $this->accessRoleId('Member')])
             ->assertHasNoTableActionErrors();
 
         $this->assertSame('member', $organization->fresh()->roleOf($target));
@@ -146,7 +166,7 @@ class OrganizationAddMemberTest extends TestCase
         $this->actingAs($owner);
 
         Livewire::test(OrganizationSettings::class)
-            ->callTableAction('addMember', null, data: ['name' => 'Test User', 'email' => $target->email, 'role' => 'admin'])
+            ->callTableAction('addMember', null, data: ['name' => 'Test User', 'email' => $target->email, 'access_role_id' => $this->accessRoleId('Admin')])
             ->assertHasNoTableActionErrors();
 
         $this->assertSame('admin', $organization->fresh()->roleOf($target));
@@ -163,7 +183,7 @@ class OrganizationAddMemberTest extends TestCase
         $this->actingAs($owner);
 
         Livewire::test(OrganizationSettings::class)
-            ->callTableAction('addMember', null, data: ['name' => 'Test User', 'email' => $target->email, 'role' => 'owner'])
+            ->callTableAction('addMember', null, data: ['name' => 'Test User', 'email' => $target->email, 'access_role_id' => $this->accessRoleId('Owner')])
             ->assertForbidden();
 
         $this->assertFalse($organization->fresh()->isAccessibleBy($target));
@@ -181,7 +201,7 @@ class OrganizationAddMemberTest extends TestCase
         $this->actingAs($admin);
 
         Livewire::test(OrganizationSettings::class)
-            ->callTableAction('addMember', null, data: ['name' => 'Test User', 'email' => $target->email, 'role' => 'member'])
+            ->callTableAction('addMember', null, data: ['name' => 'Test User', 'email' => $target->email, 'access_role_id' => $this->accessRoleId('Member')])
             ->assertHasNoTableActionErrors();
 
         $this->assertSame('member', $organization->fresh()->roleOf($target));
@@ -196,7 +216,7 @@ class OrganizationAddMemberTest extends TestCase
         $this->actingAs($admin);
 
         Livewire::test(OrganizationSettings::class)
-            ->callTableAction('addMember', null, data: ['name' => 'Test User', 'email' => $target->email, 'role' => 'admin'])
+            ->callTableAction('addMember', null, data: ['name' => 'Test User', 'email' => $target->email, 'access_role_id' => $this->accessRoleId('Admin')])
             ->assertHasNoTableActionErrors();
 
         $this->assertSame('admin', $organization->fresh()->roleOf($target));
@@ -213,7 +233,7 @@ class OrganizationAddMemberTest extends TestCase
         $this->actingAs($admin);
 
         Livewire::test(OrganizationSettings::class)
-            ->callTableAction('addMember', null, data: ['name' => 'Test User', 'email' => $target->email, 'role' => 'owner'])
+            ->callTableAction('addMember', null, data: ['name' => 'Test User', 'email' => $target->email, 'access_role_id' => $this->accessRoleId('Owner')])
             ->assertForbidden();
 
         $this->assertFalse($organization->fresh()->isAccessibleBy($target));
@@ -254,7 +274,7 @@ class OrganizationAddMemberTest extends TestCase
         // OrganizationSettings only ever operates on OrganizationContext::current(),
         // which resolves to A here, never a client-chosen organization.
         Livewire::test(OrganizationSettings::class)
-            ->callTableAction('addMember', null, data: ['name' => 'Test User', 'email' => $target->email, 'role' => 'member']);
+            ->callTableAction('addMember', null, data: ['name' => 'Test User', 'email' => $target->email, 'access_role_id' => $this->accessRoleId('Member')]);
 
         $this->assertFalse($organizationB->fresh()->isAccessibleBy($target));
     }
@@ -271,7 +291,7 @@ class OrganizationAddMemberTest extends TestCase
         $this->actingAs($owner);
 
         Livewire::test(OrganizationSettings::class)
-            ->callTableAction('addMember', null, data: ['name' => 'Test User', 'email' => $target->email, 'role' => 'admin'])
+            ->callTableAction('addMember', null, data: ['name' => 'Test User', 'email' => $target->email, 'access_role_id' => $this->accessRoleId('Admin')])
             ->assertHasNoTableActionErrors();
 
         $this->assertSame('admin', $organization->fresh()->roleOf($target));
@@ -295,7 +315,7 @@ class OrganizationAddMemberTest extends TestCase
         $this->actingAs($owner);
 
         Livewire::test(OrganizationSettings::class)
-            ->callTableAction('addMember', null, data: ['name' => 'Test User', 'email' => $target->email, 'role' => 'member']);
+            ->callTableAction('addMember', null, data: ['name' => 'Test User', 'email' => $target->email, 'access_role_id' => $this->accessRoleId('Member')]);
 
         $this->assertSame($originalPasswordHash, $target->fresh()->password);
     }
@@ -311,7 +331,7 @@ class OrganizationAddMemberTest extends TestCase
         $this->actingAs($owner);
 
         Livewire::test(OrganizationSettings::class)
-            ->callTableAction('addMember', null, data: ['name' => 'Test User', 'email' => $target->email, 'role' => 'member']);
+            ->callTableAction('addMember', null, data: ['name' => 'Test User', 'email' => $target->email, 'access_role_id' => $this->accessRoleId('Member')]);
 
         $this->assertDatabaseMissing('organization_invitations', ['email' => $target->email]);
     }
@@ -328,7 +348,7 @@ class OrganizationAddMemberTest extends TestCase
         $this->actingAs($owner);
 
         Livewire::test(OrganizationSettings::class)
-            ->callTableAction('addMember', null, data: ['name' => 'Test User', 'email' => $alreadyMember->email, 'role' => 'admin'])
+            ->callTableAction('addMember', null, data: ['name' => 'Test User', 'email' => $alreadyMember->email, 'access_role_id' => $this->accessRoleId('Admin')])
             ->assertHasTableActionErrors(['email']);
 
         $this->assertSame('member', $organization->fresh()->roleOf($alreadyMember));
@@ -342,7 +362,7 @@ class OrganizationAddMemberTest extends TestCase
         $this->actingAs($owner);
 
         Livewire::test(OrganizationSettings::class)
-            ->callTableAction('addMember', null, data: ['name' => 'Test User', 'email' => $owner->email, 'role' => 'member'])
+            ->callTableAction('addMember', null, data: ['name' => 'Test User', 'email' => $owner->email, 'access_role_id' => $this->accessRoleId('Member')])
             ->assertHasTableActionErrors(['email']);
 
         $this->assertSame('owner', $organization->fresh()->roleOf($owner));
@@ -364,7 +384,7 @@ class OrganizationAddMemberTest extends TestCase
         // brand-new recipient (an invitation), never silently restored or
         // attached.
         Livewire::test(OrganizationSettings::class)
-            ->callTableAction('addMember', null, data: ['name' => 'Test User', 'email' => $deletedEmail, 'role' => 'member'])
+            ->callTableAction('addMember', null, data: ['name' => 'Test User', 'email' => $deletedEmail, 'access_role_id' => $this->accessRoleId('Member')])
             ->assertHasNoTableActionErrors();
 
         $this->assertFalse($organization->fresh()->isAccessibleBy($deletedUser));
@@ -389,7 +409,7 @@ class OrganizationAddMemberTest extends TestCase
         $this->actingAs($ownerAlpha);
 
         Livewire::test(OrganizationSettings::class)
-            ->callTableAction('addMember', null, data: ['name' => 'Test User', 'email' => $target->email, 'role' => 'admin'])
+            ->callTableAction('addMember', null, data: ['name' => 'Test User', 'email' => $target->email, 'access_role_id' => $this->accessRoleId('Admin')])
             ->assertHasNoTableActionErrors();
 
         $this->assertSame('admin', $alpha->fresh()->roleOf($target));
@@ -397,7 +417,7 @@ class OrganizationAddMemberTest extends TestCase
 
         $this->actingAs($adminGamma);
         Livewire::test(OrganizationSettings::class)
-            ->callTableAction('addMember', null, data: ['name' => 'Test User', 'email' => $target->email, 'role' => 'member'])
+            ->callTableAction('addMember', null, data: ['name' => 'Test User', 'email' => $target->email, 'access_role_id' => $this->accessRoleId('Member')])
             ->assertHasNoTableActionErrors();
 
         $this->assertSame('admin', $alpha->fresh()->roleOf($target), 'Alpha untouched by the Gamma add');
@@ -407,7 +427,14 @@ class OrganizationAddMemberTest extends TestCase
 
     // ---------------------------------------------------- role tampering, 33-36
 
-    public function test_an_arbitrary_role_string_is_rejected(): void
+    /**
+     * The free-text 'role' field is gone (organizationRoleFor() derives
+     * the tier from a real Role id, never a client-typed string) - the
+     * equivalent tampering surface now is a nonexistent/invalid
+     * access_role_id, which resolveAccessRole() must refuse cleanly (a
+     * form validation error, not a 500 or a silently-granted membership).
+     */
+    public function test_a_nonexistent_access_role_id_is_rejected(): void
     {
         $organization = Organization::factory()->create();
         $owner = $this->panelUser();
@@ -415,11 +442,9 @@ class OrganizationAddMemberTest extends TestCase
         $this->attach($organization, $owner, 'owner');
         $this->actingAs($owner);
 
-        foreach (['super_admin', 'platform_admin', 'owner_of_everything'] as $maliciousRole) {
-            Livewire::test(OrganizationSettings::class)
-                ->callTableAction('addMember', null, data: ['name' => 'Test User', 'email' => $target->email, 'role' => $maliciousRole])
-                ->assertForbidden();
-        }
+        Livewire::test(OrganizationSettings::class)
+            ->callTableAction('addMember', null, data: ['name' => 'Test User', 'email' => $target->email, 'access_role_id' => 999999])
+            ->assertHasTableActionErrors(['access_role_id']);
 
         $this->assertFalse($organization->fresh()->isAccessibleBy($target));
     }
@@ -438,7 +463,7 @@ class OrganizationAddMemberTest extends TestCase
             ->callTableAction('addMember', null, data: [
                 'name' => 'Test User',
                 'email' => $target->email,
-                'role' => 'member',
+                'access_role_id' => $this->accessRoleId('Member'),
                 'organization_id' => $foreign->id,
             ])
             ->assertHasNoTableActionErrors();
@@ -460,7 +485,7 @@ class OrganizationAddMemberTest extends TestCase
             ->callTableAction('addMember', null, data: [
                 'name' => 'Test User',
                 'email' => $target->email,
-                'role' => 'member',
+                'access_role_id' => $this->accessRoleId('Member'),
                 'user_id' => $victim->id,
             ]);
 
@@ -508,7 +533,7 @@ class OrganizationAddMemberTest extends TestCase
         OrganizationContext::switch($owner, $organization->id);
 
         Livewire::test(OrganizationSettings::class)
-            ->callTableAction('addMember', null, data: ['name' => 'Test User', 'email' => $target->email, 'role' => 'member']);
+            ->callTableAction('addMember', null, data: ['name' => 'Test User', 'email' => $target->email, 'access_role_id' => $this->accessRoleId('Member')]);
 
         $this->assertTrue(OrganizationContext::current($owner)->is($organization));
     }
@@ -526,12 +551,15 @@ class OrganizationAddMemberTest extends TestCase
 
         Livewire::test(OrganizationSettings::class)
             ->callTableAction('addMember', null, data: [
-                'name' => 'Test User', 'email' => $target->email, 'role' => 'member',
+                'name' => 'Test User', 'email' => $target->email,
                 'access_role_id' => $accessRole->id,
             ])
             ->assertHasNoTableActionErrors();
 
         $this->assertTrue($target->fresh()->hasRole($accessRole->name));
+        // "Project Manager" isn't one of the three seeded tier names, so
+        // organizationRoleFor() falls back to the safe default tier.
+        $this->assertSame('member', $organization->fresh()->roleOf($target));
     }
 
     /**
@@ -554,7 +582,7 @@ class OrganizationAddMemberTest extends TestCase
 
         Livewire::test(OrganizationSettings::class)
             ->callTableAction('addMember', null, data: [
-                'name' => 'Test User', 'email' => $target->email, 'role' => 'member',
+                'name' => 'Test User', 'email' => $target->email,
                 'access_role_id' => $accessRole->id,
             ])
             ->assertHasNoTableActionErrors();
@@ -562,34 +590,18 @@ class OrganizationAddMemberTest extends TestCase
         $target = $target->fresh();
         $this->assertTrue($target->hasRole($establishedRole->name));
         $this->assertFalse($target->hasRole($accessRole->name));
-        // Still added to the Organization despite the role not being applied.
+        // Still added to the Organization despite the Spatie role not
+        // being applied - organization_users.role is still derived and
+        // written regardless.
         $this->assertSame('member', $organization->fresh()->roleOf($target));
-    }
-
-    /**
-     * Picking a Role auto-fills the matching seeded Access role
-     * (OrganizationAccessRoleSeeder: "Admin"/"Member" match the Organization
-     * role names exactly) - proven by driving the actual reactive form
-     * field, not just the end result of a one-shot submit.
-     */
-    public function test_choosing_a_role_auto_fills_the_matching_access_role(): void
-    {
-        $adminAccessRole = Role::create(['name' => 'Admin']);
-        $organization = Organization::factory()->create();
-        $owner = $this->panelUser();
-        $this->attach($organization, $owner, 'owner');
-        $this->actingAs($owner);
-
-        Livewire::test(OrganizationSettings::class)
-            ->mountTableAction('addMember')
-            ->set('mountedTableActionData.role', 'admin')
-            ->assertSet('mountedTableActionData.access_role_id', $adminAccessRole->id);
     }
 
     /**
      * A crafted request submitting the Super Admin role's id directly
      * (never actually offered by the picker's own ->options()) must still
-     * never grant it - resolveAccessRole() re-checks server-side.
+     * never grant it - resolveAccessRole() rejects it server-side, which
+     * now means the whole action is blocked (there is no other role field
+     * to fall back to), not silently ignored.
      */
     public function test_the_super_admin_role_is_never_applied_even_if_submitted_directly(): void
     {
@@ -602,11 +614,12 @@ class OrganizationAddMemberTest extends TestCase
 
         Livewire::test(OrganizationSettings::class)
             ->callTableAction('addMember', null, data: [
-                'name' => 'Test User', 'email' => $target->email, 'role' => 'member',
+                'name' => 'Test User', 'email' => $target->email,
                 'access_role_id' => $superAdminRole->id,
             ])
-            ->assertHasNoTableActionErrors();
+            ->assertHasTableActionErrors(['access_role_id']);
 
+        $this->assertFalse($organization->fresh()->isAccessibleBy($target));
         $this->assertFalse($target->fresh()->isSuperAdmin());
     }
 

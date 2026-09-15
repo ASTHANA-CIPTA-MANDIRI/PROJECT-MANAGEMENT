@@ -26,6 +26,13 @@ use Tests\TestCase;
  * (Phase 5.4.1 — ownership assignment is a distinct, not-yet-built
  * feature), so the old "owner can invite another owner" case is replaced
  * by an explicit denial test.
+ *
+ * Second revision: the form's "Role" field is access_role_id (a Spatie
+ * Role id) - see OrganizationSettings::organizationRoleFor(). The
+ * organization_invitations.role COLUMN is still the plain owner/admin/
+ * member string it always was (derived from the picked Role, never
+ * touched directly by this form anymore), so every assertion against that
+ * column is unchanged; only the *submitted* payloads below changed.
  */
 class OrganizationInvitationTest extends TestCase
 {
@@ -40,6 +47,16 @@ class OrganizationInvitationTest extends TestCase
         return $user->fresh();
     }
 
+    /**
+     * A seeded Role named exactly "Owner"/"Admin"/"Member" - the only
+     * names OrganizationSettings::organizationRoleFor() maps back to an
+     * Organization authority tier.
+     */
+    private function accessRoleId(string $name): int
+    {
+        return Role::firstOrCreate(['name' => $name])->id;
+    }
+
     // ---------------------------------------------------------------- A, B, C
 
     public function test_owner_can_invite_a_member(): void
@@ -51,7 +68,7 @@ class OrganizationInvitationTest extends TestCase
         $this->actingAs($owner);
 
         Livewire::test(OrganizationSettings::class)
-            ->callTableAction('addMember', null, data: ['name' => 'Invitee Person', 'email' => 'invitee@example.test', 'role' => 'member'])
+            ->callTableAction('addMember', null, data: ['name' => 'Invitee Person', 'email' => 'invitee@example.test', 'access_role_id' => $this->accessRoleId('Member')])
             ->assertHasNoTableActionErrors();
 
         $this->assertDatabaseHas('organization_invitations', [
@@ -72,7 +89,7 @@ class OrganizationInvitationTest extends TestCase
         $this->actingAs($owner);
 
         Livewire::test(OrganizationSettings::class)
-            ->callTableAction('addMember', null, data: ['name' => 'Invitee Person', 'email' => 'invitee@example.test', 'role' => 'admin'])
+            ->callTableAction('addMember', null, data: ['name' => 'Invitee Person', 'email' => 'invitee@example.test', 'access_role_id' => $this->accessRoleId('Admin')])
             ->assertHasNoTableActionErrors();
 
         $this->assertDatabaseHas('organization_invitations', ['email' => 'invitee@example.test', 'role' => 'admin']);
@@ -86,7 +103,7 @@ class OrganizationInvitationTest extends TestCase
         $this->actingAs($owner);
 
         Livewire::test(OrganizationSettings::class)
-            ->callTableAction('addMember', null, data: ['name' => 'Invitee Person', 'email' => 'invitee@example.test', 'role' => 'owner'])
+            ->callTableAction('addMember', null, data: ['name' => 'Invitee Person', 'email' => 'invitee@example.test', 'access_role_id' => $this->accessRoleId('Owner')])
             ->assertForbidden();
 
         $this->assertDatabaseMissing('organization_invitations', ['email' => 'invitee@example.test']);
@@ -103,7 +120,7 @@ class OrganizationInvitationTest extends TestCase
         $this->actingAs($admin);
 
         Livewire::test(OrganizationSettings::class)
-            ->callTableAction('addMember', null, data: ['name' => 'Invitee Person', 'email' => 'invitee@example.test', 'role' => 'member'])
+            ->callTableAction('addMember', null, data: ['name' => 'Invitee Person', 'email' => 'invitee@example.test', 'access_role_id' => $this->accessRoleId('Member')])
             ->assertHasNoTableActionErrors();
     }
 
@@ -116,7 +133,7 @@ class OrganizationInvitationTest extends TestCase
         $this->actingAs($admin);
 
         Livewire::test(OrganizationSettings::class)
-            ->callTableAction('addMember', null, data: ['name' => 'Invitee Person', 'email' => 'invitee@example.test', 'role' => 'admin'])
+            ->callTableAction('addMember', null, data: ['name' => 'Invitee Person', 'email' => 'invitee@example.test', 'access_role_id' => $this->accessRoleId('Admin')])
             ->assertHasNoTableActionErrors();
     }
 
@@ -130,7 +147,7 @@ class OrganizationInvitationTest extends TestCase
         $this->actingAs($admin);
 
         Livewire::test(OrganizationSettings::class)
-            ->callTableAction('addMember', null, data: ['name' => 'Invitee Person', 'email' => 'invitee@example.test', 'role' => 'owner'])
+            ->callTableAction('addMember', null, data: ['name' => 'Invitee Person', 'email' => 'invitee@example.test', 'access_role_id' => $this->accessRoleId('Owner')])
             ->assertForbidden();
 
         $this->assertDatabaseMissing('organization_invitations', ['email' => 'invitee@example.test']);
@@ -166,7 +183,13 @@ class OrganizationInvitationTest extends TestCase
 
     // -------------------------------------------------------------------- U
 
-    public function test_an_arbitrary_role_string_is_rejected(): void
+    /**
+     * The free-text 'role' field is gone - the equivalent tampering
+     * surface now is a nonexistent access_role_id, which resolveAccessRole()
+     * must refuse with a form validation error rather than creating an
+     * invitation anyway.
+     */
+    public function test_a_nonexistent_access_role_id_is_rejected(): void
     {
         $organization = Organization::factory()->create();
         $owner = $this->panelUser();
@@ -174,8 +197,8 @@ class OrganizationInvitationTest extends TestCase
         $this->actingAs($owner);
 
         Livewire::test(OrganizationSettings::class)
-            ->callTableAction('addMember', null, data: ['name' => 'Invitee Person', 'email' => 'invitee@example.test', 'role' => 'super_admin'])
-            ->assertForbidden();
+            ->callTableAction('addMember', null, data: ['name' => 'Invitee Person', 'email' => 'invitee@example.test', 'access_role_id' => 999999])
+            ->assertHasTableActionErrors(['access_role_id']);
 
         $this->assertDatabaseMissing('organization_invitations', ['email' => 'invitee@example.test']);
     }
@@ -202,7 +225,7 @@ class OrganizationInvitationTest extends TestCase
             ->callTableAction('addMember', null, data: [
                 'name' => 'Invitee Person',
                 'email' => 'invitee@example.test',
-                'role' => 'member',
+                'access_role_id' => $this->accessRoleId('Member'),
                 'organization_id' => $organizationB->id,
             ])
             ->assertHasNoTableActionErrors();
@@ -229,7 +252,7 @@ class OrganizationInvitationTest extends TestCase
         $this->actingAs($owner);
 
         Livewire::test(OrganizationSettings::class)
-            ->callTableAction('addMember', null, data: ['name' => 'Invitee Person', 'email' => 'existing@example.test', 'role' => 'admin'])
+            ->callTableAction('addMember', null, data: ['name' => 'Invitee Person', 'email' => 'existing@example.test', 'access_role_id' => $this->accessRoleId('Admin')])
             ->assertHasTableActionErrors(['email']);
 
         $this->assertDatabaseMissing('organization_invitations', ['email' => 'existing@example.test']);
@@ -244,11 +267,11 @@ class OrganizationInvitationTest extends TestCase
         $this->actingAs($owner);
 
         Livewire::test(OrganizationSettings::class)
-            ->callTableAction('addMember', null, data: ['name' => 'Invitee Person', 'email' => 'dup@example.test', 'role' => 'member'])
+            ->callTableAction('addMember', null, data: ['name' => 'Invitee Person', 'email' => 'dup@example.test', 'access_role_id' => $this->accessRoleId('Member')])
             ->assertHasNoTableActionErrors();
 
         Livewire::test(OrganizationSettings::class)
-            ->callTableAction('addMember', null, data: ['name' => 'Invitee Person', 'email' => 'dup@example.test', 'role' => 'admin'])
+            ->callTableAction('addMember', null, data: ['name' => 'Invitee Person', 'email' => 'dup@example.test', 'access_role_id' => $this->accessRoleId('Admin')])
             ->assertHasTableActionErrors(['email']);
 
         $this->assertSame(1, OrganizationInvitation::where('email', 'dup@example.test')->count());
@@ -268,7 +291,7 @@ class OrganizationInvitationTest extends TestCase
             ->callTableAction('addMember', null, data: [
                 'name' => 'Budi Santoso',
                 'email' => 'budi@example.test',
-                'role' => 'member',
+                'access_role_id' => $this->accessRoleId('Member'),
             ])
             ->assertHasNoTableActionErrors();
 

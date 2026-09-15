@@ -9,7 +9,6 @@ use App\Models\User;
 use App\Notifications\OrganizationInvitationCreated;
 use App\Notifications\OrganizationMemberAdded;
 use App\Support\OrganizationContext;
-use Filament\Forms\Components\Grid;
 use Filament\Forms\Components\Placeholder;
 use Filament\Forms\Components\Section;
 use Filament\Forms\Components\Select;
@@ -228,67 +227,57 @@ class OrganizationSettings extends AuthorizedPage implements HasForms, HasTable
                         ->email()
                         ->required()
                         ->maxLength(255),
-                    Grid::make(2)->schema([
-                        Select::make('role')
-                            ->label(__('Role'))
-                            ->required()
-                            ->reactive()
-                            ->default(fn () => config('system.organizations.affectations.roles.default'))
-                            // Owner is never one of these two options, for
-                            // anyone - OrganizationPolicy::addMember() itself
-                            // rejects it unconditionally now (Phase 5.4.1),
-                            // ownership assignment is a distinct, not-yet-built
-                            // feature. ->only() reads the two labels from the
-                            // existing config rather than hard-coding them here
-                            // a second time.
-                            ->options(function () {
-                                $organization = $this->organization();
-                                $actor = auth()->user();
+                    // A single Role picker, sourced entirely from what a
+                    // Super Admin manages under Roles - not two separate
+                    // "Organization role" / "Access role" dropdowns anymore.
+                    // organizationRoleFor() derives the owner/admin/member
+                    // authority tier from whichever Role is picked here, so
+                    // the protections that tier drives (Owner-only actions,
+                    // trial-gate exemptions, the sole-Owner guard, etc. - all
+                    // keyed on that exact string elsewhere in this app) keep
+                    // working unchanged even though the actor never sees
+                    // that tier as its own field. Owner is still never
+                    // grantable through this action for anyone -
+                    // OrganizationPolicy::addMember() rejects it
+                    // unconditionally (Phase 5.4.1) - enforced here by
+                    // filtering it out of the options, not just hoping no
+                    // Role happens to be named "Owner".
+                    Select::make('access_role_id')
+                        ->label(__('Role'))
+                        ->required()
+                        ->helperText(__('Feature permissions for this member, managed by a Super Admin under Roles.'))
+                        ->default(fn () => $this->accessRoleFor(config('system.organizations.affectations.roles.default'))?->id)
+                        ->options(function () {
+                            $organization = $this->organization();
+                            $actor = auth()->user();
 
-                                return collect(config('system.organizations.affectations.roles.list'))
-                                    ->only(['admin', 'member'])
-                                    ->filter(fn ($label, $role) => Gate::forUser($actor)
-                                        ->allows('addMember', [$organization, $role]))
-                                    ->all();
-                            })
-                            // Keeps the two fields feeling like one choice
-                            // instead of two unrelated dropdowns: picking a
-                            // Role auto-fills the matching seeded Access role
-                            // (OrganizationAccessRoleSeeder) below, editable
-                            // afterwards like any other default.
-                            ->afterStateUpdated(fn ($state, callable $set) => $set(
-                                'access_role_id',
-                                $this->accessRoleFor($state)?->id
-                            )),
-                        Select::make('access_role_id')
-                            ->label(__('Access role'))
-                            ->helperText(__('Which feature permissions this member gets, managed by a Super Admin under Roles. Follows the Role above by default.'))
-                            ->default(fn () => $this->accessRoleFor(config('system.organizations.affectations.roles.default'))?->id)
-                            // Every Role except the platform's own Super Admin
-                            // one - never offered here at all, so an Owner/Admin
-                            // (who may not even hold that permission themselves)
-                            // can never hand it out through an invitation. This
-                            // is a UX nicety only; the action below re-checks
-                            // the submitted id against the exact same exclusion,
-                            // never trusting this options list alone.
-                            ->options(fn () => Role::query()
+                            return Role::query()
                                 ->get()
                                 ->reject(fn (Role $role) => $role->isSuperAdminRole())
-                                ->pluck('name', 'id')),
-                    ]),
+                                ->filter(fn (Role $role) => Gate::forUser($actor)
+                                    ->allows('addMember', [$organization, $this->organizationRoleFor($role)]))
+                                ->pluck('name', 'id');
+                        }),
                 ])
                 ->action(function (array $data): void {
                     $organization = $this->organization();
-                    $role = $data['role'];
-
-                    // The role in $data is client-controlled state -
-                    // re-checked against the allow-list (admin/member only,
-                    // never owner) and the actor's own manage authority
-                    // every time, never trusting the rendered <select>'s
-                    // options alone.
-                    Gate::authorize('addMember', [$organization, $role]);
 
                     $accessRole = $this->resolveAccessRole($data['access_role_id'] ?? null);
+
+                    if ($accessRole === null) {
+                        throw ValidationException::withMessages([
+                            'mountedTableActionData.access_role_id' => __('Please choose a role.'),
+                        ]);
+                    }
+
+                    $role = $this->organizationRoleFor($accessRole);
+
+                    // $role is derived from a Role id that is client-
+                    // controlled state - re-checked against the allow-list
+                    // (admin/member only, never owner) and the actor's own
+                    // manage authority every time, never trusting the
+                    // rendered <select>'s options alone.
+                    Gate::authorize('addMember', [$organization, $role]);
 
                     $name = trim((string) $data['name']);
                     $email = trim((string) $data['email']);
@@ -338,6 +327,27 @@ class OrganizationSettings extends AuthorizedPage implements HasForms, HasTable
         $role = Role::where('name', ucfirst($organizationRole))->first();
 
         return $role !== null && ! $role->isSuperAdminRole() ? $role : null;
+    }
+
+    /**
+     * The inverse of accessRoleFor() above: which Organization authority
+     * tier (owner/admin/member - the only three organization_users.role
+     * ever holds) a picked Role implies. A Role named exactly "Owner"/
+     * "Admin"/"Member" (case-insensitive - OrganizationAccessRoleSeeder)
+     * maps directly; any other Role (e.g. "Employee", or anything a Super
+     * Admin creates later that isn't meant to carry Organization authority
+     * of its own) falls back to the safest tier, config('system....default')
+     * ('member') - never silently grants more authority than a Role name
+     * that doesn't say so.
+     */
+    private function organizationRoleFor(Role $accessRole): string
+    {
+        $tier = mb_strtolower($accessRole->name);
+        $validTiers = array_keys(config('system.organizations.affectations.roles.list'));
+
+        return in_array($tier, $validTiers, true)
+            ? $tier
+            : config('system.organizations.affectations.roles.default');
     }
 
     /**
@@ -571,69 +581,67 @@ class OrganizationSettings extends AuthorizedPage implements HasForms, HasTable
                     Placeholder::make('target_email')
                         ->label(__('Email'))
                         ->content(fn (User $record) => $record->email),
-                    Grid::make(2)->schema([
-                        Select::make('role')
-                            ->label(__('Role'))
-                            ->required()
-                            ->reactive()
-                            // Reuses the exact same Policy method the action
-                            // itself enforces below - a role this actor could
-                            // not actually set for this target (e.g. demoting
-                            // the sole Owner) never even appears as an option,
-                            // rather than duplicating that logic here.
-                            ->options(function (User $record) {
-                                $organization = $this->organization();
-                                $actor = auth()->user();
+                    // Same single-picker shape as addMember above: one Role
+                    // field sourced from Roles, organizationRoleFor()
+                    // deriving the owner/admin/member authority tier from
+                    // whichever one is picked, instead of a separate
+                    // Organization-role dropdown next to it.
+                    Select::make('access_role_id')
+                        ->label(__('Role'))
+                        ->required()
+                        ->helperText(__('Feature permissions for this member, managed by a Super Admin under Roles.'))
+                        // Whatever Role this member already holds takes
+                        // priority over guessing from their Organization
+                        // role - an Owner/Admin who already fine-tuned
+                        // someone's access manually should not have that
+                        // silently reset just by opening this modal.
+                        ->default(fn (User $record) => $record->roles()->first()?->id
+                            ?? $this->accessRoleFor($this->organization()->roleOf($record))?->id)
+                        // Reuses the exact same Policy method the action
+                        // itself enforces below - a Role whose derived tier
+                        // this actor could not actually set for this target
+                        // (e.g. demoting the sole Owner, or promoting to
+                        // Owner without being one) never even appears as an
+                        // option, rather than duplicating that logic here.
+                        ->options(function (User $record) {
+                            $organization = $this->organization();
+                            $actor = auth()->user();
 
-                                return collect(config('system.organizations.affectations.roles.list'))
-                                    ->filter(fn ($label, $role) => Gate::forUser($actor)
-                                        ->allows('updateMemberRole', [$organization, $record, $role]))
-                                    ->all();
-                            })
-                            ->default(fn (User $record) => $this->organization()->roleOf($record))
-                            // Same "feels like one choice" auto-fill as
-                            // addMember's Role field above.
-                            ->afterStateUpdated(fn ($state, callable $set) => $set(
-                                'access_role_id',
-                                $this->accessRoleFor($state)?->id
-                            )),
-                        Select::make('access_role_id')
-                            ->label(__('Access role'))
-                            ->helperText(__('Which feature permissions this member gets, managed by a Super Admin under Roles. Follows the Role above by default.'))
-                            // Whatever Role this member already holds takes
-                            // priority over guessing from their Organization
-                            // role - an Owner/Admin who already fine-tuned
-                            // someone's access manually should not have that
-                            // silently reset just by opening this modal.
-                            ->default(fn (User $record) => $record->roles()->first()?->id
-                                ?? $this->accessRoleFor($this->organization()->roleOf($record))?->id)
-                            ->options(fn () => Role::query()
+                            return Role::query()
                                 ->get()
                                 ->reject(fn (Role $role) => $role->isSuperAdminRole())
-                                ->pluck('name', 'id')),
-                    ]),
+                                ->filter(fn (Role $role) => Gate::forUser($actor)
+                                    ->allows('updateMemberRole', [$organization, $record, $this->organizationRoleFor($role)]))
+                                ->pluck('name', 'id');
+                        }),
                 ])
                 ->action(function (User $record, array $data): void {
                     $organization = $this->organization();
 
-                    // The role in $data is Livewire/Filament state the
-                    // client controls — Gate::authorize re-checks it against
-                    // the allow-list, the actor's own role, and Owner
-                    // protection every time, never trusting the rendered
-                    // <select>'s options alone.
-                    Gate::authorize('updateMemberRole', [$organization, $record, $data['role']]);
-
-                    $organization->users()->updateExistingPivot($record->id, ['role' => $data['role']]);
-
                     $accessRole = $this->resolveAccessRole($data['access_role_id'] ?? null);
+
+                    if ($accessRole === null) {
+                        throw ValidationException::withMessages([
+                            'mountedTableActionData.access_role_id' => __('Please choose a role.'),
+                        ]);
+                    }
+
+                    $role = $this->organizationRoleFor($accessRole);
+
+                    // $role is derived from a Role id that is Livewire/
+                    // Filament state the client controls — Gate::authorize
+                    // re-checks it against the allow-list, the actor's own
+                    // role, and Owner protection every time, never trusting
+                    // the rendered <select>'s options alone.
+                    Gate::authorize('updateMemberRole', [$organization, $record, $role]);
+
+                    $organization->users()->updateExistingPivot($record->id, ['role' => $role]);
 
                     // Unlike addExistingUser()'s never-overwrite-an-existing-
                     // Role guard, this action's entire purpose is explicitly
                     // setting this member's role - syncRoles() (replace) is
                     // the correct, intended effect here, not a landmine.
-                    if ($accessRole !== null) {
-                        $record->syncRoles([$accessRole]);
-                    }
+                    $record->syncRoles([$accessRole]);
 
                     Notification::make()
                         ->title(__('Role updated'))
