@@ -513,6 +513,83 @@ class OrganizationAddMemberTest extends TestCase
         $this->assertTrue(OrganizationContext::current($owner)->is($organization));
     }
 
+    // ------------------------------------------------------------ access role
+
+    public function test_an_existing_user_with_no_roles_yet_gets_the_chosen_access_role(): void
+    {
+        $accessRole = Role::create(['name' => 'Project Manager']);
+        $organization = Organization::factory()->create();
+        $owner = $this->panelUser();
+        $target = User::factory()->create();
+        $this->attach($organization, $owner, 'owner');
+        $this->actingAs($owner);
+
+        Livewire::test(OrganizationSettings::class)
+            ->callTableAction('addMember', null, data: [
+                'name' => 'Test User', 'email' => $target->email, 'role' => 'member',
+                'access_role_id' => $accessRole->id,
+            ])
+            ->assertHasNoTableActionErrors();
+
+        $this->assertTrue($target->fresh()->hasRole($accessRole->name));
+    }
+
+    /**
+     * Spatie Roles are still global per-user (this app deliberately does
+     * not use Spatie Teams, see ADR 0001's rejection) - an existing account
+     * may already be active with an established Role somewhere else, so
+     * adding them to a second Organization must never silently change what
+     * they can already do there.
+     */
+    public function test_an_existing_users_established_role_is_never_overwritten(): void
+    {
+        $accessRole = Role::create(['name' => 'Project Manager']);
+        $establishedRole = Role::create(['name' => 'Employee']);
+        $organization = Organization::factory()->create();
+        $owner = $this->panelUser();
+        $target = User::factory()->create();
+        $target->assignRole($establishedRole);
+        $this->attach($organization, $owner, 'owner');
+        $this->actingAs($owner);
+
+        Livewire::test(OrganizationSettings::class)
+            ->callTableAction('addMember', null, data: [
+                'name' => 'Test User', 'email' => $target->email, 'role' => 'member',
+                'access_role_id' => $accessRole->id,
+            ])
+            ->assertHasNoTableActionErrors();
+
+        $target = $target->fresh();
+        $this->assertTrue($target->hasRole($establishedRole->name));
+        $this->assertFalse($target->hasRole($accessRole->name));
+        // Still added to the Organization despite the role not being applied.
+        $this->assertSame('member', $organization->fresh()->roleOf($target));
+    }
+
+    /**
+     * A crafted request submitting the Super Admin role's id directly
+     * (never actually offered by the picker's own ->options()) must still
+     * never grant it - resolveAccessRole() re-checks server-side.
+     */
+    public function test_the_super_admin_role_is_never_applied_even_if_submitted_directly(): void
+    {
+        $superAdminRole = Role::create(['name' => 'Super Admin']);
+        $organization = Organization::factory()->create();
+        $owner = $this->panelUser();
+        $target = User::factory()->create();
+        $this->attach($organization, $owner, 'owner');
+        $this->actingAs($owner);
+
+        Livewire::test(OrganizationSettings::class)
+            ->callTableAction('addMember', null, data: [
+                'name' => 'Test User', 'email' => $target->email, 'role' => 'member',
+                'access_role_id' => $superAdminRole->id,
+            ])
+            ->assertHasNoTableActionErrors();
+
+        $this->assertFalse($target->fresh()->isSuperAdmin());
+    }
+
     public function test_the_database_unique_constraint_rejects_a_true_duplicate_pivot_row(): void
     {
         $organization = Organization::factory()->create();

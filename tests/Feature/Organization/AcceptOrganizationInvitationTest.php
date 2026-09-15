@@ -5,6 +5,7 @@ namespace Tests\Feature\Organization;
 use App\Http\Livewire\AcceptOrganizationInvitation;
 use App\Models\Organization;
 use App\Models\OrganizationInvitation;
+use App\Models\Role;
 use App\Models\User;
 use App\Support\OrganizationContext;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -155,6 +156,79 @@ class AcceptOrganizationInvitationTest extends TestCase
         Livewire::test(AcceptOrganizationInvitation::class, ['token' => $token])->call('accept');
 
         $this->assertSame('Existing Member Name', $user->fresh()->name);
+    }
+
+    // ---------------------------------------------------------- access role
+
+    /**
+     * The recipient here is always a brand-new account (this branch only
+     * runs when the invited email had none), so applying the invitation's
+     * chosen access Role is safe unconditionally - see
+     * AcceptOrganizationInvitation::accept()'s own docblock on this point.
+     */
+    public function test_a_new_recipient_gets_the_invitations_access_role(): void
+    {
+        $accessRole = Role::create(['name' => 'Project Manager']);
+        [$invitation, $token] = $this->invitationWithToken(['access_role_id' => $accessRole->id]);
+        $user = User::factory()->create(['email' => $invitation->email]);
+        $this->actingAs($user);
+
+        Livewire::test(AcceptOrganizationInvitation::class, ['token' => $token])->call('accept');
+
+        $this->assertTrue($user->fresh()->hasRole($accessRole->name));
+    }
+
+    /**
+     * syncRoles(), not assignRole(): whatever the platform's own
+     * self-registration default role already gave this brand-new account
+     * (App\Listeners\AssignDefaultRole) is replaced, not stacked, so the
+     * invitation's chosen access role is the only one they end up with.
+     */
+    public function test_the_platform_default_role_is_replaced_not_stacked(): void
+    {
+        $defaultRole = Role::create(['name' => 'Employee']);
+        $accessRole = Role::create(['name' => 'Project Manager']);
+        [$invitation, $token] = $this->invitationWithToken(['access_role_id' => $accessRole->id]);
+        $user = User::factory()->create(['email' => $invitation->email]);
+        $user->assignRole($defaultRole);
+        $this->actingAs($user);
+
+        Livewire::test(AcceptOrganizationInvitation::class, ['token' => $token])->call('accept');
+
+        $user = $user->fresh();
+        $this->assertTrue($user->hasRole($accessRole->name));
+        $this->assertFalse($user->hasRole($defaultRole->name));
+    }
+
+    public function test_an_invitation_without_an_access_role_leaves_roles_untouched(): void
+    {
+        $defaultRole = Role::create(['name' => 'Employee']);
+        [$invitation, $token] = $this->invitationWithToken();
+        $user = User::factory()->create(['email' => $invitation->email]);
+        $user->assignRole($defaultRole);
+        $this->actingAs($user);
+
+        Livewire::test(AcceptOrganizationInvitation::class, ['token' => $token])->call('accept');
+
+        $this->assertTrue($user->fresh()->hasRole($defaultRole->name));
+    }
+
+    /**
+     * Defense in depth: even if an invitation somehow ended up with the
+     * Super Admin role as its access_role_id (should never happen -
+     * OrganizationSettings excludes it at creation time), accepting it must
+     * never actually grant that role.
+     */
+    public function test_the_super_admin_role_is_never_granted_through_an_invitation(): void
+    {
+        $superAdminRole = Role::create(['name' => 'Super Admin']);
+        [$invitation, $token] = $this->invitationWithToken(['access_role_id' => $superAdminRole->id]);
+        $user = User::factory()->create(['email' => $invitation->email]);
+        $this->actingAs($user);
+
+        Livewire::test(AcceptOrganizationInvitation::class, ['token' => $token])->call('accept');
+
+        $this->assertFalse($user->fresh()->isSuperAdmin());
     }
 
     // ------------------------------------------------------------- Phase 5.4.1: email verification

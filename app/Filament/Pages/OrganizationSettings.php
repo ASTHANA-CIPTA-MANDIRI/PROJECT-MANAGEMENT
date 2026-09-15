@@ -4,6 +4,7 @@ namespace App\Filament\Pages;
 
 use App\Models\Organization;
 use App\Models\OrganizationInvitation;
+use App\Models\Role;
 use App\Models\User;
 use App\Notifications\OrganizationInvitationCreated;
 use App\Notifications\OrganizationMemberAdded;
@@ -247,6 +248,20 @@ class OrganizationSettings extends AuthorizedPage implements HasForms, HasTable
                                     ->allows('addMember', [$organization, $role]))
                                 ->all();
                         }),
+                    Select::make('access_role_id')
+                        ->label(__('Access role'))
+                        ->helperText(__('Which feature permissions this member gets, managed by a Super Admin under Roles. Leave blank to not change it.'))
+                        // Every Role except the platform's own Super Admin
+                        // one - never offered here at all, so an Owner/Admin
+                        // (who may not even hold that permission themselves)
+                        // can never hand it out through an invitation. This
+                        // is a UX nicety only; the action below re-checks
+                        // the submitted id against the exact same exclusion,
+                        // never trusting this options list alone.
+                        ->options(fn () => Role::query()
+                            ->get()
+                            ->reject(fn (Role $role) => $role->isSuperAdminRole())
+                            ->pluck('name', 'id')),
                 ])
                 ->action(function (array $data): void {
                     $organization = $this->organization();
@@ -258,6 +273,8 @@ class OrganizationSettings extends AuthorizedPage implements HasForms, HasTable
                     // every time, never trusting the rendered <select>'s
                     // options alone.
                     Gate::authorize('addMember', [$organization, $role]);
+
+                    $accessRole = $this->resolveAccessRole($data['access_role_id'] ?? null);
 
                     $name = trim((string) $data['name']);
                     $email = trim((string) $data['email']);
@@ -279,14 +296,39 @@ class OrganizationSettings extends AuthorizedPage implements HasForms, HasTable
                     if ($existingUser !== null) {
                         // $name is deliberately never passed here - see
                         // addExistingUser()'s own docblock.
-                        $this->addExistingUser($organization, $existingUser, $role);
+                        $this->addExistingUser($organization, $existingUser, $role, $accessRole);
 
                         return;
                     }
 
-                    $this->inviteNewRecipient($organization, $name, $email, $role);
+                    $this->inviteNewRecipient($organization, $name, $email, $role, $accessRole);
                 }),
         ];
+    }
+
+    /**
+     * The submitted access_role_id is client-controlled state - re-resolved
+     * through a real query (never trusted as a bare id) and re-checked
+     * against the exact same Super-Admin exclusion the picker's own
+     * ->options() applies, so a crafted request cannot hand out that role
+     * just because the Select happened not to render it. A blank/invalid
+     * value (id belongs to no Role, or was the Super Admin one) silently
+     * resolves to null - "do not change the recipient's access role" -
+     * rather than failing the whole add-member action over it.
+     */
+    private function resolveAccessRole(?string $accessRoleId): ?Role
+    {
+        if ($accessRoleId === null || $accessRoleId === '') {
+            return null;
+        }
+
+        $role = Role::find($accessRoleId);
+
+        if ($role === null || $role->isSuperAdminRole()) {
+            return null;
+        }
+
+        return $role;
     }
 
     /**
@@ -300,8 +342,17 @@ class OrganizationSettings extends AuthorizedPage implements HasForms, HasTable
      * branch, never written to $existingUser->name. An existing account's
      * name belongs to that account, not to whoever happens to type
      * something in this form.
+     *
+     * $accessRole is only ever applied when $existingUser holds no Role at
+     * all yet - an existing account may already be active (with an
+     * established Role) in another Organization, and Spatie Roles are
+     * still global per-user (see [[subscription-model-direction]] /
+     * ADR 0001's Teams rejection - this codebase deliberately does not use
+     * Spatie Teams), so silently overwriting it here would change what
+     * that person can do everywhere else they already work, not just in
+     * this Organization. A user with zero Roles has nothing to protect.
      */
-    private function addExistingUser(Organization $organization, User $existingUser, string $role): void
+    private function addExistingUser(Organization $organization, User $existingUser, string $role, ?Role $accessRole): void
     {
         if ($organization->isAccessibleBy($existingUser)) {
             throw ValidationException::withMessages([
@@ -327,6 +378,10 @@ class OrganizationSettings extends AuthorizedPage implements HasForms, HasTable
             ]);
         }
 
+        if ($accessRole !== null && ! $existingUser->roles()->exists()) {
+            $existingUser->assignRole($accessRole);
+        }
+
         $existingUser->notify(new OrganizationMemberAdded($organization, $role));
 
         Notification::make()
@@ -346,8 +401,14 @@ class OrganizationSettings extends AuthorizedPage implements HasForms, HasTable
      * assumed, never re-derived) so App\Http\Livewire\AcceptOrganizationInvitation
      * can apply it to the brand-new account at the moment membership is
      * actually created - see that class for exactly when and why.
+     *
+     * $accessRole is carried the same way, for the same reason - see
+     * AcceptOrganizationInvitation::accept() for why it is safe to apply
+     * unconditionally there (unlike addExistingUser() above), even though
+     * self-registration in between already assigned the platform's default
+     * Role.
      */
-    private function inviteNewRecipient(Organization $organization, string $name, string $email, string $role): void
+    private function inviteNewRecipient(Organization $organization, string $name, string $email, string $role, ?Role $accessRole): void
     {
         if ($organization->invitations()->pending()->where('email', $email)->exists()) {
             throw ValidationException::withMessages([
@@ -362,6 +423,7 @@ class OrganizationSettings extends AuthorizedPage implements HasForms, HasTable
             'name' => $name,
             'email' => $email,
             'role' => $role,
+            'access_role_id' => $accessRole?->id,
             'token_hash' => OrganizationInvitation::hashToken($plainToken),
             'expires_at' => now()->addDays(OrganizationInvitation::LIFETIME_DAYS),
             'created_by' => auth()->id(),

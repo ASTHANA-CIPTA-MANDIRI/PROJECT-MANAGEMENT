@@ -4,6 +4,7 @@ namespace Database\Factories;
 
 use App\Models\Organization;
 use App\Models\OrganizationInvitation;
+use App\Models\Role;
 use Illuminate\Database\Eloquent\Factories\Factory;
 use Illuminate\Support\Carbon;
 
@@ -48,5 +49,10 @@ class OrganizationInvitationFactory extends Factory
     public function revoked(): static
     {
         return $this->state(fn () => ['revoked_at' => Carbon::now()]);
+    }
+
+    public function withAccessRole(Role $role): static
+    {
+        return $this->state(fn () => ['access_role_id' => $role->id]);
     }
 }

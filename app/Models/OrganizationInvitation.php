@@ -38,6 +38,7 @@ class OrganizationInvitation extends Model
         'name',
         'email',
         'role',
+        'access_role_id',
         'token_hash',
         'expires_at',
         'created_by',
@@ -72,6 +73,19 @@ class OrganizationInvitation extends Model
     public function inviter(): BelongsTo
     {
         return $this->belongsTo(User::class, 'created_by', 'id');
+    }
+
+    /**
+     * The Spatie Role (feature permissions) the recipient is granted at
+     * acceptance, in addition to organization_users.role (management
+     * authority only - see this class's own docblock for why they are two
+     * separate things). Nullable: an invitation created before this
+     * existed, or one where the inviter left it unset, simply applies
+     * nothing extra.
+     */
+    public function accessRole(): BelongsTo
+    {
+        return $this->belongsTo(Role::class, 'access_role_id', 'id');
     }
 
     /**

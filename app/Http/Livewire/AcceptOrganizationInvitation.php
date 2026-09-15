@@ -200,6 +200,30 @@ class AcceptOrganizationInvitation extends Component
                 $user->forceFill(['name' => $invitation->name])->save();
             }
 
+            // Unlike OrganizationSettings::addExistingUser()'s
+            // never-overwrite-an-existing-Role rule, applying this one is
+            // safe unconditionally: reaching this branch at all means $user
+            // is a brand-new account (same guarantee as the name above),
+            // so the only Role they could possibly already hold is the
+            // platform's single global self-registration default
+            // (App\Listeners\AssignDefaultRole) assigned moments ago at
+            // registration - a placeholder, not an established permission
+            // set worth protecting the way an existing, active account's
+            // Role would be. syncRoles() (replace, not add) so the
+            // invitation's chosen Role is the only one they end up with,
+            // not that default plus this one.
+            $accessRole = $invitation->accessRole;
+
+            // Defensive re-check, not just trust in what OrganizationSettings
+            // already validated at creation time: an invitation can sit
+            // pending for up to OrganizationInvitation::LIFETIME_DAYS, long
+            // enough for which Role is designated Super Admin to change in
+            // Settings in the meantime. Never let that Role reach a user
+            // through this path, no matter how it was set.
+            if ($accessRole !== null && ! $accessRole->isSuperAdminRole()) {
+                $user->syncRoles([$accessRole]);
+            }
+
             $joined = true;
         });
 
