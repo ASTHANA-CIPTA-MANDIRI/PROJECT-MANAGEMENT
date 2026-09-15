@@ -18,6 +18,7 @@ class DatabaseSeeder extends Seeder
         // exist by the time it runs.
         $this->call(PermissionsSeeder::class);
         $this->call(EmployeeRoleSeeder::class);
+        $this->call(OrganizationAccessRoleSeeder::class);
         $this->call(DefaultUserSeeder::class);
         $this->call(ProjectStatusSeeder::class);
         $this->call(TicketTypeSeeder::class);

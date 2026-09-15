@@ -10,6 +10,7 @@ use App\Settings\GeneralSettings;
 use Database\Seeders\DatabaseSeeder;
 use Database\Seeders\DefaultUserSeeder;
 use Database\Seeders\EmployeeRoleSeeder;
+use Database\Seeders\OrganizationAccessRoleSeeder;
 use Database\Seeders\PermissionsSeeder;
 use Illuminate\Auth\Events\Registered;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -42,6 +43,39 @@ class SeederSecurityTest extends TestCase
         $this->assertFalse($role->hasPermissionTo('Delete ticket'));
         $this->assertFalse($role->hasPermissionTo('Update user'));
         $this->assertFalse($role->hasPermissionTo('Delete role'));
+    }
+
+    /**
+     * These three exist so OrganizationSettings' addMember/changeRole
+     * Access role picker has a ready-made match for each Organization role
+     * tier (App\Support\... accessRoleFor(), matching by name) - none of
+     * them may ever touch the 'role'/'permission'/'user' modules or
+     * 'Manage super admin settings', which stay platform-wide, Super-
+     * Admin-only concerns regardless of Organization role.
+     */
+    public function test_owner_admin_member_access_roles_never_get_platform_wide_permissions(): void
+    {
+        $this->seed(PermissionsSeeder::class);
+        $this->seed(OrganizationAccessRoleSeeder::class);
+
+        foreach (['Owner', 'Admin', 'Member'] as $roleName) {
+            $role = Role::findByName($roleName);
+
+            $this->assertFalse($role->hasPermissionTo('Delete role'), "{$roleName} must not manage roles");
+            $this->assertFalse($role->hasPermissionTo('Delete permission'), "{$roleName} must not manage permissions");
+            $this->assertFalse($role->hasPermissionTo('Update user'), "{$roleName} must not manage users");
+            $this->assertFalse($role->hasPermissionTo('Manage super admin settings'), "{$roleName} must not reach platform settings");
+        }
+    }
+
+    public function test_admin_and_owner_access_roles_can_manage_projects_member_cannot(): void
+    {
+        $this->seed(PermissionsSeeder::class);
+        $this->seed(OrganizationAccessRoleSeeder::class);
+
+        $this->assertTrue(Role::findByName('Admin')->hasPermissionTo('Delete project'));
+        $this->assertTrue(Role::findByName('Owner')->hasPermissionTo('Delete project'));
+        $this->assertFalse(Role::findByName('Member')->hasPermissionTo('Delete project'));
     }
 
     public function test_seeding_creates_a_super_admin_role_with_all_permissions(): void

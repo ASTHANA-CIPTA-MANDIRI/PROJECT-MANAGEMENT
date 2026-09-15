@@ -567,6 +567,26 @@ class OrganizationAddMemberTest extends TestCase
     }
 
     /**
+     * Picking a Role auto-fills the matching seeded Access role
+     * (OrganizationAccessRoleSeeder: "Admin"/"Member" match the Organization
+     * role names exactly) - proven by driving the actual reactive form
+     * field, not just the end result of a one-shot submit.
+     */
+    public function test_choosing_a_role_auto_fills_the_matching_access_role(): void
+    {
+        $adminAccessRole = Role::create(['name' => 'Admin']);
+        $organization = Organization::factory()->create();
+        $owner = $this->panelUser();
+        $this->attach($organization, $owner, 'owner');
+        $this->actingAs($owner);
+
+        Livewire::test(OrganizationSettings::class)
+            ->mountTableAction('addMember')
+            ->set('mountedTableActionData.role', 'admin')
+            ->assertSet('mountedTableActionData.access_role_id', $adminAccessRole->id);
+    }
+
+    /**
      * A crafted request submitting the Super Admin role's id directly
      * (never actually offered by the picker's own ->options()) must still
      * never grant it - resolveAccessRole() re-checks server-side.

@@ -345,6 +345,75 @@ class OrganizationManagementTest extends TestCase
         ]);
     }
 
+    // -------------------------------------------------------- access role
+
+    /**
+     * Unlike addMember's never-overwrite-an-existing-Role guard,
+     * changeRole's whole purpose is explicitly setting this member's role -
+     * syncRoles() applies unconditionally here, replacing whatever they
+     * held before.
+     */
+    public function test_changing_a_members_role_also_syncs_the_chosen_access_role(): void
+    {
+        $oldRole = Role::create(['name' => 'Employee']);
+        $newRole = Role::create(['name' => 'Admin']);
+        $organization = Organization::factory()->create();
+        $owner = User::factory()->create();
+        $member = User::factory()->create();
+        $member->assignRole($oldRole);
+        $this->attach($organization, $owner, 'owner');
+        $this->attach($organization, $member, 'member');
+        $this->actingAs($owner);
+
+        Livewire::test(OrganizationSettings::class)
+            ->callTableAction('changeRole', $member, data: ['role' => 'admin', 'access_role_id' => $newRole->id]);
+
+        $member = $member->fresh();
+        $this->assertTrue($member->hasRole($newRole->name));
+        $this->assertFalse($member->hasRole($oldRole->name));
+    }
+
+    /**
+     * The access_role_id field defaults to whatever Role the member
+     * already holds - proven by opening the real modal, not just the
+     * default() closure in isolation.
+     */
+    public function test_the_access_role_field_defaults_to_the_members_current_role(): void
+    {
+        $currentRole = Role::create(['name' => 'Employee']);
+        $organization = Organization::factory()->create();
+        $owner = User::factory()->create();
+        $member = User::factory()->create();
+        $member->assignRole($currentRole);
+        $this->attach($organization, $owner, 'owner');
+        $this->attach($organization, $member, 'member');
+        $this->actingAs($owner);
+
+        Livewire::test(OrganizationSettings::class)
+            ->mountTableAction('changeRole', $member)
+            ->assertSet('mountedTableActionData.access_role_id', $currentRole->id);
+    }
+
+    /**
+     * The Super Admin role must never be handed out through this action
+     * either, even if submitted directly.
+     */
+    public function test_changing_a_role_never_grants_the_super_admin_access_role(): void
+    {
+        $superAdminRole = Role::create(['name' => 'Super Admin']);
+        $organization = Organization::factory()->create();
+        $owner = User::factory()->create();
+        $member = User::factory()->create();
+        $this->attach($organization, $owner, 'owner');
+        $this->attach($organization, $member, 'member');
+        $this->actingAs($owner);
+
+        Livewire::test(OrganizationSettings::class)
+            ->callTableAction('changeRole', $member, data: ['role' => 'admin', 'access_role_id' => $superAdminRole->id]);
+
+        $this->assertFalse($member->fresh()->isSuperAdmin());
+    }
+
     /**
      * removeMember's ->visible() is now an exact reuse of
      * OrganizationPolicy::removeMember() (Phase 5.1), so Filament hides the
