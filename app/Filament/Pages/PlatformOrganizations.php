@@ -208,7 +208,6 @@ class PlatformOrganizations extends AuthorizedPage implements HasForms, Tables\C
                     // $data itself, never from which fields the form
                     // happened to render (same discipline as owner_id's
                     // own re-resolution below).
-                    //
                     // Deliberately not ->required(): its own ->default()
                     // only applies once Livewire actually mounts the form
                     // (real usage always has it pre-selected), but a test
