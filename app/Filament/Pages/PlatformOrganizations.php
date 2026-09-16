@@ -3,11 +3,15 @@
 namespace App\Filament\Pages;
 
 use App\Models\Organization;
+use App\Models\OrganizationInvitation;
 use App\Models\Role;
 use App\Models\User;
+use App\Notifications\OrganizationInvitationCreated;
 use App\Support\OrganizationDefaults;
 use App\Support\TrialGate;
+use Closure;
 use Filament\Forms\Components\DatePicker;
+use Filament\Forms\Components\Radio;
 use Filament\Forms\Components\Select;
 use Filament\Forms\Components\TextInput;
 use Filament\Forms\Concerns\InteractsWithForms;
@@ -18,6 +22,7 @@ use Illuminate\Contracts\Support\Htmlable;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\QueryException;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Notification as NotificationFacade;
 use Illuminate\Validation\ValidationException;
 
 /**
@@ -114,6 +119,12 @@ class PlatformOrganizations extends AuthorizedPage implements HasForms, Tables\C
         return Organization::query()
             ->withCount('users')
             ->with(['users' => fn ($query) => $query->wherePivot('role', 'owner')])
+            // A pending Owner invitation only ever exists while the
+            // organization has no Owner yet (createOrganizationWithInvitedOwner()
+            // never attaches one until acceptance) — eager loaded here so
+            // the Owner column and the revoke action below read it without
+            // a second query per row.
+            ->with(['invitations' => fn ($query) => $query->pending()->where('role', 'owner')])
             // Trials closest to running out (or already expired) float to the
             // top; grandfathered organizations (trial_ends_at is null) have
             // no urgency at all, so they sort last regardless of direction.
@@ -131,8 +142,20 @@ class PlatformOrganizations extends AuthorizedPage implements HasForms, Tables\C
 
             Tables\Columns\TextColumn::make('owner')
                 ->label(__('Owner'))
-                ->getStateUsing(fn (Organization $record) => $record->users->first()?->name ?? __('No owner'))
-                ->description(fn (Organization $record) => $record->users->first()?->email),
+                ->getStateUsing(function (Organization $record) {
+                    if ($owner = $record->users->first()) {
+                        return $owner->name;
+                    }
+
+                    return $record->invitations->first() !== null
+                        ? __('Invitation pending')
+                        : __('No owner');
+                })
+                ->description(fn (Organization $record) => $record->users->first()?->email
+                    ?? $record->invitations->first()?->email)
+                ->color(fn (Organization $record) => $record->users->isEmpty() && $record->invitations->isNotEmpty()
+                    ? 'warning'
+                    : null),
 
             Tables\Columns\TextColumn::make('users_count')
                 ->label(__('Members'))
@@ -175,9 +198,40 @@ class PlatformOrganizations extends AuthorizedPage implements HasForms, Tables\C
                         ->required()
                         ->maxLength(255),
 
+                    // Two ways to name an Owner: pick someone who already
+                    // has an account (existing behaviour), or hand the
+                    // Super Admin an email for someone who doesn't yet —
+                    // e.g. onboarding an enterprise customer by hand before
+                    // they have ever touched the product. The picked mode
+                    // only decides which fields below are shown/required;
+                    // the action() closure re-derives everything from
+                    // $data itself, never from which fields the form
+                    // happened to render (same discipline as owner_id's
+                    // own re-resolution below).
+                    //
+                    // Deliberately not ->required(): its own ->default()
+                    // only applies once Livewire actually mounts the form
+                    // (real usage always has it pre-selected), but a test
+                    // driving callTableAction() with an explicit $data
+                    // array bypasses that mount lifecycle - the action()
+                    // closure below already treats a missing value the
+                    // same as 'existing' via `?? 'existing'`, so gating
+                    // submission on this field being non-empty would only
+                    // ever reject requests that never actually omit a
+                    // real choice in the browser.
+                    Radio::make('owner_mode')
+                        ->label(__('Owner'))
+                        ->options([
+                            'existing' => __('Choose an existing user'),
+                            'invite' => __('Invite someone new by email'),
+                        ])
+                        ->default('existing')
+                        ->reactive(),
+
                     Select::make('owner_id')
                         ->label(__('Owner'))
-                        ->required()
+                        ->visible(fn (Closure $get) => $get('owner_mode') !== 'invite')
+                        ->required(fn (Closure $get) => $get('owner_mode') !== 'invite')
                         ->searchable()
                         ->getSearchResultsUsing(fn (string $search) => User::query()
                             ->where(fn (Builder $query) => $query
@@ -192,6 +246,20 @@ class PlatformOrganizations extends AuthorizedPage implements HasForms, Tables\C
                             : null)
                         ->helperText(__("This user becomes the organization's initial Owner.")),
 
+                    TextInput::make('invite_name')
+                        ->label(__('Full name'))
+                        ->visible(fn (Closure $get) => $get('owner_mode') === 'invite')
+                        ->required(fn (Closure $get) => $get('owner_mode') === 'invite')
+                        ->maxLength(255),
+
+                    TextInput::make('invite_email')
+                        ->label(__('Email'))
+                        ->email()
+                        ->visible(fn (Closure $get) => $get('owner_mode') === 'invite')
+                        ->required(fn (Closure $get) => $get('owner_mode') === 'invite')
+                        ->maxLength(255)
+                        ->helperText(__('An invitation link is emailed to them — they become Owner once they accept. If this email already has an account, they are made Owner immediately instead.')),
+
                     DatePicker::make('trial_ends_at')
                         ->label(__('Trial ends at'))
                         ->helperText(__('Leave blank for an unlimited (grandfathered) organization.')),
@@ -205,14 +273,6 @@ class PlatformOrganizations extends AuthorizedPage implements HasForms, Tables\C
                         ]);
                     }
 
-                    $owner = User::find($data['owner_id'] ?? null);
-
-                    if ($owner === null) {
-                        throw ValidationException::withMessages([
-                            'mountedTableActionData.owner_id' => __('Please choose an owner.'),
-                        ]);
-                    }
-
                     if (Organization::where('name', $name)->exists()) {
                         throw ValidationException::withMessages([
                             'mountedTableActionData.name' => __('This organization name is already taken.'),
@@ -220,15 +280,11 @@ class PlatformOrganizations extends AuthorizedPage implements HasForms, Tables\C
                     }
 
                     try {
-                        DB::transaction(function () use ($name, $owner, $data) {
-                            $organization = Organization::create([
-                                'name' => $name,
-                                'trial_ends_at' => $data['trial_ends_at'] ?? null,
-                            ]);
-                            $organization->users()->attach($owner->id, ['role' => 'owner']);
-                            OrganizationDefaults::seed($organization);
-                            $this->assignOwnerAccessRoleIfNone($owner);
-                        });
+                        if (($data['owner_mode'] ?? 'existing') === 'invite') {
+                            $this->createOrganizationWithInvitedOwner($name, $data);
+                        } else {
+                            $this->createOrganizationWithExistingOwner($name, $data);
+                        }
                     } catch (QueryException $exception) {
                         // organizations.name is unique at the database level
                         // too — the final backstop against a race with the
@@ -241,13 +297,134 @@ class PlatformOrganizations extends AuthorizedPage implements HasForms, Tables\C
                             'mountedTableActionData.name' => __('This organization name is already taken.'),
                         ]);
                     }
-
-                    Notification::make()
-                        ->title(__('Organization created'))
-                        ->success()
-                        ->send();
                 }),
         ];
+    }
+
+    /**
+     * The "pick someone who already has an account" branch — unchanged
+     * from before the invite-by-email option existed, just extracted so
+     * the action() closure above only has to decide which branch to run.
+     */
+    private function createOrganizationWithExistingOwner(string $name, array $data): void
+    {
+        $owner = User::find($data['owner_id'] ?? null);
+
+        if ($owner === null) {
+            throw ValidationException::withMessages([
+                'mountedTableActionData.owner_id' => __('Please choose an owner.'),
+            ]);
+        }
+
+        DB::transaction(function () use ($name, $owner, $data) {
+            $organization = Organization::create([
+                'name' => $name,
+                'trial_ends_at' => $data['trial_ends_at'] ?? null,
+            ]);
+            $organization->users()->attach($owner->id, ['role' => 'owner']);
+            OrganizationDefaults::seed($organization);
+            $this->assignOwnerAccessRoleIfNone($owner);
+        });
+
+        Notification::make()
+            ->title(__('Organization created'))
+            ->success()
+            ->send();
+    }
+
+    /**
+     * The "invite someone new by email" branch. If the email already
+     * belongs to an account, this short-circuits to the exact same
+     * immediate-attach behaviour as the existing-owner branch — an
+     * invitation would only make them wait on an email they don't need to
+     * open, mirroring the precedent OrganizationSettings::addExistingUser()
+     * already sets for "existing account short-circuits the invite".
+     *
+     * Otherwise, the Organization is created right away (so it is visible
+     * in the table immediately, with the Owner column showing the pending
+     * invitation — see getTableColumns()) but nobody is attached as Owner
+     * yet; App\Http\Livewire\AcceptOrganizationInvitation attaches them at
+     * acceptance, exactly like every other invitation in this app. Sending
+     * role: 'owner' here is safe specifically because this page never
+     * calls OrganizationPolicy::addMember() (the ability that hard-blocks
+     * 'owner' — see that method's own docblock) — this is Super Admin's own,
+     * separate authorization path (see this class's own docblock), and
+     * AcceptOrganizationInvitation::accept() itself trusts whatever role an
+     * invitation carries without re-checking that allow-list.
+     */
+    private function createOrganizationWithInvitedOwner(string $name, array $data): void
+    {
+        $email = trim((string) ($data['invite_email'] ?? ''));
+        $inviteName = trim((string) ($data['invite_name'] ?? ''));
+
+        if ($email === '') {
+            throw ValidationException::withMessages([
+                'mountedTableActionData.invite_email' => __('Please enter an email address.'),
+            ]);
+        }
+
+        if ($inviteName === '') {
+            throw ValidationException::withMessages([
+                'mountedTableActionData.invite_name' => __('Please enter a full name.'),
+            ]);
+        }
+
+        $existingUser = User::where('email', $email)->first();
+
+        if ($existingUser !== null) {
+            DB::transaction(function () use ($name, $existingUser, $data) {
+                $organization = Organization::create([
+                    'name' => $name,
+                    'trial_ends_at' => $data['trial_ends_at'] ?? null,
+                ]);
+                $organization->users()->attach($existingUser->id, ['role' => 'owner']);
+                OrganizationDefaults::seed($organization);
+                $this->assignOwnerAccessRoleIfNone($existingUser);
+            });
+
+            Notification::make()
+                ->title(__('Organization created'))
+                ->body(__('This email already had an account, so they were made Owner immediately.'))
+                ->success()
+                ->send();
+
+            return;
+        }
+
+        $accessRole = Role::where('name', 'Owner')->first();
+        $plainToken = OrganizationInvitation::generateToken();
+
+        $invitation = DB::transaction(function () use ($name, $data, $inviteName, $email, $accessRole, $plainToken) {
+            $organization = Organization::create([
+                'name' => $name,
+                'trial_ends_at' => $data['trial_ends_at'] ?? null,
+            ]);
+            OrganizationDefaults::seed($organization);
+
+            return OrganizationInvitation::create([
+                'organization_id' => $organization->id,
+                'name' => $inviteName,
+                'email' => $email,
+                'role' => 'owner',
+                'access_role_id' => $accessRole?->id,
+                'token_hash' => OrganizationInvitation::hashToken($plainToken),
+                'expires_at' => now()->addDays(OrganizationInvitation::LIFETIME_DAYS),
+                'created_by' => auth()->id(),
+            ]);
+        });
+
+        // Mailed only after the transaction above has committed (the
+        // notification itself is queued with afterCommit — see
+        // OrganizationInvitationCreated — this call site keeps the same
+        // discipline of never issuing outside I/O from inside the DB
+        // transaction that could still roll back).
+        NotificationFacade::route('mail', $email)
+            ->notify(new OrganizationInvitationCreated($invitation, $plainToken));
+
+        Notification::make()
+            ->title(__('Organization created — invitation sent'))
+            ->success()
+            ->send();
     }
 
     protected function getTableActions(): array
@@ -309,6 +486,35 @@ class PlatformOrganizations extends AuthorizedPage implements HasForms, Tables\C
 
                     Notification::make()
                         ->title(__('Organization updated'))
+                        ->success()
+                        ->send();
+                }),
+
+            // Only ever shown while an Organization has no Owner yet and a
+            // pending invitation is the reason why (getTableColumns()'s
+            // Owner column renders the same condition as "Invitation
+            // pending") — lets the Super Admin free up the email (e.g. it
+            // was mistyped) without waiting for the 7-day expiry.
+            Tables\Actions\Action::make('revokeOwnerInvitation')
+                ->label(__('Revoke invitation'))
+                ->icon('heroicon-o-x-circle')
+                ->color('danger')
+                ->requiresConfirmation()
+                ->visible(fn (Organization $record) => $record->users->isEmpty() && $record->invitations->isNotEmpty())
+                ->action(function (Organization $record): void {
+                    $invitation = $record->invitations->first();
+
+                    if ($invitation === null) {
+                        return;
+                    }
+
+                    OrganizationInvitation::whereKey($invitation->id)
+                        ->whereNull('accepted_at')
+                        ->whereNull('revoked_at')
+                        ->update(['revoked_at' => now()]);
+
+                    Notification::make()
+                        ->title(__('Invitation revoked'))
                         ->success()
                         ->send();
                 }),

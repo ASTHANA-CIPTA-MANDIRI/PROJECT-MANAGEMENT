@@ -9,7 +9,9 @@ use App\Models\Project;
 use App\Models\ProjectStatus;
 use App\Models\Role;
 use App\Models\User;
+use App\Notifications\OrganizationInvitationCreated;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\Notification as NotificationFacade;
 use Livewire\Livewire;
 use Tests\TestCase;
 
@@ -314,6 +316,141 @@ class PlatformOrganizationsTest extends TestCase
             ->assertHasTableActionErrors(['owner_id']);
 
         $this->assertFalse(Organization::where('name', 'Ownerless Co')->exists());
+    }
+
+    // ------------------------------------------- create via email invite
+
+    /**
+     * The "invite someone new" branch for an email with no account yet:
+     * the Organization exists immediately (visible in the table right
+     * away), but nobody is attached as Owner — only accepting the emailed
+     * invitation does that (App\Http\Livewire\AcceptOrganizationInvitation),
+     * exactly like every other invitation in this app.
+     */
+    public function test_super_admin_can_create_an_organization_by_inviting_a_brand_new_owner_by_email(): void
+    {
+        NotificationFacade::fake();
+
+        $this->actingAs($this->superAdmin());
+
+        Livewire::test(PlatformOrganizations::class)
+            ->callTableAction('createOrganization', null, data: [
+                'name' => 'Invited Co',
+                'owner_mode' => 'invite',
+                'invite_name' => 'Future Owner',
+                'invite_email' => 'future-owner@example.test',
+                'trial_ends_at' => null,
+            ])
+            ->assertHasNoTableActionErrors();
+
+        $organization = Organization::where('name', 'Invited Co')->firstOrFail();
+
+        $this->assertSame(0, $organization->users()->count());
+        // OrganizationDefaults::seed() still ran even though nobody is a
+        // member yet - the org must be immediately usable once someone
+        // does accept, not a broken shell waiting to be finished.
+        $this->assertTrue(ProjectStatus::where('organization_id', $organization->id)->exists());
+
+        $invitation = OrganizationInvitation::where('organization_id', $organization->id)->firstOrFail();
+        $this->assertSame('owner', $invitation->role);
+        $this->assertSame('future-owner@example.test', $invitation->email);
+        $this->assertSame('Future Owner', $invitation->name);
+        $this->assertTrue($invitation->isPending());
+
+        NotificationFacade::assertSentOnDemand(OrganizationInvitationCreated::class);
+    }
+
+    /**
+     * An email that already belongs to an account is attached immediately
+     * instead of going through an invitation — mirrors the precedent
+     * OrganizationSettings::addExistingUser() already sets for "existing
+     * account short-circuits the invite".
+     */
+    public function test_creating_an_organization_by_inviting_an_email_that_already_has_an_account_attaches_immediately(): void
+    {
+        NotificationFacade::fake();
+
+        $this->actingAs($this->superAdmin());
+
+        $existingUser = User::factory()->create(['email' => 'already-here@example.test']);
+
+        Livewire::test(PlatformOrganizations::class)
+            ->callTableAction('createOrganization', null, data: [
+                'name' => 'Shortcut Co',
+                'owner_mode' => 'invite',
+                'invite_name' => 'Ignored Name',
+                'invite_email' => 'already-here@example.test',
+                'trial_ends_at' => null,
+            ])
+            ->assertHasNoTableActionErrors();
+
+        $organization = Organization::where('name', 'Shortcut Co')->firstOrFail();
+
+        $this->assertTrue($organization->isOwnedBy($existingUser->fresh()));
+        $this->assertFalse(OrganizationInvitation::where('organization_id', $organization->id)->exists());
+        NotificationFacade::assertNothingSent();
+    }
+
+    public function test_creating_an_organization_via_invite_without_an_email_is_rejected(): void
+    {
+        $this->actingAs($this->superAdmin());
+
+        Livewire::test(PlatformOrganizations::class)
+            ->callTableAction('createOrganization', null, data: [
+                'name' => 'No Email Co',
+                'owner_mode' => 'invite',
+                'invite_name' => 'Someone',
+                'invite_email' => '',
+            ])
+            ->assertHasTableActionErrors(['invite_email']);
+
+        $this->assertFalse(Organization::where('name', 'No Email Co')->exists());
+    }
+
+    public function test_creating_an_organization_via_invite_without_a_name_is_rejected(): void
+    {
+        $this->actingAs($this->superAdmin());
+
+        Livewire::test(PlatformOrganizations::class)
+            ->callTableAction('createOrganization', null, data: [
+                'name' => 'No Name Co',
+                'owner_mode' => 'invite',
+                'invite_name' => '',
+                'invite_email' => 'someone@example.test',
+            ])
+            ->assertHasTableActionErrors(['invite_name']);
+
+        $this->assertFalse(Organization::where('name', 'No Name Co')->exists());
+    }
+
+    // ---------------------------------------------- revoke owner invite
+
+    public function test_super_admin_can_revoke_a_pending_owner_invitation(): void
+    {
+        $this->actingAs($this->superAdmin());
+
+        $organization = Organization::factory()->create(['name' => 'Awaiting Co']);
+        $invitation = OrganizationInvitation::factory()->create([
+            'organization_id' => $organization->id,
+            'role' => 'owner',
+        ]);
+
+        Livewire::test(PlatformOrganizations::class)
+            ->callTableAction('revokeOwnerInvitation', $organization);
+
+        $this->assertTrue($invitation->fresh()->isRevoked());
+    }
+
+    public function test_revoke_owner_invitation_action_is_hidden_once_the_organization_has_an_owner(): void
+    {
+        $this->actingAs($this->superAdmin());
+
+        $owner = User::factory()->create();
+        $organization = Organization::factory()->create(['name' => 'Staffed Already Co']);
+        $organization->users()->attach($owner->id, ['role' => 'owner']);
+
+        Livewire::test(PlatformOrganizations::class)
+            ->assertTableActionHidden('revokeOwnerInvitation', $organization);
     }
 
     public function test_a_non_super_admin_cannot_reach_the_create_action(): void
