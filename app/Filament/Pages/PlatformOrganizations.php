@@ -3,15 +3,28 @@
 namespace App\Filament\Pages;
 
 use App\Models\Organization;
+use App\Models\User;
+use App\Support\OrganizationDefaults;
 use App\Support\TrialGate;
+use Filament\Forms\Components\DatePicker;
+use Filament\Forms\Components\Select;
+use Filament\Forms\Components\TextInput;
+use Filament\Forms\Concerns\InteractsWithForms;
+use Filament\Forms\Contracts\HasForms;
+use Filament\Notifications\Notification;
 use Filament\Tables;
 use Illuminate\Contracts\Support\Htmlable;
 use Illuminate\Database\Eloquent\Builder;
+use Illuminate\Database\QueryException;
+use Illuminate\Support\Facades\DB;
+use Illuminate\Validation\ValidationException;
 
 /**
- * Platform Super Admin only — a read-only, cross-organization view so the
- * operator of the SaaS product can monitor every Organization's trial status
- * without joining any of them as a member.
+ * Platform Super Admin only — a cross-organization view so the operator of
+ * the SaaS product can monitor every Organization's trial status, and help
+ * customers directly (rename a mistyped name, extend a trial, provision an
+ * organization by hand, remove an abandoned one) without joining any of
+ * them as a member.
  *
  * Per ADR 0001 ("Platform" section): "A platform-level Filament panel that
  * lets the Platform Super Admin browse across organizations is explicitly
@@ -25,14 +38,26 @@ use Illuminate\Database\Eloquent\Builder;
  * `RequireTwoFactorForSuperAdmins` already use for this exact class of check
  * (Scenario D of the Teams spike found a `team_id = NULL` role assignment
  * unsafe to rely on for a cross-organization actor), reused here rather than
- * inventing a new authorization path.
+ * inventing a new authorization path. `AuthorizesPageAccess` re-runs
+ * `userCanAccessPage()` on every Livewire request (not just the first
+ * render), so every action below is covered by the same check without
+ * needing its own redundant Gate call.
  *
- * Deliberately read-only: no edit/delete/member-management action exists on
- * this page. Managing one specific Organization as the Platform Super Admin
- * is a separate, not-yet-built feature — out of scope here on purpose.
+ * Create/Edit/Delete live here rather than a Resource for the same reason
+ * OrganizationSettings does: this is a hand-built table with actions that
+ * call domain logic directly, not a RelationManager whose abilities would
+ * be checked against the wrong Policy. Deleting an Organization only ever
+ * succeeds when it has zero Projects (including trashed ones) — every
+ * organization-scoped lookup table (ticket_types, ticket_priorities,
+ * project_statuses, labels, activities) cascade-deletes with it, and a
+ * Project's `status_id`/`priority_id`/`type_id` foreign keys are NOT
+ * cascading, so a Project would otherwise be left pointing at a row that no
+ * longer exists — the deleteOrganization action refuses up front instead of
+ * letting that happen.
  */
-class PlatformOrganizations extends AuthorizedPage implements Tables\Contracts\HasTable
+class PlatformOrganizations extends AuthorizedPage implements HasForms, Tables\Contracts\HasTable
 {
+    use InteractsWithForms;
     use Tables\Concerns\InteractsWithTable;
 
     /**
@@ -127,6 +152,206 @@ class PlatformOrganizations extends AuthorizedPage implements Tables\Contracts\H
     protected function getTableEmptyStateHeading(): ?string
     {
         return __('No organizations yet');
+    }
+
+    /**
+     * Manual provisioning — e.g. an enterprise deal onboarded by hand
+     * instead of self-serve signup. Mirrors CreateOrganization's own
+     * create+owner+defaults transaction (Phase 5.2) exactly, except the
+     * owner is a Select instead of always auth()->id(), since here it is
+     * the Super Admin acting on someone else's behalf.
+     */
+    protected function getTableHeaderActions(): array
+    {
+        return [
+            Tables\Actions\Action::make('createOrganization')
+                ->label(__('Create organization'))
+                ->icon('heroicon-o-plus')
+                ->modalHeading(__('Create organization'))
+                ->form([
+                    TextInput::make('name')
+                        ->label(__('Organization name'))
+                        ->required()
+                        ->maxLength(255),
+
+                    Select::make('owner_id')
+                        ->label(__('Owner'))
+                        ->required()
+                        ->searchable()
+                        ->getSearchResultsUsing(fn (string $search) => User::query()
+                            ->where(fn (Builder $query) => $query
+                                ->where('name', 'like', "%{$search}%")
+                                ->orWhere('email', 'like', "%{$search}%"))
+                            ->orderBy('name')
+                            ->limit(50)
+                            ->get()
+                            ->mapWithKeys(fn (User $user) => [$user->id => "{$user->name} ({$user->email})"]))
+                        ->getOptionLabelUsing(fn ($value) => ($user = User::find($value))
+                            ? "{$user->name} ({$user->email})"
+                            : null)
+                        ->helperText(__("This user becomes the organization's initial Owner.")),
+
+                    DatePicker::make('trial_ends_at')
+                        ->label(__('Trial ends at'))
+                        ->helperText(__('Leave blank for an unlimited (grandfathered) organization.')),
+                ])
+                ->action(function (array $data): void {
+                    $name = trim((string) $data['name']);
+
+                    if ($name === '') {
+                        throw ValidationException::withMessages([
+                            'mountedTableActionData.name' => __('The organization name must not be blank.'),
+                        ]);
+                    }
+
+                    $owner = User::find($data['owner_id'] ?? null);
+
+                    if ($owner === null) {
+                        throw ValidationException::withMessages([
+                            'mountedTableActionData.owner_id' => __('Please choose an owner.'),
+                        ]);
+                    }
+
+                    if (Organization::where('name', $name)->exists()) {
+                        throw ValidationException::withMessages([
+                            'mountedTableActionData.name' => __('This organization name is already taken.'),
+                        ]);
+                    }
+
+                    try {
+                        DB::transaction(function () use ($name, $owner, $data) {
+                            $organization = Organization::create([
+                                'name' => $name,
+                                'trial_ends_at' => $data['trial_ends_at'] ?? null,
+                            ]);
+                            $organization->users()->attach($owner->id, ['role' => 'owner']);
+                            OrganizationDefaults::seed($organization);
+                        });
+                    } catch (QueryException $exception) {
+                        // organizations.name is unique at the database level
+                        // too — the final backstop against a race with the
+                        // check above, same discipline as CreateOrganization.
+                        if ($exception->getCode() !== '23000') {
+                            throw $exception;
+                        }
+
+                        throw ValidationException::withMessages([
+                            'mountedTableActionData.name' => __('This organization name is already taken.'),
+                        ]);
+                    }
+
+                    Notification::make()
+                        ->title(__('Organization created'))
+                        ->success()
+                        ->send();
+                }),
+        ];
+    }
+
+    protected function getTableActions(): array
+    {
+        return [
+            Tables\Actions\Action::make('editOrganization')
+                ->label(__('Edit'))
+                ->icon('heroicon-o-pencil')
+                ->modalHeading(__('Edit organization'))
+                // Owner reassignment deliberately has no field here —
+                // ownership transfer is a separate, not-yet-built feature
+                // (same boundary OrganizationPolicy's addMember() docblock
+                // already draws), not a side effect of an unrelated edit.
+                // Filament 2's table actions have no fillForm() (a Filament
+                // 3 API) — each field reads the record's current value via
+                // its own ->default(), the same pattern changeRole() in
+                // OrganizationSettings already uses.
+                ->form([
+                    TextInput::make('name')
+                        ->label(__('Organization name'))
+                        ->required()
+                        ->maxLength(255)
+                        ->default(fn (Organization $record) => $record->name),
+
+                    DatePicker::make('trial_ends_at')
+                        ->label(__('Trial ends at'))
+                        ->helperText(__('Leave blank for an unlimited (grandfathered) organization.'))
+                        ->default(fn (Organization $record) => $record->trial_ends_at),
+                ])
+                ->action(function (Organization $record, array $data): void {
+                    $name = trim((string) $data['name']);
+
+                    if ($name === '') {
+                        throw ValidationException::withMessages([
+                            'mountedTableActionData.name' => __('The organization name must not be blank.'),
+                        ]);
+                    }
+
+                    if (Organization::where('name', $name)->whereKeyNot($record->id)->exists()) {
+                        throw ValidationException::withMessages([
+                            'mountedTableActionData.name' => __('This organization name is already taken.'),
+                        ]);
+                    }
+
+                    try {
+                        $record->update([
+                            'name' => $name,
+                            'trial_ends_at' => $data['trial_ends_at'] ?? null,
+                        ]);
+                    } catch (QueryException $exception) {
+                        if ($exception->getCode() !== '23000') {
+                            throw $exception;
+                        }
+
+                        throw ValidationException::withMessages([
+                            'mountedTableActionData.name' => __('This organization name is already taken.'),
+                        ]);
+                    }
+
+                    Notification::make()
+                        ->title(__('Organization updated'))
+                        ->success()
+                        ->send();
+                }),
+
+            Tables\Actions\Action::make('deleteOrganization')
+                ->label(__('Delete'))
+                ->icon('heroicon-o-trash')
+                ->color('danger')
+                ->requiresConfirmation()
+                ->modalHeading(__('Delete organization?'))
+                // Not record-scoped ($record isn't resolvable yet at the
+                // point Filament 2 evaluates shouldOpenModal() for a table
+                // action - only ->default() form fields and ->action()
+                // itself receive the mounted record) - kept generic instead
+                // of interpolating the organization's name.
+                ->modalSubheading(__('This permanently removes its memberships, invitations, and organization-scoped reference data (ticket types, priorities, statuses, labels, activities). An organization that still has projects cannot be deleted — reassign or delete them first.'))
+                ->modalButton(__('Delete'))
+                ->action(function (Organization $record): void {
+                    // withTrashed() because a soft-deleted Project's
+                    // status_id/priority_id/type_id foreign keys still point
+                    // at this organization's lookup rows, so the cascade
+                    // below would still violate them otherwise. This is the
+                    // real guard (not just a friendlier message) — every
+                    // Ticket lives under a Project, and every Project under
+                    // this Organization, so zero Projects (trashed included)
+                    // means nothing else can hold a foreign key into the
+                    // lookup rows this delete cascades through.
+                    if ($record->projects()->withTrashed()->exists()) {
+                        Notification::make()
+                            ->title(__('Cannot delete an organization that still has projects'))
+                            ->body(__('Reassign or delete its projects first, then try again.'))
+                            ->danger()
+                            ->send();
+
+                        return;
+                    }
+
+                    $record->delete();
+
+                    Notification::make()
+                        ->title(__('Organization deleted'))
+                        ->success()
+                        ->send();
+                }),
+        ];
     }
 
     /**
