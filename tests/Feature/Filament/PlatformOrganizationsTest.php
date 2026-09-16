@@ -219,6 +219,60 @@ class PlatformOrganizationsTest extends TestCase
         $this->assertTrue(ProjectStatus::where('organization_id', $organization->id)->exists());
     }
 
+    /**
+     * A user picked as Owner who holds no Spatie Role at all (e.g. a
+     * standalone account created without one) must not end up locked out
+     * of Filament entirely — User::canAccessFilament() gates purely on
+     * roles()->exists(), independent of organization_users.role.
+     */
+    public function test_creating_an_organization_grants_the_owner_role_when_the_picked_owner_has_none(): void
+    {
+        $this->actingAs($this->superAdmin());
+
+        Role::create(['name' => 'Owner']);
+        $owner = User::factory()->create();
+        $this->assertFalse($owner->roles()->exists());
+
+        Livewire::test(PlatformOrganizations::class)
+            ->callTableAction('createOrganization', null, data: [
+                'name' => 'Freshly Created Co',
+                'owner_id' => $owner->id,
+                'trial_ends_at' => null,
+            ])
+            ->assertHasNoTableActionErrors();
+
+        $this->assertTrue($owner->fresh()->hasRole('Owner'));
+    }
+
+    /**
+     * An owner who already holds an established Role elsewhere must never
+     * have it silently replaced — Spatie Roles are global per-user, not
+     * Organization-scoped (ADR 0001's Teams rejection), so overwriting it
+     * here would change what they can do in every other Organization they
+     * already belong to.
+     */
+    public function test_creating_an_organization_never_overwrites_the_picked_owners_existing_role(): void
+    {
+        $this->actingAs($this->superAdmin());
+
+        Role::create(['name' => 'Owner']);
+        $existingRole = Role::create(['name' => 'Admin']);
+        $owner = User::factory()->create();
+        $owner->assignRole($existingRole);
+
+        Livewire::test(PlatformOrganizations::class)
+            ->callTableAction('createOrganization', null, data: [
+                'name' => 'Freshly Created Co',
+                'owner_id' => $owner->id,
+                'trial_ends_at' => null,
+            ])
+            ->assertHasNoTableActionErrors();
+
+        $owner->refresh();
+        $this->assertTrue($owner->hasRole('Admin'));
+        $this->assertFalse($owner->hasRole('Owner'));
+    }
+
     public function test_creating_an_organization_with_a_duplicate_name_is_rejected(): void
     {
         $this->actingAs($this->superAdmin());

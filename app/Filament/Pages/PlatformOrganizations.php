@@ -3,6 +3,7 @@
 namespace App\Filament\Pages;
 
 use App\Models\Organization;
+use App\Models\Role;
 use App\Models\User;
 use App\Support\OrganizationDefaults;
 use App\Support\TrialGate;
@@ -226,6 +227,7 @@ class PlatformOrganizations extends AuthorizedPage implements HasForms, Tables\C
                             ]);
                             $organization->users()->attach($owner->id, ['role' => 'owner']);
                             OrganizationDefaults::seed($organization);
+                            $this->assignOwnerAccessRoleIfNone($owner);
                         });
                     } catch (QueryException $exception) {
                         // organizations.name is unique at the database level
@@ -352,6 +354,35 @@ class PlatformOrganizations extends AuthorizedPage implements HasForms, Tables\C
                         ->send();
                 }),
         ];
+    }
+
+    /**
+     * organization_users.role='owner' (set right above this call) is the
+     * tenant/authority axis; it grants nothing in Filament by itself -
+     * User::canAccessFilament() gates purely on Spatie roles()->exists(),
+     * same as OrganizationSettings::addExistingUser() already has to
+     * account for. Unlike that method, this one never risks overwriting an
+     * *active* Role: Spatie roles are global per-user (not Organization-
+     * scoped - Teams was rejected, see ADR 0001), so this only ever fires
+     * for a user picked here who has no Role at all yet - otherwise a
+     * Super Admin manually onboarding an enterprise customer could hand
+     * that picked "Owner" a brand-new user shell that can't even log in.
+     * A missing/renamed "Owner" Role (OrganizationAccessRoleSeeder) simply
+     * leaves the user role-less, exactly like accessRoleFor() elsewhere -
+     * never an error, since granting no permissions is always the safe
+     * failure mode here.
+     */
+    private function assignOwnerAccessRoleIfNone(User $owner): void
+    {
+        if ($owner->roles()->exists()) {
+            return;
+        }
+
+        $role = Role::where('name', 'Owner')->first();
+
+        if ($role !== null && ! $role->isSuperAdminRole()) {
+            $owner->assignRole($role);
+        }
     }
 
     /**
