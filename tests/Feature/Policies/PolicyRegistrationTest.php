@@ -29,10 +29,18 @@ class PolicyRegistrationTest extends TestCase
      * Organization::isManageableBy(), never against OrganizationInvitation
      * directly, and it is not exposed through any Filament Resource.
      *
+     * OrganizationSupportSession is exempt for the same shape of reason: it
+     * is never exposed via a Filament Resource, and it is only ever created
+     * or read through App\Filament\Pages\PlatformOrganizations's
+     * startSupportSession action and App\Filament\Pages\OrganizationSupportView,
+     * both of which check auth()->user()->isSuperAdmin() directly (via
+     * App\Support\SupportSessionContext) rather than going through a Policy.
+     *
      * @var array<int, string>
      */
     private const UNGUARDED_MODELS = [
         \App\Models\OrganizationInvitation::class,
+        \App\Models\OrganizationSupportSession::class,
         \App\Models\ProjectFavorite::class,
         \App\Models\ProjectUser::class,
         \App\Models\TicketActivity::class,
