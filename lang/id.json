@@ -534,5 +534,12 @@
     "You have been added to :organization as :role.": "Anda telah ditambahkan ke :organization sebagai :role.",
     "Open organization": "Buka organisasi",
     "Please verify your email address before accepting this invitation.": "Silakan verifikasi alamat email Anda sebelum menerima undangan ini.",
-    "Verify email": "Verifikasi email"
+    "Verify email": "Verifikasi email",
+    "Masuk sebagai Support": "Masuk sebagai Support",
+    "Alasan": "Alasan",
+    "Sesi support dimulai.": "Sesi support dimulai.",
+    "Sesi Support": "Sesi Support",
+    "Started at": "Dimulai pada",
+    "No projects yet": "Belum ada proyek",
+    "Akhiri Sesi": "Akhiri Sesi"
 }
