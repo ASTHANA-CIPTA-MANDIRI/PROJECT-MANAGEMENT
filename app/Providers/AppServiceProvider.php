@@ -152,13 +152,6 @@ class AppServiceProvider extends ServiceProvider
                         return;
                     }
 
-                    // RestoreBulkAction is only ever wired to soft-deletable
-                    // resources, but the closure signature here is typed
-                    // against the generic Eloquent Model (Filament/Larastan
-                    // have no way to narrow it further), so restore() reads
-                    // as undefined to static analysis despite always being
-                    // present at runtime.
-                    // @phpstan-ignore-next-line method.notFound
                     $record->restore();
                 });
 
