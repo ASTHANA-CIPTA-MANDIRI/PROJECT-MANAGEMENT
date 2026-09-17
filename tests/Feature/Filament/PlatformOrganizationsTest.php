@@ -2,9 +2,11 @@
 
 namespace Tests\Feature\Filament;
 
+use App\Filament\Pages\OrganizationSupportView;
 use App\Filament\Pages\PlatformOrganizations;
 use App\Models\Organization;
 use App\Models\OrganizationInvitation;
+use App\Models\OrganizationSupportSession;
 use App\Models\Project;
 use App\Models\ProjectStatus;
 use App\Models\Role;
@@ -596,5 +598,66 @@ class PlatformOrganizationsTest extends TestCase
         Livewire::test(PlatformOrganizations::class)->assertForbidden();
 
         $this->assertModelExists($organization);
+    }
+
+    // ------------------------------------------------- start support session
+
+    /**
+     * The whole point of this action: Project::isAccessibleBy() et al. have
+     * no Super Admin bypass anywhere, so this is the only way a Super Admin
+     * ever gets a legitimate window into another Organization's data — and
+     * it must always be logged with a reason.
+     */
+    public function test_super_admin_can_start_a_support_session_with_a_reason(): void
+    {
+        $admin = $this->superAdmin();
+        $organization = Organization::factory()->create(['name' => 'Needs Help Co']);
+
+        $this->actingAs($admin);
+
+        Livewire::test(PlatformOrganizations::class)
+            ->callTableAction('startSupportSession', $organization, data: [
+                'reason' => 'Investigating a ticket the customer reported as broken',
+            ])
+            ->assertHasNoTableActionErrors()
+            ->assertRedirect(OrganizationSupportView::getUrl());
+
+        $session = OrganizationSupportSession::where('organization_id', $organization->id)->firstOrFail();
+        $this->assertSame($admin->id, $session->super_admin_id);
+        $this->assertSame('Investigating a ticket the customer reported as broken', $session->reason);
+        $this->assertNull($session->ended_at);
+    }
+
+    public function test_starting_a_support_session_without_a_reason_is_rejected(): void
+    {
+        $admin = $this->superAdmin();
+        $organization = Organization::factory()->create();
+
+        $this->actingAs($admin);
+
+        Livewire::test(PlatformOrganizations::class)
+            ->callTableAction('startSupportSession', $organization, data: [
+                'reason' => '',
+            ])
+            ->assertHasTableActionErrors(['reason']);
+
+        $this->assertFalse(
+            OrganizationSupportSession::where('organization_id', $organization->id)
+                ->where('super_admin_id', $admin->id)
+                ->exists()
+        );
+    }
+
+    public function test_a_non_super_admin_cannot_reach_the_start_support_session_action(): void
+    {
+        $owner = User::factory()->create();
+        $organization = Organization::factory()->create();
+        $organization->users()->attach($owner->id, ['role' => 'owner']);
+
+        $this->actingAs($owner);
+
+        Livewire::test(PlatformOrganizations::class)->assertForbidden();
+
+        $this->assertFalse(OrganizationSupportSession::where('organization_id', $organization->id)->exists());
     }
 }

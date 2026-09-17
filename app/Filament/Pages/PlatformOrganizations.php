@@ -8,11 +8,13 @@ use App\Models\Role;
 use App\Models\User;
 use App\Notifications\OrganizationInvitationCreated;
 use App\Support\OrganizationDefaults;
+use App\Support\SupportSessionContext;
 use App\Support\TrialGate;
 use Closure;
 use Filament\Forms\Components\DatePicker;
 use Filament\Forms\Components\Radio;
 use Filament\Forms\Components\Select;
+use Filament\Forms\Components\Textarea;
 use Filament\Forms\Components\TextInput;
 use Filament\Forms\Concerns\InteractsWithForms;
 use Filament\Forms\Contracts\HasForms;
@@ -487,6 +489,35 @@ class PlatformOrganizations extends AuthorizedPage implements HasForms, Tables\C
                         ->title(__('Organization updated'))
                         ->success()
                         ->send();
+                }),
+
+            // Read-only-by-construction support access (see
+            // App\Support\SupportSessionContext and
+            // App\Filament\Pages\OrganizationSupportView's own docblocks):
+            // no write UI in this app has a Super Admin bypass, so a page
+            // that only ever reads through this session is automatically
+            // safe without inventing a new Gate::before rule. $data['reason']
+            // is required below, so there is always an audit trail for why
+            // this Organization was accessed.
+            Tables\Actions\Action::make('startSupportSession')
+                ->label(__('Masuk sebagai Support'))
+                ->icon('heroicon-o-eye')
+                ->form([
+                    Textarea::make('reason')
+                        ->label(__('Alasan'))
+                        ->required()
+                        ->maxLength(500),
+                ])
+                ->requiresConfirmation()
+                ->action(function (Organization $record, array $data): void {
+                    SupportSessionContext::start(auth()->user(), $record, $data['reason']);
+
+                    Notification::make()
+                        ->title(__('Sesi support dimulai.'))
+                        ->success()
+                        ->send();
+
+                    $this->redirect(OrganizationSupportView::getUrl());
                 }),
 
             // Only ever shown while an Organization has no Owner yet and a
