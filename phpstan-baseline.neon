@@ -393,4 +393,9 @@ parameters:
 		-
 			message: "#^Access to an undefined property App\\\\Models\\\\Project\\:\\:\\$contributors\\.$#"
 			count: 1
+			path: app/Filament/Pages/OrganizationSupportView.php
+
+		-
+			message: "#^Access to an undefined property App\\\\Models\\\\Project\\:\\:\\$contributors\\.$#"
+			count: 1
 			path: app/Support/UserOptions.php

@@ -4,6 +4,7 @@ namespace App\Filament\Pages;
 
 use App\Models\Organization;
 use App\Models\OrganizationInvitation;
+use App\Models\OrganizationSupportSession;
 use App\Models\Role;
 use App\Models\User;
 use App\Notifications\OrganizationInvitationCreated;
@@ -499,6 +500,14 @@ class PlatformOrganizations extends AuthorizedPage implements HasForms, Tables\C
             // safe without inventing a new Gate::before rule. $data['reason']
             // is required below, so there is always an audit trail for why
             // this Organization was accessed.
+            //
+            // Phase 1 of Support Action: the `level` field lets the Super
+            // Admin pick Read Only vs Support Action up front, defaulting
+            // to Read Only so choosing nothing changes nothing about
+            // today's behavior. Support Action carries no extra capability
+            // yet — OrganizationSupportView stays 100% read-only regardless
+            // of which level is picked here until Phase 3 builds the
+            // write-authorization layer on top of it.
             Tables\Actions\Action::make('startSupportSession')
                 ->label(__('Masuk sebagai Support'))
                 ->icon('heroicon-o-eye')
@@ -507,10 +516,35 @@ class PlatformOrganizations extends AuthorizedPage implements HasForms, Tables\C
                         ->label(__('Alasan'))
                         ->required()
                         ->maxLength(500),
+
+                    // Deliberately not ->required(): same reasoning as
+                    // owner_mode above on createOrganization's form — its
+                    // ->default() only applies once Livewire actually
+                    // mounts the form (real usage always has Read Only
+                    // pre-selected), but a test driving
+                    // callTableAction() with an explicit $data array
+                    // bypasses that mount lifecycle entirely. The
+                    // action() closure's own `?? LEVEL_READ_ONLY` below
+                    // already treats a missing value the same as picking
+                    // Read Only, so gating submission on this field being
+                    // non-empty would only ever reject requests that never
+                    // actually omit a real choice in the browser.
+                    Radio::make('level')
+                        ->label(__('Support level'))
+                        ->options([
+                            OrganizationSupportSession::LEVEL_READ_ONLY => __('Support level: Read Only'),
+                            OrganizationSupportSession::LEVEL_SUPPORT_ACTION => __('Support level: Support Action'),
+                        ])
+                        ->default(OrganizationSupportSession::LEVEL_READ_ONLY),
                 ])
                 ->requiresConfirmation()
                 ->action(function (Organization $record, array $data): void {
-                    SupportSessionContext::start(auth()->user(), $record, $data['reason']);
+                    SupportSessionContext::start(
+                        auth()->user(),
+                        $record,
+                        $data['reason'],
+                        $data['level'] ?? OrganizationSupportSession::LEVEL_READ_ONLY
+                    );
 
                     Notification::make()
                         ->title(__('Sesi support dimulai.'))

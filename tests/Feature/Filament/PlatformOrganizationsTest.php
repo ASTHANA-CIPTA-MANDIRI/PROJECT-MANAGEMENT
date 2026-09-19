@@ -626,6 +626,50 @@ class PlatformOrganizationsTest extends TestCase
         $this->assertSame($admin->id, $session->super_admin_id);
         $this->assertSame('Investigating a ticket the customer reported as broken', $session->reason);
         $this->assertNull($session->ended_at);
+        $this->assertSame(OrganizationSupportSession::LEVEL_READ_ONLY, $session->level);
+    }
+
+    /**
+     * Phase 1 of Support Action: omitting `level` entirely (not just the
+     * browser's pre-selected default, but genuinely absent from $data, the
+     * same way callTableAction() already exercises owner_mode on
+     * createOrganization) must still land on Read Only — the field is
+     * deliberately not ->required() for exactly this reason.
+     */
+    public function test_starting_a_support_session_without_a_level_defaults_to_read_only(): void
+    {
+        $admin = $this->superAdmin();
+        $organization = Organization::factory()->create();
+
+        $this->actingAs($admin);
+
+        Livewire::test(PlatformOrganizations::class)
+            ->callTableAction('startSupportSession', $organization, data: [
+                'reason' => 'Support request',
+            ])
+            ->assertHasNoTableActionErrors();
+
+        $session = OrganizationSupportSession::where('organization_id', $organization->id)->firstOrFail();
+        $this->assertSame(OrganizationSupportSession::LEVEL_READ_ONLY, $session->level);
+    }
+
+    public function test_super_admin_can_start_a_support_action_level_session(): void
+    {
+        $admin = $this->superAdmin();
+        $organization = Organization::factory()->create();
+
+        $this->actingAs($admin);
+
+        Livewire::test(PlatformOrganizations::class)
+            ->callTableAction('startSupportSession', $organization, data: [
+                'reason' => 'Need to fix a stuck ticket status',
+                'level' => OrganizationSupportSession::LEVEL_SUPPORT_ACTION,
+            ])
+            ->assertHasNoTableActionErrors()
+            ->assertRedirect(OrganizationSupportView::getUrl());
+
+        $session = OrganizationSupportSession::where('organization_id', $organization->id)->firstOrFail();
+        $this->assertSame(OrganizationSupportSession::LEVEL_SUPPORT_ACTION, $session->level);
     }
 
     public function test_starting_a_support_session_without_a_reason_is_rejected(): void

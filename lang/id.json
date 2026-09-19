@@ -560,5 +560,20 @@
     "Not started": "Belum dimulai",
     "Joined at": "Bergabung pada",
     "Recent activity": "Aktivitas terbaru",
-    ":user changed :ticket status from :old to :new": ":user mengubah status :ticket dari :old ke :new"
+    ":user changed :ticket status from :old to :new": ":user mengubah status :ticket dari :old ke :new",
+    "Support level": "Level dukungan",
+    "Support level: Read Only": "Hanya Baca",
+    "Support level: Support Action": "Support Action",
+    "Are you sure you want to change this ticket's status?": "Anda yakin ingin mengubah status tugas ini?",
+    "Are you sure you want to change this ticket's priority?": "Anda yakin ingin mengubah prioritas tugas ini?",
+    "Are you sure you want to change this ticket's responsible?": "Anda yakin ingin mengubah penanggung jawab tugas ini?",
+    "Are you sure you want to change this ticket's due date?": "Anda yakin ingin mengubah tanggal jatuh tempo tugas ini?",
+    "Are you sure you want to change this ticket's title?": "Anda yakin ingin mengubah judul tugas ini?",
+    "Are you sure you want to change this ticket's labels?": "Anda yakin ingin mengubah label tugas ini?",
+    "Are you sure you want to change this project's status?": "Anda yakin ingin mengubah status proyek ini?",
+    "Are you sure you want to start this sprint?": "Anda yakin ingin memulai sprint ini?",
+    "Are you sure you want to stop this sprint?": "Anda yakin ingin menghentikan sprint ini?",
+    "Are you sure you want to change this sprint's dates?": "Anda yakin ingin mengubah tanggal sprint ini?",
+    "Sprint updated": "Sprint diperbarui",
+    "Unassigned": "Belum ditugaskan"
 }

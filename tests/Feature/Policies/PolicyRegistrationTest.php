@@ -36,10 +36,18 @@ class PolicyRegistrationTest extends TestCase
      * both of which check auth()->user()->isSuperAdmin() directly (via
      * App\Support\SupportSessionContext) rather than going through a Policy.
      *
+     * OrganizationSupportAction (Phase 2 of Support Action) is exempt for
+     * the identical reason — it is the audit trail for OrganizationSupportSession
+     * itself, never exposed via a Filament Resource, and as of this phase
+     * nothing even writes to it yet (Phase 4 will, from inside the same
+     * isSuperAdmin()-gated Support Action write path, never through a
+     * Policy).
+     *
      * @var array<int, string>
      */
     private const UNGUARDED_MODELS = [
         \App\Models\OrganizationInvitation::class,
+        \App\Models\OrganizationSupportAction::class,
         \App\Models\OrganizationSupportSession::class,
         \App\Models\ProjectFavorite::class,
         \App\Models\ProjectUser::class,
