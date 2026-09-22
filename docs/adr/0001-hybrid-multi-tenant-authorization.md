@@ -112,21 +112,61 @@ Admin can start a temporary "view as Organization" support session
 - **Logged** — every session requires a non-empty `reason` and is a
   permanent audit row (`organization_support_sessions`), never silently
   granted.
-- **Read-only by construction** — `OrganizationSupportView` defines no write
-  actions at all, so there is nothing on that page for a Policy or
-  `Gate::before` to guard. It reads `$organization->projects` directly
-  instead of `Project::accessibleBy()`, which is safe specifically because
-  no write path exists on that page to accidentally inherit the bypass.
-- **Never touches the three axes above** — `SupportSessionContext` does not
-  read or write `App\Support\OrganizationContext`, does not call
+- **Read Only by default, with two narrower, explicitly-graded write
+  tiers** — a session is started at one of three levels
+  (`OrganizationSupportSession::LEVEL_READ_ONLY`/`LEVEL_SUPPORT_ACTION`/
+  `LEVEL_FULL_ACCESS`), and the level chosen at start time never changes for
+  that session's lifetime:
+  - **Read Only** — the original, still-true description of this feature: no
+    write method on `OrganizationSupportView` is reachable at this level.
+  - **Support Action** — a small, fixed set of non-destructive, single-field
+    edits (ticket status/priority/responsible/due date/title/labels, project
+    status, sprint start/stop/dates), each gated by
+    `SupportSessionContext::authorizeAction()`/`authorizeCapability()`, which
+    re-verifies the session is active, at the right level, and scoped to the
+    same organization as the target on every call.
+  - **Full Access** — the highest tier, and the only one that can reach a
+    destructive action (delete/restore Ticket, Sprint or Project, and their
+    bulk equivalents). It is never reachable by starting a session directly
+    (`SupportSessionContext::start()` explicitly refuses this level): a
+    Super Admin must first request it, the target Organization's **Owner**
+    must approve it, and only the original requester may then consume that
+    approval into a session
+    (`OrganizationSupportAccessGrant`: REQUESTED → APPROVED → CONSUMED, with
+    EXPIRED/REVOKED as terminal off-ramps, each transition row-locked and
+    re-validated inside a transaction). Each Full Access write additionally
+    checks the mutation's capability against a fail-closed allowlist
+    (`SupportSessionContext::isFullAccessCapabilityAllowed()`) before
+    `authorizeFullAccess()` re-resolves the session's grant end-to-end
+    (grant exists, matches both the session's and the target's organization,
+    is actually consumed, and was not revoked afterward).
+
+  Every write at either tier records a permanent `OrganizationSupportAction`
+  row (actor, organization, capability/field, old/new value — all
+  server-derived from the authorized session and the resolved record, never
+  from client input beyond the target id and the new value itself) in the
+  same database transaction as the mutation, so a failure anywhere rolls
+  both back together; a Project delete/restore's cascade is summarized in
+  one bounded row rather than one per cascaded child, and a bulk action
+  validates its whole batch twice (once before the transaction opens, once
+  again from scratch inside it) under an explicit all-or-nothing contract —
+  one invalid, wrong-organization, or wrong-state id anywhere in the batch
+  rejects the entire call.
+- **Never touches the three axes above** — regardless of level,
+  `SupportSessionContext` does not read or write
+  `App\Support\OrganizationContext`, does not call
   `Project::accessibleBy()`/`isAccessibleBy()`/`isManageableBy()`, and no
-  `App\Policies\*` class knows this feature exists. It is a separate
+  `App\Policies\*` class knows this feature exists — including its write
+  actions, which are authorized entirely through `SupportSessionContext`
+  itself, never through a Policy or `Gate::before`. It is a separate
   side-channel, not a modification to how Organization/Project/Policy
   authorization already works.
 
 This preserves the invariant this ADR establishes throughout: object-level
 authorization never assumes "Super Admin can see everything" — even the one
-place Super Admin *does* get cross-organization read access is additive,
+place Super Admin *does* get cross-organization access (read always, a
+narrow set of field edits under Support Action, and destructive actions
+only under an Owner-approved, single-use Full Access grant) is additive,
 audited, temporary, and outside the three axes rather than a bypass inside
 them.
 
