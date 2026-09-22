@@ -2,6 +2,7 @@
 
 namespace App\Filament\Pages;
 
+use App\Models\Epic;
 use App\Models\Label;
 use App\Models\Organization;
 use App\Models\OrganizationSupportAction;
@@ -37,6 +38,39 @@ use Illuminate\Support\Facades\DB;
  * content audit trail needs a schema decision (widen the columns, or
  * record a weaker summary instead of the full value) this class does not
  * make unilaterally.
+ *
+ * deleteTicket()/restoreTicket() (Phase 11) are a different shape from
+ * every write method above: the first Destructive Category A capability,
+ * and deliberately Full-Access-only rather than Support-Action-reachable —
+ * see their own docblocks for why they bypass
+ * SupportSessionContext::authorizeCapability() entirely and call
+ * authorizeFullAccess() directly instead. deleteSprint()/restoreSprint()
+ * (Phase 12, Destructive Category B) follow that exact same shape for
+ * Sprint — see their own docblocks for the Epic-mirror side effect
+ * restoreSprint() has to account for that deleteTicket()/restoreTicket()
+ * never had to. deleteProject()/restoreProject() (Phase 13, the highest-
+ * blast-radius pair yet) follow the identical Full-Access-only shape once
+ * more, but never reimplement App\Observers\ProjectObserver's own Ticket/
+ * Sprint/Epic cascade — they stay thin authorize → resolve → mutate → audit
+ * wrappers around plain $project->delete()/restore(), and audit the cascade
+ * as one bounded summary row rather than one row per cascaded child — see
+ * deleteProject()'s own docblock for the full reasoning.
+ *
+ * bulkDeleteTicket()/bulkRestoreTicket()/bulkDeleteSprint()/bulkRestoreSprint()
+ * (Phase 14, the last destructive category) apply deleteTicket()'s/
+ * restoreTicket()'s/deleteSprint()'s/restoreSprint()'s exact single-target
+ * mutation to a whole client-selected batch at once, under an explicit
+ * ALL-OR-NOTHING contract: one target anywhere in the batch that fails to
+ * resolve (not found, wrong organization, or the wrong precondition state
+ * for the action) rejects the entire batch rather than silently applying to
+ * a valid subset — the same discipline changeTicketLabels() already applies
+ * to a single ticket's label set, extended here across an entire selection.
+ * Every batch is resolved and validated twice: once before the transaction
+ * opens (so an invalid batch fails fast without ever writing anything), and
+ * again from scratch immediately inside DB::transaction(), right before any
+ * mutation runs — the second pass is what the mutation actually trusts, not
+ * the first; see resolveBulkTickets()'s own docblock for why. Bulk project
+ * delete/restore is deliberately out of scope for this phase.
  *
  * Every read query filters by this organization's id at the database level
  * (never Model::all() + a PHP-side filter). It reads $organization->projects,
@@ -96,6 +130,30 @@ class OrganizationSupportView extends AuthorizedPage
     private const RECENT_TICKETS_LIMIT = 25;
 
     private const RECENT_ACTIVITY_LIMIT = 20;
+
+    /**
+     * Phase 14 — the maximum number of ids a single bulk call
+     * (bulkDeleteTicket()/bulkRestoreTicket()/bulkDeleteSprint()/
+     * bulkRestoreSprint()) will accept. This page's own UI can never submit
+     * more than a small handful in practice — tickets() itself is capped at
+     * RECENT_TICKETS_LIMIT (25) and sprints() is uncapped but naturally
+     * small (see that method's own docblock) — but a public Livewire method
+     * is reachable with an arbitrary client-supplied array regardless of
+     * what the rendered UI offers (the same "never trust the caller already
+     * filtered" discipline this whole class already applies to every other
+     * client-suppliable value). Without a cap, nothing stops a direct
+     * `$wire.call('bulkDeleteTicket', [1..10000])` from resolving a very
+     * large Eloquent collection and running thousands of per-item
+     * delete()+OrganizationSupportAction::create() pairs inside one
+     * DB::transaction() — a real timeout/resource-exhaustion risk, not a
+     * correctness one (every id would still be organization-scoped and
+     * individually audited correctly). 100 is a generous multiple of what
+     * this page's own UI could ever realistically select at once, chosen
+     * the same way PROJECT_CASCADE_WINDOW_SECONDS below documents a
+     * concrete, named product number rather than an arbitrary magic value
+     * inlined at each call site.
+     */
+    private const BULK_ACTION_MAX_ITEMS = 100;
 
     private ?Organization $cachedOrganization = null;
 
@@ -216,6 +274,17 @@ class OrganizationSupportView extends AuthorizedPage
      * (withCount) plus one for active sprints (with()), not one per
      * project — instead of reaching for each Project's own
      * currentSprint/statistics() (which would run per-instance queries).
+     *
+     * Phase 13: a Full Access session also sees soft-deleted projects in
+     * this same list — restoreProject() needs a trashed project to actually
+     * be visible somewhere for its confirm()-gated control to reach it at
+     * all, exactly mirroring tickets()'s/sprints()'s own Phase 11/12 change.
+     * Read Only and Support Action sessions keep today's behavior unchanged,
+     * since neither may ever call restoreProject()/deleteProject() — both
+     * are Full-Access-only. 'sprints_count'/'epics_count' are added to the
+     * same withCount() call already running here — the live (not-yet-
+     * cascaded) counts a Full Access delete would actually cascade, read in
+     * the Projects table's existing single query rather than a new one.
      */
     public function projects(): Collection
     {
@@ -226,6 +295,10 @@ class OrganizationSupportView extends AuthorizedPage
         }
 
         return $organization->projects()
+            ->when(
+                $this->session()?->isFullAccess() === true,
+                fn ($query) => $query->withTrashed()
+            )
             ->withCount([
                 'tickets as tickets_count',
                 'tickets as open_tickets_count' => fn ($query) => $query
@@ -233,6 +306,8 @@ class OrganizationSupportView extends AuthorizedPage
                 'tickets as overdue_tickets_count' => fn ($query) => $query
                     ->whereNotNull('due_date')
                     ->where('due_date', '<', now()->startOfDay()),
+                'sprints as sprints_count',
+                'epics as epics_count',
             ])
             ->with([
                 'sprints' => fn ($query) => $query->whereNotNull('started_at')->whereNull('ended_at'),
@@ -371,6 +446,17 @@ class OrganizationSupportView extends AuthorizedPage
         }
 
         return Ticket::query()
+            // Phase 11: a Full Access session also sees soft-deleted tickets
+            // in this same list — restoreTicket() needs a trashed ticket to
+            // actually be visible somewhere for its confirm()-gated control
+            // to reach it at all. Read Only and Support Action sessions keep
+            // today's behavior unchanged (no trashed rows), since neither
+            // may ever call restoreTicket()/deleteTicket() — both are
+            // Full-Access-only (see those methods' own docblocks).
+            ->when(
+                $this->session()?->isFullAccess() === true,
+                fn ($query) => $query->withTrashed()
+            )
             ->whereHas('project', fn ($query) => $query->where('organization_id', $organization->id))
             ->with(['project:id,name,status_type,organization_id', 'status:id,name,color', 'priority:id,name,color', 'responsible:id,name', 'labels:id,name,color'])
             ->latest()
@@ -438,7 +524,7 @@ class OrganizationSupportView extends AuthorizedPage
 
         abort_unless($organization !== null, 403);
 
-        $session = SupportSessionContext::authorizeAction(auth()->user(), $organization->id);
+        $session = SupportSessionContext::authorizeCapability(auth()->user(), $organization->id, 'change_ticket_status');
 
         // Resolved through the same organization filter every read method
         // on this page already uses — never Ticket::find($ticketId) first
@@ -502,6 +588,135 @@ class OrganizationSupportView extends AuthorizedPage
 
         Notification::make()
             ->title(__('Ticket updated'))
+            ->success()
+            ->send();
+    }
+
+    /**
+     * Phase 11 — the first Destructive Category A capability ever opened to
+     * Support Center, and deliberately Full-Access-only: unlike
+     * changeTicketStatus() above, this does NOT call
+     * SupportSessionContext::authorizeCapability(). That method's Support
+     * Action branch returns as soon as a Support Action session matches the
+     * target organization, before 'delete_ticket' is ever checked against
+     * FULL_ACCESS_CAPABILITIES (see authorizeCapability()'s own docblock and
+     * test_authorize_capability_allows_a_support_action_session_for_any_capability)
+     * — correct for a capability Support Action already legitimately has,
+     * but wrong here: deleting a ticket must never be reachable through a
+     * Support Action session, only through an Owner-approved Full Access
+     * grant. So this calls the allowlist check and authorizeFullAccess()
+     * directly, which only ever accepts a session with isFullAccess() true —
+     * a Support Action (or Read Only) session is refused outright, with no
+     * path through this method at all.
+     */
+    public function deleteTicket(int $ticketId): void
+    {
+        $organization = $this->organization();
+
+        abort_unless($organization !== null, 403);
+
+        abort_unless(SupportSessionContext::isFullAccessCapabilityAllowed('delete_ticket'), 403);
+        $session = SupportSessionContext::authorizeFullAccess(auth()->user(), $organization->id);
+
+        // Resolved through the same organization-scoped query every write
+        // method on this page uses — never Ticket::find($ticketId) first and
+        // checked after (see changeTicketStatus()'s own comment on this).
+        $ticket = Ticket::query()
+            ->whereHas('project', fn ($query) => $query->where('organization_id', $organization->id))
+            ->find($ticketId);
+
+        // No separate "already trashed" precondition check is needed (unlike
+        // restoreTicket()'s below): this query never used withTrashed(), so
+        // Eloquent's default SoftDeletingScope already excludes a trashed
+        // ticket from the result entirely — it simply isn't found, and the
+        // abort_unless() above already turns that into the same 403 an
+        // explicit trashed() check would have produced. Adding one anyway
+        // would be dead code that can never actually evaluate true.
+        abort_unless($ticket !== null, 403);
+
+        DB::transaction(function () use ($ticket, $session, $organization) {
+            // Eloquent delete(), not a query-builder update(): this must run
+            // through App\Observers\TicketObserver::deleting()/deleted() the
+            // same way every other delete path (TicketResource,
+            // ProjectObserver's cascade) does. Read in full during Phase 11
+            // inspection: deleted() only calls
+            // $ticket->project?->forgetStatistics() and
+            // WidgetDataCache::invalidate() — cache invalidation, nothing
+            // that itself needs to be proven to roll back.
+            $ticket->delete();
+
+            OrganizationSupportAction::create([
+                'support_session_id' => $session->id,
+                'actor_user_id' => auth()->id(),
+                'organization_id' => $organization->id,
+                'action' => 'ticket.delete',
+                'target_type' => Ticket::class,
+                'target_id' => $ticket->id,
+                'field' => 'deleted_at',
+                'old_value' => null,
+                'new_value' => (string) $ticket->deleted_at,
+            ]);
+        });
+
+        Notification::make()
+            ->title(__('Ticket deleted'))
+            ->success()
+            ->send();
+    }
+
+    /**
+     * The symmetric undo of deleteTicket() above — same reasoning for why
+     * this bypasses authorizeCapability() and calls
+     * isFullAccessCapabilityAllowed()/authorizeFullAccess() directly:
+     * restoring a ticket must be just as Full-Access-only as deleting one,
+     * never reachable through a Support Action session.
+     */
+    public function restoreTicket(int $ticketId): void
+    {
+        $organization = $this->organization();
+
+        abort_unless($organization !== null, 403);
+
+        abort_unless(SupportSessionContext::isFullAccessCapabilityAllowed('restore_ticket'), 403);
+        $session = SupportSessionContext::authorizeFullAccess(auth()->user(), $organization->id);
+
+        // withTrashed() is required here — the whole point of this method is
+        // to find a ticket that is currently soft-deleted, which the default
+        // Eloquent scope excludes.
+        $ticket = Ticket::withTrashed()
+            ->whereHas('project', fn ($query) => $query->where('organization_id', $organization->id))
+            ->find($ticketId);
+
+        abort_unless($ticket !== null, 403);
+
+        // Symmetric precondition to deleteTicket(): a ticket that is not
+        // currently trashed is an invalid target for restore.
+        abort_unless($ticket->trashed(), 403);
+
+        $oldDeletedAt = (string) $ticket->deleted_at;
+
+        DB::transaction(function () use ($ticket, $session, $organization, $oldDeletedAt) {
+            // Eloquent restore(), not a query-builder update(): runs through
+            // TicketObserver::restored(), which only calls
+            // WidgetDataCache::invalidate() (confirmed in full during Phase
+            // 11 inspection) — same reasoning as delete() above.
+            $ticket->restore();
+
+            OrganizationSupportAction::create([
+                'support_session_id' => $session->id,
+                'actor_user_id' => auth()->id(),
+                'organization_id' => $organization->id,
+                'action' => 'ticket.restore',
+                'target_type' => Ticket::class,
+                'target_id' => $ticket->id,
+                'field' => 'deleted_at',
+                'old_value' => $oldDeletedAt,
+                'new_value' => null,
+            ]);
+        });
+
+        Notification::make()
+            ->title(__('Ticket restored'))
             ->success()
             ->send();
     }
@@ -1153,6 +1368,19 @@ class OrganizationSupportView extends AuthorizedPage
      * list (not just id/name) — sprintStatusBreakdown() re-checks it on
      * every call, so leaving it unselected would make that check always
      * see null and reject even this method's own, already-scoped sprints.
+     *
+     * Phase 12: a Full Access session also sees soft-deleted sprints in this
+     * same list — restoreSprint() needs a trashed sprint to actually be
+     * visible somewhere for its confirm()-gated control to reach it at all,
+     * exactly mirroring tickets()'s own Phase 11 change. Read Only and
+     * Support Action sessions keep today's behavior unchanged, since neither
+     * may ever call restoreSprint()/deleteSprint() — both are Full-Access-
+     * only (see those methods' own docblocks). 'epic' is eager loaded with
+     * withTrashed() so the Blade view can tell whether restoring this sprint
+     * would also cascade-restore its mirrored epic (App\Observers\SprintObserver
+     * ::restoring()) — without withTrashed() here, an already-trashed epic
+     * would simply resolve to null and that real impact would be silently
+     * hidden from the confirm() dialog.
      */
     public function sprints(): Collection
     {
@@ -1163,8 +1391,16 @@ class OrganizationSupportView extends AuthorizedPage
         }
 
         return Sprint::query()
+            ->when(
+                $this->session()?->isFullAccess() === true,
+                fn ($query) => $query->withTrashed()
+            )
             ->whereHas('project', fn ($query) => $query->where('organization_id', $organization->id))
-            ->with(['project:id,name,organization_id', 'tickets.status:id,name,is_final,is_default'])
+            ->with([
+                'project:id,name,organization_id',
+                'tickets.status:id,name,is_final,is_default',
+                'epic' => fn ($query) => $query->withTrashed(),
+            ])
             ->latest('starts_at')
             ->get();
     }
@@ -1221,12 +1457,21 @@ class OrganizationSupportView extends AuthorizedPage
     /**
      * Resolves $sprintId the same organization-scoped way every write
      * method on this page resolves its target — never Sprint::find($id)
-     * trusted before the fact. Shared by all three Sprint-targeted actions
-     * below instead of each repeating the same query.
+     * trusted before the fact. Shared by every Sprint-targeted action below
+     * instead of each repeating the same query.
+     *
+     * $withTrashed defaults to false so sprintStart()/sprintStop()/
+     * changeSprintDates() (Phase 6G, unchanged by Phase 12) keep resolving
+     * only a live sprint exactly as before — none of the three has any valid
+     * target state for an already-trashed sprint. restoreSprint() (Phase 12)
+     * is the only caller that ever passes true, the same way
+     * restoreTicket() needs Ticket::withTrashed() where deleteTicket()
+     * doesn't.
      */
-    private function resolveSprint(int $sprintId, Organization $organization): Sprint
+    private function resolveSprint(int $sprintId, Organization $organization, bool $withTrashed = false): Sprint
     {
         $sprint = Sprint::query()
+            ->when($withTrashed, fn ($query) => $query->withTrashed())
             ->whereHas('project', fn ($query) => $query->where('organization_id', $organization->id))
             ->find($sprintId);
 
@@ -1466,6 +1711,835 @@ class OrganizationSupportView extends AuthorizedPage
 
         Notification::make()
             ->title(__('Sprint updated'))
+            ->success()
+            ->send();
+    }
+
+    /**
+     * Phase 12 — Destructive Category B, following deleteTicket()'s exact
+     * shape (Phase 11): deliberately Full-Access-only, bypassing
+     * SupportSessionContext::authorizeCapability() entirely and calling the
+     * allowlist check + authorizeFullAccess() directly, for the identical
+     * reason — a Support Action session must never reach this, even though
+     * it already legitimately has sprintStart()/sprintStop()/
+     * changeSprintDates() as its own, separate capabilities via
+     * authorizeAction().
+     *
+     * Epic side effect, verified by reading App\Observers\SprintObserver in
+     * full during Phase 12 inspection: it has no deleting()/deleted() hook
+     * at all — only created()/updated()/restoring(). So unlike
+     * deleteTicket() there is nothing to even check here: deleting a sprint
+     * never touches its mirrored epic (App\Models\Epic, linked via
+     * Sprint::epic_id) in any way, it stays exactly as it was. The epic can
+     * only ever be taken down together with the sprint by
+     * App\Observers\ProjectObserver::deleting()'s own project-level cascade,
+     * a completely different write path this method does not go through
+     * (resolveSprint() only ever finds a sprint whose project is not itself
+     * trashed, via whereHas('project', ...)'s implicit SoftDeletingScope on
+     * Project).
+     *
+     * Uses the default (non-trashed) resolveSprint() call, exactly like
+     * deleteTicket()'s equivalent comment explains: the default
+     * SoftDeletingScope already excludes an already-trashed sprint from the
+     * result, so a separate "not already trashed" precondition would be
+     * dead code.
+     */
+    public function deleteSprint(int $sprintId): void
+    {
+        $organization = $this->organization();
+
+        abort_unless($organization !== null, 403);
+
+        abort_unless(SupportSessionContext::isFullAccessCapabilityAllowed('delete_sprint'), 403);
+        $session = SupportSessionContext::authorizeFullAccess(auth()->user(), $organization->id);
+
+        $sprint = $this->resolveSprint($sprintId, $organization);
+
+        DB::transaction(function () use ($sprint, $session, $organization) {
+            // Eloquent delete(), not a query-builder update(): must run
+            // through App\Observers\SprintObserver's hooks the same way
+            // every other Sprint delete path does — confirmed in full during
+            // Phase 12 inspection that deleting()/deleted() do not exist on
+            // that observer, so nothing beyond sprints.deleted_at itself
+            // changes here.
+            $sprint->delete();
+
+            OrganizationSupportAction::create([
+                'support_session_id' => $session->id,
+                'actor_user_id' => auth()->id(),
+                'organization_id' => $organization->id,
+                'action' => 'sprint.delete',
+                'target_type' => Sprint::class,
+                'target_id' => $sprint->id,
+                'field' => 'deleted_at',
+                'old_value' => null,
+                'new_value' => (string) $sprint->deleted_at,
+            ]);
+        });
+
+        Notification::make()
+            ->title(__('Sprint deleted'))
+            ->success()
+            ->send();
+    }
+
+    /**
+     * The symmetric undo of deleteSprint() above — same Full-Access-only
+     * reasoning, and the same withTrashed()/trashed() precondition shape as
+     * restoreTicket().
+     *
+     * Epic side effect, the one genuine asymmetry Phase 12 inspection found:
+     * App\Observers\SprintObserver::restoring() unconditionally looks up
+     * `$sprint->epic()->onlyTrashed()->first()` and restores it if found.
+     * deleteSprint() above never trashes the mirrored epic itself, but nothing
+     * stops the epic from having been independently trashed by an unrelated
+     * path in the meantime — App\Http\Livewire\RoadMap\EpicForm::delete()
+     * lets any user with access to the epic's project soft-delete *any*
+     * epic directly, including one still backing an active-but-now-trashed
+     * sprint (confirmed by reading that component and EpicPolicy in full;
+     * neither special-cases a sprint-mirrored epic). So $sprint->restore()
+     * below can legitimately cascade-restore an epic this method never
+     * touched directly — a real side effect, not a hypothetical one, and it
+     * gets its own separate OrganizationSupportAction row ('epic.auto_restore'),
+     * mirroring how sprintStart() already audits the *other* sprint it
+     * auto-stops as a distinct row rather than folding it into the primary
+     * action's row. The trashed epic (if any) is captured *before*
+     * $sprint->restore() runs, since that call is what changes its
+     * deleted_at.
+     */
+    public function restoreSprint(int $sprintId): void
+    {
+        $organization = $this->organization();
+
+        abort_unless($organization !== null, 403);
+
+        abort_unless(SupportSessionContext::isFullAccessCapabilityAllowed('restore_sprint'), 403);
+        $session = SupportSessionContext::authorizeFullAccess(auth()->user(), $organization->id);
+
+        $sprint = $this->resolveSprint($sprintId, $organization, withTrashed: true);
+
+        // Symmetric precondition to deleteSprint(): a sprint that is not
+        // currently trashed is an invalid target for restore.
+        abort_unless($sprint->trashed(), 403);
+
+        $oldDeletedAt = (string) $sprint->deleted_at;
+
+        DB::transaction(function () use ($sprint, $session, $organization, $oldDeletedAt) {
+            // Captured before restore() runs — SprintObserver::restoring()
+            // is what would change (or clear) this epic's own deleted_at,
+            // so it has to be read first.
+            $trashedEpic = $sprint->epic()->onlyTrashed()->first();
+            $epicOldDeletedAt = $trashedEpic !== null ? (string) $trashedEpic->deleted_at : null;
+
+            // Eloquent restore(), not a query-builder update(): runs through
+            // SprintObserver::restoring(), which is exactly the cascade this
+            // method's own docblock documents and audits separately below.
+            $sprint->restore();
+
+            OrganizationSupportAction::create([
+                'support_session_id' => $session->id,
+                'actor_user_id' => auth()->id(),
+                'organization_id' => $organization->id,
+                'action' => 'sprint.restore',
+                'target_type' => Sprint::class,
+                'target_id' => $sprint->id,
+                'field' => 'deleted_at',
+                'old_value' => $oldDeletedAt,
+                'new_value' => null,
+            ]);
+
+            if ($trashedEpic !== null) {
+                OrganizationSupportAction::create([
+                    'support_session_id' => $session->id,
+                    'actor_user_id' => auth()->id(),
+                    'organization_id' => $organization->id,
+                    'action' => 'epic.auto_restore',
+                    'target_type' => Epic::class,
+                    'target_id' => $trashedEpic->id,
+                    'field' => 'deleted_at',
+                    'old_value' => $epicOldDeletedAt,
+                    'new_value' => null,
+                ]);
+            }
+        });
+
+        Notification::make()
+            ->title(__('Sprint restored'))
+            ->success()
+            ->send();
+    }
+
+    // -----------------------------------------------------------------
+    // Phase 14 — Bulk Full Access Gate. bulkDeleteTicket()/
+    // bulkRestoreTicket()/bulkDeleteSprint()/bulkRestoreSprint() apply
+    // deleteTicket()'s/restoreTicket()'s/deleteSprint()'s/restoreSprint()'s
+    // exact single-target mutation to a whole client-selected batch,
+    // Full-Access-only exactly like those four (never authorizeCapability(),
+    // a Support Action session must never reach any of these), under an
+    // explicit ALL-OR-NOTHING contract — see this class's own docblock.
+    // -----------------------------------------------------------------
+
+    /**
+     * Untrusted-client-array-to-clean-int-collection, shared by every bulk
+     * method below — the exact same sanitization changeTicketLabels()
+     * already applies to its own $newLabelIds array (scalar check,
+     * FILTER_VALIDATE_INT, drop anything that fails, dedupe), extracted
+     * here once rather than repeated four times.
+     */
+    private function sanitizeBulkIds(array $rawIds): SupportCollection
+    {
+        return collect($rawIds)
+            ->filter(fn ($id) => is_scalar($id))
+            ->map(fn ($id) => filter_var($id, FILTER_VALIDATE_INT))
+            ->filter(fn ($id) => $id !== false)
+            ->unique()
+            ->values();
+    }
+
+    /**
+     * Resolves+validates a whole batch of Ticket ids under the ALL-OR-
+     * NOTHING contract Phase 14 requires: every id in $ticketIds must
+     * resolve to a real Ticket belonging to $organization AND already be in
+     * the correct precondition state for the action ($forDelete: not
+     * trashed, matching deleteTicket()'s own default-SoftDeletingScope
+     * reasoning; !$forDelete: trashed, matching restoreTicket()'s own
+     * trashed() precondition) — a single id anywhere in the batch that
+     * fails either check rejects the entire batch, never a partial apply.
+     * This is the exact same "validate the whole set, not the valid
+     * subset" discipline changeTicketLabels() already applies to a single
+     * ticket's label ids, extended here across an entire ticket selection.
+     *
+     * Mixed-organization input needs no separate branch: whereHas('project',
+     * ...) already scopes the query to $organization, so an id belonging to
+     * a different organization is simply never found by it — its absence
+     * from the resolved collection is caught by the exact same "every
+     * requested id must have resolved" count check that also catches a
+     * garbage/nonexistent id, per this class's own docblock on why mixed-
+     * organization input is not a distinct code path.
+     *
+     * Deliberately called twice by every bulk method below: once before
+     * DB::transaction() opens (fail fast on an invalid batch without ever
+     * writing anything), and again from scratch immediately inside the
+     * transaction, right before any mutation runs. The second call is the
+     * one the mutation actually trusts — the first call's result is never
+     * reused for the mutation itself, so a batch that was valid when this
+     * method first ran but had its state changed by a *different* request
+     * in the window before the transaction actually started (the same
+     * TOCTOU window every REVALIDATION step in this phase exists to close)
+     * is caught by the second call rather than silently trusted from the
+     * first. See bulkDeleteTicket()'s own docblock for why this re-SELECT,
+     * without lockForUpdate(), is judged sufficient for V1 rather than a
+     * row-locking read.
+     *
+     * @return Collection<int, Ticket>
+     */
+    private function resolveBulkTickets(SupportCollection $ticketIds, Organization $organization, bool $forDelete): Collection
+    {
+        abort_unless($ticketIds->isNotEmpty(), 403);
+        abort_unless($ticketIds->count() <= self::BULK_ACTION_MAX_ITEMS, 403);
+
+        $tickets = Ticket::query()
+            ->when($forDelete === false, fn ($query) => $query->withTrashed())
+            ->whereHas('project', fn ($query) => $query->where('organization_id', $organization->id))
+            ->whereIn('id', $ticketIds)
+            ->get();
+
+        // ALL-OR-NOTHING: every requested id must have resolved to a real,
+        // in-scope Ticket. For $forDelete === true this query never used
+        // withTrashed(), so an already-trashed ticket is silently excluded
+        // by the default SoftDeletingScope — exactly like a nonexistent or
+        // wrong-organization id, it simply fails this same count check
+        // rather than needing its own separate precondition branch.
+        abort_unless($tickets->count() === $ticketIds->count(), 403);
+
+        if ($forDelete === false) {
+            // Symmetric to restoreTicket()'s own trashed() precondition,
+            // applied to every resolved ticket in the batch — withTrashed()
+            // above means a live ticket would otherwise slip through the
+            // count check above undetected.
+            abort_unless($tickets->every(fn (Ticket $ticket) => $ticket->trashed()), 403);
+        }
+
+        return $tickets;
+    }
+
+    /**
+     * Sprint's equivalent of resolveBulkTickets() immediately above — same
+     * ALL-OR-NOTHING contract, same reasoning for why mixed-organization
+     * input needs no separate branch, same two-pass (pre-transaction +
+     * in-transaction REVALIDATION) calling convention. resolveSprint()
+     * above is not reused here: it resolves and aborts for exactly one id
+     * at a time, and reimplementing its per-id abort_unless() in a loop
+     * here would abort on the *first* invalid id instead of resolving the
+     * whole batch to determine ALL-OR-NOTHING membership the same way
+     * resolveBulkTickets() does — this stays a single set-based query
+     * instead.
+     *
+     * @return Collection<int, Sprint>
+     */
+    private function resolveBulkSprints(SupportCollection $sprintIds, Organization $organization, bool $forDelete): Collection
+    {
+        abort_unless($sprintIds->isNotEmpty(), 403);
+        abort_unless($sprintIds->count() <= self::BULK_ACTION_MAX_ITEMS, 403);
+
+        $sprints = Sprint::query()
+            ->when($forDelete === false, fn ($query) => $query->withTrashed())
+            ->whereHas('project', fn ($query) => $query->where('organization_id', $organization->id))
+            ->whereIn('id', $sprintIds)
+            ->get();
+
+        abort_unless($sprints->count() === $sprintIds->count(), 403);
+
+        if ($forDelete === false) {
+            abort_unless($sprints->every(fn (Sprint $sprint) => $sprint->trashed()), 403);
+        }
+
+        return $sprints;
+    }
+
+    /**
+     * Phase 14's first bulk capability — soft-deletes every Ticket in
+     * $ticketIds in one call, exactly reusing deleteTicket()'s own
+     * per-ticket mutation ($ticket->delete(), running through
+     * TicketObserver the same way) rather than reimplementing it, just
+     * looped across the whole resolved batch. Full-Access-only via the same
+     * isFullAccessCapabilityAllowed()+authorizeFullAccess() direct-call
+     * shape deleteTicket() itself uses — never authorizeCapability(), so a
+     * Support Action session cannot reach this regardless of how many
+     * capabilities it already legitimately has.
+     *
+     * CONCURRENCY EVALUATION (Phase 14, mirroring Phase 10's own written
+     * evaluation for change_ticket_status rather than forcing a MySQL-only
+     * test where one is not needed): two concurrent bulk-delete requests
+     * with an overlapping ticket selection are not judged to need
+     * lockForUpdate() here. The worst case if both requests' REVALIDATION
+     * SELECT (inside resolveBulkTickets(), see its own docblock) both read
+     * "not trashed" before either commits is that both transactions call
+     * $ticket->delete() and both create an OrganizationSupportAction row
+     * for the same ticket — a duplicate audit row for an action that was
+     * independently authorized both times (both callers hold a genuinely
+     * valid Full Access grant for this same organization), not an
+     * unauthorized mutation, not a cross-organization leak, and not data
+     * loss: the ticket ends up soft-deleted either way, which is the
+     * correct end state regardless of execution order. This is the exact
+     * same category of outcome sprintStart()'s own un-locked "close other
+     * active sprints" query already accepts elsewhere on this page — an
+     * idempotent-outcome mutation where ordering affects only cosmetic
+     * duplication, not correctness or isolation. A stronger guarantee
+     * (lockForUpdate() per resolved row, following the pattern
+     * SupportSessionContext's own grant methods already establish) would
+     * only remove that cosmetic duplicate-audit-row possibility, not close
+     * any actual security gap, so it is not added for V1.
+     */
+    public function bulkDeleteTicket(array $ticketIds): void
+    {
+        $organization = $this->organization();
+
+        abort_unless($organization !== null, 403);
+
+        abort_unless(SupportSessionContext::isFullAccessCapabilityAllowed('bulk_delete_ticket'), 403);
+        $session = SupportSessionContext::authorizeFullAccess(auth()->user(), $organization->id);
+
+        $ticketIds = $this->sanitizeBulkIds($ticketIds);
+
+        // First pass — resolve+validate the whole batch before ever opening
+        // a transaction, so an invalid batch fails fast without writing
+        // anything. Its result is deliberately discarded: the mutation
+        // below never reuses it, see resolveBulkTickets()'s own docblock.
+        $this->resolveBulkTickets($ticketIds, $organization, forDelete: true);
+
+        DB::transaction(function () use ($ticketIds, $organization, $session) {
+            // REVALIDATION — re-resolved from scratch, inside the
+            // transaction, immediately before any mutation runs. Never
+            // trusts the pass above as still-valid proof.
+            $tickets = $this->resolveBulkTickets($ticketIds, $organization, forDelete: true);
+
+            foreach ($tickets as $ticket) {
+                // Eloquent delete(), not a query-builder update(): same
+                // reasoning as deleteTicket() — must run through
+                // TicketObserver the same way every other delete path does.
+                $ticket->delete();
+
+                // Per-item audit: one OrganizationSupportAction row per
+                // ticket, not a single batch-summary row — Phase 14's own
+                // instruction is granular per-item auditing for bulk
+                // (unlike deleteProject()'s bounded cascade-summary row,
+                // which exists because a project's cascade can reach
+                // thousands of rows; a bulk selection here is capped at
+                // BULK_ACTION_MAX_ITEMS and operator-selected, not
+                // cascaded).
+                OrganizationSupportAction::create([
+                    'support_session_id' => $session->id,
+                    'actor_user_id' => auth()->id(),
+                    'organization_id' => $organization->id,
+                    'action' => 'ticket.bulk_delete',
+                    'target_type' => Ticket::class,
+                    'target_id' => $ticket->id,
+                    'field' => 'deleted_at',
+                    'old_value' => null,
+                    'new_value' => (string) $ticket->deleted_at,
+                ]);
+            }
+        });
+
+        Notification::make()
+            ->title(__(':count ticket(s) deleted', ['count' => $ticketIds->count()]))
+            ->success()
+            ->send();
+    }
+
+    /**
+     * Symmetric undo of bulkDeleteTicket() above — same Full-Access-only
+     * shape, same ALL-OR-NOTHING/REVALIDATION contract via
+     * resolveBulkTickets(forDelete: false), same per-item audit granularity,
+     * same concurrency reasoning (see bulkDeleteTicket()'s own docblock —
+     * two overlapping concurrent bulk-restores produce, at worst, a
+     * duplicate 'ticket.bulk_restore' audit row for an already-correct end
+     * state, not an authorization or isolation gap).
+     */
+    public function bulkRestoreTicket(array $ticketIds): void
+    {
+        $organization = $this->organization();
+
+        abort_unless($organization !== null, 403);
+
+        abort_unless(SupportSessionContext::isFullAccessCapabilityAllowed('bulk_restore_ticket'), 403);
+        $session = SupportSessionContext::authorizeFullAccess(auth()->user(), $organization->id);
+
+        $ticketIds = $this->sanitizeBulkIds($ticketIds);
+
+        $this->resolveBulkTickets($ticketIds, $organization, forDelete: false);
+
+        DB::transaction(function () use ($ticketIds, $organization, $session) {
+            $tickets = $this->resolveBulkTickets($ticketIds, $organization, forDelete: false);
+
+            foreach ($tickets as $ticket) {
+                $oldDeletedAt = (string) $ticket->deleted_at;
+
+                // Eloquent restore(), not a query-builder update(): same
+                // reasoning as restoreTicket() — must run through
+                // TicketObserver the same way every other restore path does.
+                $ticket->restore();
+
+                OrganizationSupportAction::create([
+                    'support_session_id' => $session->id,
+                    'actor_user_id' => auth()->id(),
+                    'organization_id' => $organization->id,
+                    'action' => 'ticket.bulk_restore',
+                    'target_type' => Ticket::class,
+                    'target_id' => $ticket->id,
+                    'field' => 'deleted_at',
+                    'old_value' => $oldDeletedAt,
+                    'new_value' => null,
+                ]);
+            }
+        });
+
+        Notification::make()
+            ->title(__(':count ticket(s) restored', ['count' => $ticketIds->count()]))
+            ->success()
+            ->send();
+    }
+
+    /**
+     * Sprint's equivalent of bulkDeleteTicket() above — same shape, reusing
+     * deleteSprint()'s own per-sprint mutation. Same Epic finding
+     * deleteSprint()'s own docblock documents applies unchanged here:
+     * App\Observers\SprintObserver has no deleting()/deleted() hook at all,
+     * so this never touches a sprint's mirrored epic — no cascade to audit
+     * for delete, unlike bulkRestoreSprint() below.
+     */
+    public function bulkDeleteSprint(array $sprintIds): void
+    {
+        $organization = $this->organization();
+
+        abort_unless($organization !== null, 403);
+
+        abort_unless(SupportSessionContext::isFullAccessCapabilityAllowed('bulk_delete_sprint'), 403);
+        $session = SupportSessionContext::authorizeFullAccess(auth()->user(), $organization->id);
+
+        $sprintIds = $this->sanitizeBulkIds($sprintIds);
+
+        $this->resolveBulkSprints($sprintIds, $organization, forDelete: true);
+
+        DB::transaction(function () use ($sprintIds, $organization, $session) {
+            $sprints = $this->resolveBulkSprints($sprintIds, $organization, forDelete: true);
+
+            foreach ($sprints as $sprint) {
+                $sprint->delete();
+
+                OrganizationSupportAction::create([
+                    'support_session_id' => $session->id,
+                    'actor_user_id' => auth()->id(),
+                    'organization_id' => $organization->id,
+                    'action' => 'sprint.bulk_delete',
+                    'target_type' => Sprint::class,
+                    'target_id' => $sprint->id,
+                    'field' => 'deleted_at',
+                    'old_value' => null,
+                    'new_value' => (string) $sprint->deleted_at,
+                ]);
+            }
+        });
+
+        Notification::make()
+            ->title(__(':count sprint(s) deleted', ['count' => $sprintIds->count()]))
+            ->success()
+            ->send();
+    }
+
+    /**
+     * Symmetric undo of bulkDeleteSprint() above. Unlike that method, this
+     * carries forward the one genuine asymmetry restoreSprint() itself
+     * documents: App\Observers\SprintObserver::restoring() unconditionally
+     * cascade-restores an already-trashed mirrored epic for *each* sprint
+     * restored — a real per-item side effect, not folded into a single
+     * batch-level summary. So this batch can legitimately produce between N
+     * and 2N OrganizationSupportAction rows (one 'sprint.bulk_restore' row
+     * per sprint, plus one 'epic.auto_restore' row for each sprint whose own
+     * mirrored epic was independently trashed and gets cascade-restored
+     * with it) — this is not folded into a single "N sprints, M epics"
+     * summary row the way deleteProject()'s cascade is, because Phase 14's
+     * own instruction is granular per-item auditing, and this is a
+     * mechanical, per-item application of restoreSprint()'s own
+     * already-approved single-target behavior (Phase 12) to each member of
+     * the batch — not a new decision being made unilaterally here. The
+     * trashed epic (if any) is captured *before* $sprint->restore() runs,
+     * for the same reason restoreSprint() itself captures it first: that
+     * call is what changes the epic's own deleted_at.
+     */
+    public function bulkRestoreSprint(array $sprintIds): void
+    {
+        $organization = $this->organization();
+
+        abort_unless($organization !== null, 403);
+
+        abort_unless(SupportSessionContext::isFullAccessCapabilityAllowed('bulk_restore_sprint'), 403);
+        $session = SupportSessionContext::authorizeFullAccess(auth()->user(), $organization->id);
+
+        $sprintIds = $this->sanitizeBulkIds($sprintIds);
+
+        $this->resolveBulkSprints($sprintIds, $organization, forDelete: false);
+
+        DB::transaction(function () use ($sprintIds, $organization, $session) {
+            $sprints = $this->resolveBulkSprints($sprintIds, $organization, forDelete: false);
+
+            foreach ($sprints as $sprint) {
+                $oldDeletedAt = (string) $sprint->deleted_at;
+
+                // Captured before restore() runs — SprintObserver::restoring()
+                // is what would change (or clear) this epic's own deleted_at,
+                // exactly mirroring restoreSprint()'s own single-target logic.
+                $trashedEpic = $sprint->epic()->onlyTrashed()->first();
+                $epicOldDeletedAt = $trashedEpic !== null ? (string) $trashedEpic->deleted_at : null;
+
+                $sprint->restore();
+
+                OrganizationSupportAction::create([
+                    'support_session_id' => $session->id,
+                    'actor_user_id' => auth()->id(),
+                    'organization_id' => $organization->id,
+                    'action' => 'sprint.bulk_restore',
+                    'target_type' => Sprint::class,
+                    'target_id' => $sprint->id,
+                    'field' => 'deleted_at',
+                    'old_value' => $oldDeletedAt,
+                    'new_value' => null,
+                ]);
+
+                if ($trashedEpic !== null) {
+                    OrganizationSupportAction::create([
+                        'support_session_id' => $session->id,
+                        'actor_user_id' => auth()->id(),
+                        'organization_id' => $organization->id,
+                        'action' => 'epic.auto_restore',
+                        'target_type' => Epic::class,
+                        'target_id' => $trashedEpic->id,
+                        'field' => 'deleted_at',
+                        'old_value' => $epicOldDeletedAt,
+                        'new_value' => null,
+                    ]);
+                }
+            }
+        });
+
+        Notification::make()
+            ->title(__(':count sprint(s) restored', ['count' => $sprintIds->count()]))
+            ->success()
+            ->send();
+    }
+
+    /**
+     * A trashed child's deleted_at must fall within this many seconds of the
+     * project's own to count as "taken down by the project's own cascade"
+     * rather than independently deleted at some unrelated earlier time.
+     * Mirrors App\Observers\ProjectObserver::CASCADE_WINDOW_SECONDS exactly
+     * (30 seconds) — that constant is private on the Observer, so this
+     * duplicates its literal value rather than introduce a new coupling
+     * between the two classes. This copy is read-only/display-only: it is
+     * only ever used to compute the numbers shown in projectRestoreImpact()/
+     * restoreProject()'s confirm() dialog and audit row, never to decide
+     * what $project->restore() actually restores — that decision is made
+     * entirely by ProjectObserver itself, which this method's callers never
+     * override.
+     */
+    private const PROJECT_CASCADE_WINDOW_SECONDS = 30;
+
+    /**
+     * The Ticket/Sprint/Epic counts that restoring $project would actually
+     * cascade-restore, per the same within-window rule
+     * App\Observers\ProjectObserver::restoring() itself applies. Shared by
+     * restoreProject() and projectRestoreImpact() so the confirm() dialog's
+     * numbers and the numbers the audit row records can never drift apart
+     * from each other — both read this same method.
+     *
+     * Three bounded count() queries against the already-resolved,
+     * organization-scoped $project — not a naive per-row loop, and not
+     * Model::all() filtered in PHP.
+     *
+     * @return array{tickets: int, sprints: int, epics: int}
+     */
+    private function projectCascadeRestoreCounts(Project $project): array
+    {
+        $cutoff = $project->deleted_at->copy()->subSeconds(self::PROJECT_CASCADE_WINDOW_SECONDS);
+
+        return [
+            'tickets' => $project->tickets()->onlyTrashed()->where('deleted_at', '>=', $cutoff)->count(),
+            'sprints' => $project->sprints()->onlyTrashed()->where('deleted_at', '>=', $cutoff)->count(),
+            'epics' => $project->epics()->onlyTrashed()->where('deleted_at', '>=', $cutoff)->count(),
+        ];
+    }
+
+    /**
+     * Public entry point for the Blade confirm() dialog on a trashed
+     * project's Restore button — takes the project's scalar id, never a
+     * Project model (same Livewire-implicit-binding reasoning as every
+     * other public per-row method on this page, e.g. sprintStatusBreakdown()),
+     * and re-resolves it through the organization-scoped, withTrashed()
+     * query itself rather than trusting the caller already filtered.
+     *
+     * @return array{tickets: int, sprints: int, epics: int}
+     */
+    public function projectRestoreImpact(int $projectId): array
+    {
+        $organization = $this->organization();
+
+        abort_unless($organization !== null, 403);
+
+        $project = Project::withTrashed()
+            ->where('organization_id', $organization->id)
+            ->find($projectId);
+
+        abort_unless($project !== null && $project->trashed(), 403);
+
+        return $this->projectCascadeRestoreCounts($project);
+    }
+
+    /**
+     * Phase 13 — the highest-blast-radius Full Access capability yet: unlike
+     * deleteTicket()/deleteSprint() (Phase 11/12), a Project cascades to
+     * every Ticket, Sprint and Epic beneath it. Same Full-Access-only shape
+     * as those two — bypasses SupportSessionContext::authorizeCapability()
+     * entirely and calls the allowlist check + authorizeFullAccess()
+     * directly, for the identical reason: a Support Action session must
+     * never reach this, even though changeProjectStatus() already
+     * legitimately belongs to it via authorizeAction().
+     *
+     * Cascade behavior, verified by reading App\Observers\ProjectObserver::
+     * deleting() in full during Phase 13 inspection: it chunks through
+     * $project->tickets()/sprints()/epics() (200 at a time via chunkById —
+     * safe to delete while chunking) and calls Eloquent delete() on each, so
+     * TicketObserver::deleted() still fires per cascaded ticket exactly like
+     * every other delete path (TicketResource, deleteTicket() above) —
+     * SprintObserver has no deleting()/deleted() hook at all (confirmed
+     * during Phase 12 inspection, unchanged since), and Epic has no
+     * Observer whatsoever, so nothing beyond their own deleted_at changes
+     * for those two. This method does not reimplement any of that:
+     * $project->delete() alone triggers the entire cascade, so this stays a
+     * thin authorize → resolve → mutate → audit wrapper, per this phase's
+     * own core principle — reuse, don't reimplement.
+     *
+     * Confirmed NOT cascaded by ProjectObserver or any other Observer, by
+     * reading every Observer in app/Observers during Phase 13 inspection:
+     * TicketComment, TicketHour, TicketActivity, and Spatie Media
+     * attachments. None has a deleting()/deleted() hook wired to a Ticket
+     * or Project delete — TicketComment's only lifecycle mechanism is its
+     * own, entirely independent 90-day prune of already-soft-deleted rows
+     * (see docs/soft-deletes.md). They are left exactly as
+     * $project->delete() (via its Ticket cascade) already leaves them; this
+     * phase does not add new cascade logic for them.
+     *
+     * Audit granularity: a project can have thousands of tickets, so one
+     * OrganizationSupportAction row per cascaded child (the literal reading
+     * of "audit every affected entity") risks thousands of INSERTs inside a
+     * single transaction — a real timeout risk at scale, not a hypothetical
+     * one. This writes exactly two rows instead: the required
+     * 'project.delete' row (field='deleted_at', matching the exact old/new
+     * shape deleteTicket()/deleteSprint() already use) plus one O(1)
+     * 'project.delete_cascade_summary' row recording the ticket/sprint/epic
+     * counts that were cascaded — field left null, per
+     * organization_support_actions' own migration docblock ("field
+     * nullable: a future action kind that isn't a single-field change is
+     * not forced to fabricate one"). Counts are read via withCount() on the
+     * same organization-scoped $project this method already resolved, not a
+     * second, separately-scoped query that could diverge from it.
+     */
+    public function deleteProject(int $projectId): void
+    {
+        $organization = $this->organization();
+
+        abort_unless($organization !== null, 403);
+
+        abort_unless(SupportSessionContext::isFullAccessCapabilityAllowed('delete_project'), 403);
+        $session = SupportSessionContext::authorizeFullAccess(auth()->user(), $organization->id);
+
+        // Same organization-scoped resolution as every other write method
+        // on this page — never Project::find($projectId) trusted before the
+        // fact. withCount(), not three separate count() queries and not a
+        // second, independently-scoped query — the counts describe exactly
+        // this resolved $project.
+        $project = Project::query()
+            ->where('organization_id', $organization->id)
+            ->withCount(['tickets', 'sprints', 'epics'])
+            ->find($projectId);
+
+        // No separate "already trashed" precondition check is needed (same
+        // reasoning as deleteTicket()/deleteSprint()): this query never used
+        // withTrashed(), so the default SoftDeletingScope already excludes a
+        // trashed project from the result entirely.
+        abort_unless($project !== null, 403);
+
+        $ticketsCount = (int) $project->tickets_count;
+        $sprintsCount = (int) $project->sprints_count;
+        $epicsCount = (int) $project->epics_count;
+
+        DB::transaction(function () use ($project, $session, $organization, $ticketsCount, $sprintsCount, $epicsCount) {
+            // Eloquent delete(), not a query-builder update(): this is what
+            // runs the entire cascade through App\Observers\ProjectObserver::
+            // deleting() — see this method's own docblock for what was
+            // verified about it during Phase 13 inspection. That cascade is
+            // already wrapped in its own DB::transaction() (a nested
+            // savepoint inside this one), so a failure anywhere in it —
+            // including this audit write below — rolls back everything
+            // together.
+            $project->delete();
+
+            OrganizationSupportAction::create([
+                'support_session_id' => $session->id,
+                'actor_user_id' => auth()->id(),
+                'organization_id' => $organization->id,
+                'action' => 'project.delete',
+                'target_type' => Project::class,
+                'target_id' => $project->id,
+                'field' => 'deleted_at',
+                'old_value' => null,
+                'new_value' => (string) $project->deleted_at,
+            ]);
+
+            OrganizationSupportAction::create([
+                'support_session_id' => $session->id,
+                'actor_user_id' => auth()->id(),
+                'organization_id' => $organization->id,
+                'action' => 'project.delete_cascade_summary',
+                'target_type' => Project::class,
+                'target_id' => $project->id,
+                'field' => null,
+                'old_value' => null,
+                'new_value' => "tickets:{$ticketsCount},sprints:{$sprintsCount},epics:{$epicsCount}",
+            ]);
+        });
+
+        Notification::make()
+            ->title(__('Project deleted'))
+            ->success()
+            ->send();
+    }
+
+    /**
+     * The symmetric undo of deleteProject() above — same Full-Access-only
+     * reasoning, and the same withTrashed()/trashed() precondition shape as
+     * restoreTicket()/restoreSprint().
+     *
+     * Cascade behavior, verified by reading App\Observers\ProjectObserver::
+     * restoring() in full during Phase 13 inspection: it only restores the
+     * tickets/sprints/epics that are *still trashed* and whose own
+     * deleted_at falls within PROJECT_CASCADE_WINDOW_SECONDS of the
+     * project's own deleted_at — a child independently deleted before the
+     * project ever was is correctly left alone (see that constant's own
+     * docblock for why this class duplicates the literal window value
+     * rather than sharing it with the Observer). restoreSprint()'s own
+     * epic-mirror side effect (SprintObserver::restoring()) is a genuine
+     * second-order consequence of this same cascade whenever a cascaded
+     * sprint is restored — this method does not audit that separately from
+     * the cascade summary row below, unlike restoreSprint() itself, because
+     * Phase 13 treats the whole cascade as one bounded summary rather than
+     * per-entity rows (see deleteProject()'s own docblock for the audit-
+     * granularity reasoning, which applies identically here).
+     *
+     * Counts are computed *before* $project->restore() runs (which is what
+     * changes deleted_at on each cascaded row) via
+     * projectCascadeRestoreCounts() — the exact same method
+     * projectRestoreImpact() uses for the confirm() dialog, so what the
+     * dialog promises and what the audit row records can never drift apart.
+     */
+    public function restoreProject(int $projectId): void
+    {
+        $organization = $this->organization();
+
+        abort_unless($organization !== null, 403);
+
+        abort_unless(SupportSessionContext::isFullAccessCapabilityAllowed('restore_project'), 403);
+        $session = SupportSessionContext::authorizeFullAccess(auth()->user(), $organization->id);
+
+        // withTrashed() is required here — the whole point of this method is
+        // to find a project that is currently soft-deleted, which the
+        // default Eloquent scope excludes.
+        $project = Project::withTrashed()
+            ->where('organization_id', $organization->id)
+            ->find($projectId);
+
+        abort_unless($project !== null, 403);
+
+        // Symmetric precondition to deleteProject(): a project that is not
+        // currently trashed is an invalid target for restore.
+        abort_unless($project->trashed(), 403);
+
+        $oldDeletedAt = (string) $project->deleted_at;
+        $cascadeCounts = $this->projectCascadeRestoreCounts($project);
+
+        DB::transaction(function () use ($project, $session, $organization, $oldDeletedAt, $cascadeCounts) {
+            // Eloquent restore(), not a query-builder update(): runs through
+            // ProjectObserver::restoring(), the exact cascade this method's
+            // own docblock documents.
+            $project->restore();
+
+            OrganizationSupportAction::create([
+                'support_session_id' => $session->id,
+                'actor_user_id' => auth()->id(),
+                'organization_id' => $organization->id,
+                'action' => 'project.restore',
+                'target_type' => Project::class,
+                'target_id' => $project->id,
+                'field' => 'deleted_at',
+                'old_value' => $oldDeletedAt,
+                'new_value' => null,
+            ]);
+
+            OrganizationSupportAction::create([
+                'support_session_id' => $session->id,
+                'actor_user_id' => auth()->id(),
+                'organization_id' => $organization->id,
+                'action' => 'project.restore_cascade_summary',
+                'target_type' => Project::class,
+                'target_id' => $project->id,
+                'field' => null,
+                'old_value' => "tickets:{$cascadeCounts['tickets']},sprints:{$cascadeCounts['sprints']},epics:{$cascadeCounts['epics']}",
+                'new_value' => null,
+            ]);
+        });
+
+        Notification::make()
+            ->title(__('Project restored'))
             ->success()
             ->send();
     }

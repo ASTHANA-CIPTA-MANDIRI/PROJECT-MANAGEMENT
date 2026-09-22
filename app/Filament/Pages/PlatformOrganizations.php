@@ -4,6 +4,7 @@ namespace App\Filament\Pages;
 
 use App\Models\Organization;
 use App\Models\OrganizationInvitation;
+use App\Models\OrganizationSupportAccessGrant;
 use App\Models\OrganizationSupportSession;
 use App\Models\Role;
 use App\Models\User;
@@ -13,6 +14,7 @@ use App\Support\SupportSessionContext;
 use App\Support\TrialGate;
 use Closure;
 use Filament\Forms\Components\DatePicker;
+use Filament\Forms\Components\Placeholder;
 use Filament\Forms\Components\Radio;
 use Filament\Forms\Components\Select;
 use Filament\Forms\Components\Textarea;
@@ -27,6 +29,7 @@ use Illuminate\Database\QueryException;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Notification as NotificationFacade;
 use Illuminate\Validation\ValidationException;
+use Symfony\Component\HttpKernel\Exception\HttpException;
 
 /**
  * Platform Super Admin only — a cross-organization view so the operator of
@@ -168,6 +171,19 @@ class PlatformOrganizations extends AuthorizedPage implements HasForms, Tables\C
                 ->label(__('Trial status'))
                 ->getStateUsing(fn (Organization $record) => $this->trialStatusLabel($record))
                 ->color(fn (Organization $record) => $this->trialStatusColor($record)),
+
+            // Phase 7 (Full Access UI/UX Gate). Reads through
+            // latestFullAccessGrant() rather than an eager-loaded relation:
+            // this table is small in practice (one row per Organization in
+            // the whole installation, same assumption the rest of this page
+            // already makes — see getTableQuery()'s own eager loads for
+            // comparison), and a per-row grant lookup keeps this column's
+            // logic in one place instead of teaching Organization a new
+            // relation only this column would ever use.
+            Tables\Columns\TextColumn::make('full_access_status')
+                ->label(__('Full Access'))
+                ->getStateUsing(fn (Organization $record) => $this->fullAccessStatusLabel($record))
+                ->description(fn (Organization $record) => $this->fullAccessStatusDescription($record)),
 
             Tables\Columns\TextColumn::make('created_at')
                 ->label(__('Created at'))
@@ -554,6 +570,136 @@ class PlatformOrganizations extends AuthorizedPage implements HasForms, Tables\C
                     $this->redirect(OrganizationSupportView::getUrl());
                 }),
 
+            // Phase 7 (Full Access UI/UX Gate) — first step of the separate
+            // Full Access flow (App\Support\SupportSessionContext's own
+            // docblock section on the grant lifecycle). Deliberately its
+            // own action rather than a third Radio option on
+            // startSupportSession above: LEVEL_FULL_ACCESS can never be
+            // reached through SupportSessionContext::start() (see that
+            // method's own docblock), so offering it in that form would be
+            // a UI promise the backend cannot keep — a Full Access session
+            // only ever begins by consuming an Owner-approved grant, which
+            // is what startFullAccess below actually does.
+            Tables\Actions\Action::make('requestFullAccess')
+                ->label(__('Request Full Access'))
+                ->icon('heroicon-o-key')
+                ->modalHeading(__('Request Full Access'))
+                ->visible(fn (Organization $record) => $this->canRequestFullAccess($record))
+                ->form([
+                    Textarea::make('reason')
+                        ->label(__('Alasan'))
+                        ->required()
+                        ->maxLength(500),
+
+                    // Static, informational only — never a field the actor
+                    // picks from and never written anywhere. See
+                    // SupportSessionContext::isFullAccessCapabilityAllowed()'s
+                    // own docblock: it is a fail-closed allowlist that is
+                    // always empty today, by deliberate product decision,
+                    // not a placeholder oversight, and there is no
+                    // `scope`/`capability` column on organization_support_
+                    // access_grants to persist a choice into even if this
+                    // were made selectable.
+                    Placeholder::make('scope')
+                        ->label(__('Scope'))
+                        ->content(__('Belum ada kapabilitas yang disetujui untuk Full Access.')),
+                ])
+                ->requiresConfirmation()
+                ->action(function (Organization $record, array $data): void {
+                    try {
+                        SupportSessionContext::requestFullAccess(auth()->user(), $record, $data['reason']);
+                    } catch (HttpException $exception) {
+                        // requestFullAccess() aborts with 409 when this
+                        // organization already has an active (REQUESTED or
+                        // APPROVED-and-unconsumed) grant — translated into a
+                        // friendly notification instead of Symfony's raw
+                        // error page, the same way createOrganization above
+                        // turns a unique-name QueryException into a
+                        // validation message rather than letting it surface
+                        // raw.
+                        if ($exception->getStatusCode() !== 409) {
+                            throw $exception;
+                        }
+
+                        Notification::make()
+                            ->title(__('Organisasi ini sudah punya permintaan Full Access yang aktif.'))
+                            ->danger()
+                            ->send();
+
+                        return;
+                    }
+
+                    Notification::make()
+                        ->title(__('Permintaan Full Access dikirim ke Owner organisasi.'))
+                        ->success()
+                        ->send();
+                }),
+
+            // Second step of the Full Access flow: only reachable once the
+            // Organization's Owner has approved the request above. No grant
+            // id is ever sent to the browser for this action to echo back —
+            // latestFullAccessGrant() re-derives the relevant grant
+            // server-side, scoped to $record (a Filament-resolved,
+            // trusted Organization, not client-supplied state), both for
+            // ->visible() and again inside ->action() itself, so a stale
+            // rendered button (the grant expired/was revoked a moment
+            // after page load) cannot be clicked into a stale action.
+            Tables\Actions\Action::make('startFullAccess')
+                ->label(__('Start Full Access'))
+                ->icon('heroicon-o-lock-open')
+                ->color('danger')
+                ->requiresConfirmation()
+                ->modalSubheading(__('This begins a Full Access support session for this organization.'))
+                ->visible(fn (Organization $record) => $this->canStartFullAccess($record))
+                ->action(function (Organization $record): void {
+                    $grant = $this->latestFullAccessGrant($record);
+
+                    // Defense in depth, not the real gate: consumeFullAccessGrant()
+                    // re-verifies isSuperAdmin(), the requester match, and
+                    // isApproved() itself (see its own docblock) — this
+                    // abort only fails fast, before even attempting the
+                    // call, for the same reasons ->visible() above hides
+                    // the button in the first place.
+                    abort_unless($grant !== null && $grant->requested_by === auth()->id(), 403);
+
+                    SupportSessionContext::consumeFullAccessGrant(auth()->user(), $grant);
+
+                    Notification::make()
+                        ->title(__('Full Access session dimulai.'))
+                        ->success()
+                        ->send();
+
+                    $this->redirect(OrganizationSupportView::getUrl());
+                }),
+
+            // Lets the requesting Super Admin withdraw their own request
+            // before it is consumed (Architecture Design Phase 2, Open
+            // Question #3 — see SupportSessionContext::revokeFullAccessGrant()'s
+            // own docblock on why self-cancellation is allowed). Same
+            // "never trust a client-supplied grant id" discipline as
+            // startFullAccess above: the grant is re-derived from $record,
+            // never read from form/session state.
+            Tables\Actions\Action::make('cancelFullAccessRequest')
+                ->label(__('Cancel request'))
+                ->icon('heroicon-o-x-circle')
+                ->color('danger')
+                ->requiresConfirmation()
+                ->visible(fn (Organization $record) => $this->canCancelFullAccessRequest($record))
+                ->action(function (Organization $record): void {
+                    $grant = $this->latestFullAccessGrant($record);
+
+                    if ($grant === null) {
+                        return;
+                    }
+
+                    SupportSessionContext::revokeFullAccessGrant(auth()->user(), $grant);
+
+                    Notification::make()
+                        ->title(__('Permintaan Full Access dibatalkan.'))
+                        ->success()
+                        ->send();
+                }),
+
             // Only ever shown while an Organization has no Owner yet and a
             // pending invitation is the reason why (getTableColumns()'s
             // Owner column renders the same condition as "Invitation
@@ -695,5 +841,139 @@ class PlatformOrganizations extends AuthorizedPage implements HasForms, Tables\C
         }
 
         return $organization->isSubscribed() ? 'success' : 'danger';
+    }
+
+    // -------------------------------------------------- Full Access (Phase 7)
+
+    /**
+     * The most recent Full Access grant for $organization, regardless of
+     * its state — every UI element that touches Full Access below (the
+     * status column, and each of the three actions' own ->visible()
+     * conditions and ->action() closures) reads through this single query
+     * rather than separately re-deriving "which grant is the relevant one
+     * right now". A fresh, unmemoized query every call — this page holds
+     * no Livewire property caching it across requests, so a grant the
+     * Owner just approved in another tab is reflected the moment this
+     * table next re-renders, the same "never a cached/session value"
+     * discipline OrganizationContext::current() and
+     * SupportSessionContext::current() already apply elsewhere.
+     */
+    private function latestFullAccessGrant(Organization $organization): ?OrganizationSupportAccessGrant
+    {
+        return OrganizationSupportAccessGrant::query()
+            ->where('organization_id', $organization->id)
+            ->latest('requested_at')
+            ->first();
+    }
+
+    /**
+     * requestFullAccess() itself is the real gate (it 409s on an active
+     * grant, re-checked under lockForUpdate() — see its own docblock) —
+     * this is UX only, so the action isn't offered at all for an
+     * organization that visibly already has one in flight. A grant that
+     * is consumed, revoked, or expired leaves the organization free to be
+     * requested again, mirroring requestFullAccess()'s own "no active
+     * grant" definition.
+     */
+    private function canRequestFullAccess(Organization $organization): bool
+    {
+        $grant = $this->latestFullAccessGrant($organization);
+
+        return $grant === null || in_array($grant->status(), ['consumed', 'revoked', 'expired'], true);
+    }
+
+    /**
+     * Mirrors consumeFullAccessGrant()'s own actor-integrity guarantee
+     * (only the original requester may ever consume their own approved
+     * grant — see that method's docblock): the button itself is hidden for
+     * every other Super Admin, not just refused on click.
+     */
+    private function canStartFullAccess(Organization $organization): bool
+    {
+        $grant = $this->latestFullAccessGrant($organization);
+
+        return $grant !== null
+            && $grant->status() === 'approved'
+            && $grant->requested_by === auth()->id();
+    }
+
+    /**
+     * revokeFullAccessGrant() allows either the Owner or the original
+     * requester to cancel, but this page only ever acts as the requester's
+     * side of that relationship (the Owner's side lives on
+     * OrganizationSettings) — so only requested/approved grants owned by
+     * the current Super Admin show a Cancel button here.
+     */
+    private function canCancelFullAccessRequest(Organization $organization): bool
+    {
+        $grant = $this->latestFullAccessGrant($organization);
+
+        return $grant !== null
+            && in_array($grant->status(), ['requested', 'approved'], true)
+            && $grant->requested_by === auth()->id();
+    }
+
+    private function fullAccessStatusLabel(Organization $organization): string
+    {
+        $grant = $this->latestFullAccessGrant($organization);
+
+        if ($grant === null) {
+            return __('No request');
+        }
+
+        return match ($grant->status()) {
+            'requested' => __('Requested'),
+            'approved' => __('Approved — ready to start'),
+            'consumed' => $this->fullAccessSessionStatusLabel($grant),
+            'revoked' => __('Revoked'),
+            default => __('Expired'),
+        };
+    }
+
+    /**
+     * A consumed grant's own status() never changes again (consumed_at is
+     * permanent), so once consumed the more useful thing to show is
+     * whatever the session it produced is doing right now — active, ended
+     * (Super Admin stopped it or started a different one), or expired
+     * (its own one-hour window lapsed) — read from
+     * OrganizationSupportSession::isActive()/ended_at directly rather than
+     * adding a parallel status method there for a single call site.
+     */
+    private function fullAccessSessionStatusLabel(OrganizationSupportAccessGrant $grant): string
+    {
+        $session = $grant->session;
+
+        if ($session === null) {
+            return __('Consumed');
+        }
+
+        if ($session->ended_at !== null) {
+            return __('Session ended');
+        }
+
+        return $session->isActive() ? __('Full Access session active') : __('Session expired');
+    }
+
+    private function fullAccessStatusDescription(Organization $organization): ?string
+    {
+        $grant = $this->latestFullAccessGrant($organization);
+
+        if ($grant === null) {
+            return null;
+        }
+
+        $parts = [__('Requested by :name', ['name' => $grant->requester?->name ?? '—'])];
+
+        if ($grant->approved_at !== null) {
+            $parts[] = __('Approved by :name', ['name' => $grant->approver?->name ?? '—']);
+        }
+
+        if ($grant->status() === 'approved') {
+            $parts[] = __('Expires :date', ['date' => $grant->grant_expires_at->diffForHumans()]);
+        } elseif ($grant->status() === 'requested') {
+            $parts[] = __('Expires :date', ['date' => $grant->request_expires_at->diffForHumans()]);
+        }
+
+        return implode(' · ', $parts);
     }
 }

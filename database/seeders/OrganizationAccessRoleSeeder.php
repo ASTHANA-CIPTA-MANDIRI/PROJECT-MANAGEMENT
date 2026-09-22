@@ -51,7 +51,7 @@ class OrganizationAccessRoleSeeder extends Seeder
      */
     private array $adminPermissions = [
         'List projects', 'View project', 'Create project', 'Update project', 'Delete project',
-        'List tickets', 'View ticket', 'Create ticket', 'Update ticket',
+        'List tickets', 'View ticket', 'Create ticket', 'Update ticket', 'Delete ticket',
         'List sprints', 'View sprint',
         'List ticket statuses', 'View ticket status', 'Create ticket status', 'Update ticket status', 'Delete ticket status',
         'List ticket types', 'View ticket type', 'Create ticket type', 'Update ticket type', 'Delete ticket type',

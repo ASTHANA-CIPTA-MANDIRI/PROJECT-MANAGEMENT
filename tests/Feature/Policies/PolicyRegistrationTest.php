@@ -43,10 +43,21 @@ class PolicyRegistrationTest extends TestCase
      * isSuperAdmin()-gated Support Action write path, never through a
      * Policy).
      *
+     * OrganizationSupportAccessGrant (Phase 3 of Support Full Access) is
+     * exempt for the same shape of reason again — never exposed via a
+     * Filament Resource, only ever created/transitioned through
+     * App\Support\SupportSessionContext::requestFullAccess()/
+     * approveFullAccessGrant()/consumeFullAccessGrant()/
+     * revokeFullAccessGrant(), each of which checks isSuperAdmin() and/or
+     * Organization::isOwnedBy() directly rather than going through a
+     * Policy — the same deliberately-separate Support authorization axis
+     * OrganizationSupportSession's own entry above already documents.
+     *
      * @var array<int, string>
      */
     private const UNGUARDED_MODELS = [
         \App\Models\OrganizationInvitation::class,
+        \App\Models\OrganizationSupportAccessGrant::class,
         \App\Models\OrganizationSupportAction::class,
         \App\Models\OrganizationSupportSession::class,
         \App\Models\ProjectFavorite::class,

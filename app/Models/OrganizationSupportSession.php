@@ -42,19 +42,34 @@ class OrganizationSupportSession extends Model
     public const LEVEL_SUPPORT_ACTION = 'support_action';
 
     /**
-     * The only two values `level` may ever hold — read by
-     * SupportSessionContext::start() to fall back safely on anything else
-     * (see that method's own docblock for why the safe fallback is this
-     * list's first entry, LEVEL_READ_ONLY, not an exception).
+     * Phase 3 of Support Full Access. Unlike the two levels above, this one
+     * is never reachable through SupportSessionContext::start() directly —
+     * that method explicitly refuses this exact value regardless of what
+     * is passed to it, because it has no way to verify an Owner-approved
+     * grant exists. The only path that ever sets a session to this level
+     * is SupportSessionContext::consumeFullAccessGrant(), which builds the
+     * session row itself rather than going through start().
+     */
+    public const LEVEL_FULL_ACCESS = 'full_access';
+
+    /**
+     * The only values `level` may ever hold. Being a member of this array
+     * does not by itself mean SupportSessionContext::start() will accept
+     * the value — see LEVEL_FULL_ACCESS's own docblock for the one
+     * exception, which start() enforces explicitly, not by omitting it
+     * from this list (it is a real, valid value of this column, just not
+     * one that generic entry point may ever set).
      */
     public const LEVELS = [
         self::LEVEL_READ_ONLY,
         self::LEVEL_SUPPORT_ACTION,
+        self::LEVEL_FULL_ACCESS,
     ];
 
     protected $fillable = [
         'organization_id',
         'super_admin_id',
+        'access_grant_id',
         'reason',
         'level',
         'started_at',
@@ -77,6 +92,17 @@ class OrganizationSupportSession extends Model
         return $this->belongsTo(User::class, 'super_admin_id');
     }
 
+    /**
+     * The Full Access grant this session was consumed from — null for
+     * every read_only/support_action session, since only
+     * SupportSessionContext::consumeFullAccessGrant() ever sets
+     * access_grant_id.
+     */
+    public function accessGrant(): BelongsTo
+    {
+        return $this->belongsTo(OrganizationSupportAccessGrant::class, 'access_grant_id');
+    }
+
     public function isActive(): bool
     {
         return $this->ended_at === null && $this->expires_at->isFuture();
@@ -92,6 +118,17 @@ class OrganizationSupportSession extends Model
     public function isSupportAction(): bool
     {
         return $this->level === self::LEVEL_SUPPORT_ACTION;
+    }
+
+    /**
+     * Whether this session was created at the Full Access level — a pure
+     * read of the stored value, not an authorization decision. The actual
+     * gate for Full Access write actions is
+     * SupportSessionContext::authorizeFullAccess(), which uses this.
+     */
+    public function isFullAccess(): bool
+    {
+        return $this->level === self::LEVEL_FULL_ACCESS;
     }
 
     public function scopeActive(Builder $query): Builder

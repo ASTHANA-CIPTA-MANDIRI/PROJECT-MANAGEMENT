@@ -4,11 +4,13 @@ namespace App\Filament\Pages;
 
 use App\Models\Organization;
 use App\Models\OrganizationInvitation;
+use App\Models\OrganizationSupportAccessGrant;
 use App\Models\Role;
 use App\Models\User;
 use App\Notifications\OrganizationInvitationCreated;
 use App\Notifications\OrganizationMemberAdded;
 use App\Support\OrganizationContext;
+use App\Support\SupportSessionContext;
 use Filament\Forms\Components\Placeholder;
 use Filament\Forms\Components\Section;
 use Filament\Forms\Components\Select;
@@ -528,6 +530,115 @@ class OrganizationSettings extends AuthorizedPage implements HasForms, HasTable
 
         Notification::make()
             ->title(__('Invitation revoked'))
+            ->success()
+            ->send();
+    }
+
+    // ------------------------------------------------------- full access
+
+    /**
+     * Phase 7 (Full Access UI/UX Gate). Owner-only, deliberately not
+     * isManageableBy() (Owner+Admin): approveFullAccessGrant() itself only
+     * ever accepts the Organization's Owner (Organization::isOwnedBy(),
+     * re-verified there at the moment of approval — see that method's own
+     * docblock), so an Admin seeing an Approve button that always 403s on
+     * click would be worse than not showing the section to them at all.
+     */
+    public function canApproveFullAccess(): bool
+    {
+        return $this->organization()->isOwnedBy(auth()->user());
+    }
+
+    /**
+     * Every Full Access grant ever requested against this organization,
+     * newest first — scoped to $this->organization()->id at the query
+     * level (never Model::all() filtered in PHP), the same discipline
+     * pendingInvitations() above already applies. Shown regardless of
+     * state (not just REQUESTED/APPROVED) so the Owner can see the outcome
+     * of a grant they already acted on, not only ones still awaiting them.
+     */
+    public function fullAccessGrants(): Collection
+    {
+        return OrganizationSupportAccessGrant::query()
+            ->where('organization_id', $this->organization()->id)
+            ->with(['requester', 'approver', 'revoker', 'session'])
+            ->latest('requested_at')
+            ->limit(20)
+            ->get();
+    }
+
+    /**
+     * Cross-organization approval is closed by construction, not just by
+     * the abort_unless() below: the lookup itself is scoped to this
+     * Owner's OWN current organization (via $this->organization(), which
+     * OrganizationContext::current() re-verifies real membership for on
+     * every call), so a grant id belonging to a different organization is
+     * never found here at all — the same pattern
+     * OrganizationSettings::revokeInvitation() already established for
+     * exactly this class of client-supplied-id risk. A not-found grant
+     * (wrong organization, or simply doesn't exist) is a silent no-op,
+     * never a 404/error, so a guessed id reveals nothing about whether it
+     * belongs to someone else's organization.
+     *
+     * approveFullAccessGrant() itself re-verifies Organization::isOwnedBy()
+     * a second time from the Grant's own organization_id (see its
+     * docblock) — the abort_unless() below is not relied upon as the only
+     * check, it just fails fast/clearly before even attempting the call.
+     */
+    public function approveFullAccessGrant(int $grantId): void
+    {
+        $organization = $this->organization();
+
+        abort_unless($organization !== null, 404);
+        abort_unless($organization->isOwnedBy(auth()->user()), 403);
+
+        $grant = OrganizationSupportAccessGrant::query()
+            ->where('organization_id', $organization->id)
+            ->whereKey($grantId)
+            ->first();
+
+        if ($grant === null) {
+            return;
+        }
+
+        SupportSessionContext::approveFullAccessGrant(auth()->user(), $grant);
+
+        Notification::make()
+            ->title(__('Full Access request approved'))
+            ->success()
+            ->send();
+    }
+
+    /**
+     * Serves both "Reject" (while still REQUESTED) and "Revoke" (once
+     * APPROVED but not yet consumed) — the same underlying call either
+     * way, SupportSessionContext::revokeFullAccessGrant() itself makes no
+     * distinction between the two states (only "not yet consumed"
+     * matters, see its own docblock); the Blade view picks which label to
+     * show based on the grant's current status(). Same
+     * scoped-lookup-before-calling-into-SupportSessionContext discipline
+     * as approveFullAccessGrant() above.
+     */
+    public function revokeFullAccessGrant(int $grantId): void
+    {
+        $organization = $this->organization();
+
+        abort_unless($organization !== null, 404);
+        abort_unless($organization->isOwnedBy(auth()->user()), 403);
+
+        $grant = OrganizationSupportAccessGrant::query()
+            ->where('organization_id', $organization->id)
+            ->whereKey($grantId)
+            ->first();
+
+        if ($grant === null) {
+            return;
+        }
+
+        SupportSessionContext::revokeFullAccessGrant(auth()->user(), $grant);
+
+        Notification::make()
+            ->title(__('Full Access request declined'))
             ->success()
             ->send();
     }

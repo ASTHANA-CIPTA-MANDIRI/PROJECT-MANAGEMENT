@@ -78,6 +78,16 @@ class SeederSecurityTest extends TestCase
         $this->assertFalse(Role::findByName('Member')->hasPermissionTo('Delete project'));
     }
 
+    public function test_admin_and_owner_access_roles_can_delete_tickets_member_cannot(): void
+    {
+        $this->seed(PermissionsSeeder::class);
+        $this->seed(OrganizationAccessRoleSeeder::class);
+
+        $this->assertTrue(Role::findByName('Admin')->hasPermissionTo('Delete ticket'));
+        $this->assertTrue(Role::findByName('Owner')->hasPermissionTo('Delete ticket'));
+        $this->assertFalse(Role::findByName('Member')->hasPermissionTo('Delete ticket'));
+    }
+
     public function test_seeding_creates_a_super_admin_role_with_all_permissions(): void
     {
         $this->seedRolesAndAdmin();

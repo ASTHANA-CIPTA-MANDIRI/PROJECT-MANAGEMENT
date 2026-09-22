@@ -17,13 +17,12 @@
                 </span>
                 <span class="font-normal">
                     {{ __('Support level') }}:
-                    {{ $session->isSupportAction() ? __('Support level: Support Action') : __('Support level: Read Only') }}
+                    {{
+                        $session->isFullAccess()
+                            ? __('Support level: Full Access')
+                            : ($session->isSupportAction() ? __('Support level: Support Action') : __('Support level: Read Only'))
+                    }}
                 </span>
-                {{-- Phase 1 of Support Action: the level above is stored and displayed,
-                     but no write capability exists yet for either level — this page
-                     stays fully read-only regardless of what was picked when the
-                     session started. --}}
-                <span class="font-normal">{{ __('Read Only') }}</span>
             </div>
 
             {{-- Organization overview --}}
@@ -79,11 +78,14 @@
                             <th class="py-2 pr-4">{{ __('Overdue tickets') }}</th>
                             <th class="py-2 pr-4">{{ __('Active sprint') }}</th>
                             <th class="py-2 pr-4">{{ __('Created at') }}</th>
+                            @if ($session->isFullAccess())
+                                <th class="py-2 pr-4">{{ __('Actions') }}</th>
+                            @endif
                         </tr>
                     </thead>
                     <tbody>
                         @forelse ($this->projects() as $project)
-                            <tr class="border-b border-gray-100 dark:border-gray-800">
+                            <tr class="border-b border-gray-100 dark:border-gray-800 @if ($project->trashed()) opacity-50 @endif">
                                 <td class="py-2 pr-4">{{ $project->name }}</td>
                                 <td class="py-2 pr-4">{{ $project->ticket_prefix }}</td>
                                 <td class="py-2 pr-4">
@@ -115,10 +117,52 @@
                                 <td class="py-2 pr-4">{{ $project->overdue_tickets_count }}</td>
                                 <td class="py-2 pr-4">{{ $project->sprints->first()?->name ?? '—' }}</td>
                                 <td class="py-2 pr-4">{{ $project->created_at?->toDateTimeString() }}</td>
+                                @if ($session->isFullAccess())
+                                    <td class="py-2 pr-4">
+                                        {{-- Phase 13: the third destructive Full Access control, same
+                                             confirm()-gated button pattern as Delete/Restore Ticket/Sprint
+                                             (Phase 11/12) — but a Project cascades to every Ticket, Sprint
+                                             and Epic beneath it, so both confirm() messages state the real,
+                                             verified impact counts (tickets_count/sprints_count/epics_count
+                                             already eager-loaded on $project for the delete case;
+                                             projectRestoreImpact() re-derives the within-cascade-window
+                                             counts for the restore case) rather than a generic warning. --}}
+                                        @if (! $project->trashed())
+                                            @php($projectDeleteConfirm = __('Delete project :project from :organization? This will also soft-delete :tickets ticket(s), :sprints sprint(s), and :epics epic(s) under it. Everything can be restored later.', ['project' => $project->name, 'organization' => $session->organization->name, 'tickets' => $project->tickets_count, 'sprints' => $project->sprints_count, 'epics' => $project->epics_count]))
+                                            <button
+                                                type="button"
+                                                x-data
+                                                x-on:click="
+                                                    if (confirm(@js($projectDeleteConfirm))) {
+                                                        $wire.deleteProject({{ $project->id }})
+                                                    }
+                                                "
+                                                class="text-sm text-danger-600 hover:text-danger-700 dark:text-danger-400"
+                                            >
+                                                {{ __('Delete') }}
+                                            </button>
+                                        @else
+                                            @php($projectRestoreCounts = $this->projectRestoreImpact($project->id))
+                                            @php($projectRestoreConfirm = __('Restore project :project in :organization? This will also restore :tickets ticket(s), :sprints sprint(s), and :epics epic(s) that were deleted along with it.', ['project' => $project->name, 'organization' => $session->organization->name, 'tickets' => $projectRestoreCounts['tickets'], 'sprints' => $projectRestoreCounts['sprints'], 'epics' => $projectRestoreCounts['epics']]))
+                                            <button
+                                                type="button"
+                                                x-data
+                                                x-on:click="
+                                                    if (confirm(@js($projectRestoreConfirm))) {
+                                                        $wire.restoreProject({{ $project->id }})
+                                                    }
+                                                "
+                                                class="text-sm text-primary-600 hover:text-primary-700 dark:text-primary-400"
+                                            >
+                                                {{ __('Restore') }}
+                                            </button>
+                                        @endif
+                                    </td>
+                                @endif
                             </tr>
                         @empty
                             <tr>
-                                <td colspan="8" class="py-4 text-gray-500">{{ __('No projects yet') }}</td>
+                                <td colspan="{{ $session->isFullAccess() ? 9 : 8 }}" class="py-4 text-gray-500">{{ __('No projects yet') }}</td>
                             </tr>
                         @endforelse
                     </tbody>
@@ -126,12 +170,68 @@
             </div>
 
             {{-- Tickets --}}
-            <div class="flex flex-col gap-2">
+            @php($ticketsForBulk = $this->tickets())
+            @php($bulkDeleteTicketConfirmTemplate = __('Delete %COUNT% selected ticket(s) from :organization? Items: %ITEMS%. Tickets will be soft-deleted (moved to trash) and can be restored later.', ['organization' => $session->organization->name]))
+            @php($bulkRestoreTicketConfirmTemplate = __('Restore %COUNT% selected ticket(s) in :organization? Items: %ITEMS%. Tickets will be moved out of trash and become visible again.', ['organization' => $session->organization->name]))
+            <div class="flex flex-col gap-2" x-data="{ selectedTicketIds: [] }">
                 <h3 class="text-base font-medium">{{ __('Tickets') }}</h3>
+
+                @if ($session->isFullAccess())
+                    {{-- Phase 14: bulk delete/restore. Both buttons stay
+                         visible regardless of selection (unlike a
+                         disabled-until-selected pattern) — a click with
+                         nothing selected simply confirm()s an empty batch
+                         and bulkDeleteTicket()/bulkRestoreTicket() reject it
+                         server-side (resolveBulkTickets()'s own
+                         abort_unless(isNotEmpty())) the same fail-closed way
+                         every other invalid input on this page is rejected,
+                         so there is no client-only gate whose bypass would
+                         matter. --}}
+                    <div class="flex items-center gap-3">
+                        <span class="text-xs text-gray-500" x-show="selectedTicketIds.length > 0" x-text="selectedTicketIds.length + ' {{ __('selected') }}'"></span>
+                        <button
+                            type="button"
+                            x-on:click="
+                                let items = Array.from($root.querySelectorAll('[data-ticket-checkbox]:checked')).map((cb) => cb.dataset.ticketName + (cb.dataset.ticketState === 'trashed' ? ' ({{ __('trashed') }})' : ''));
+                                let message = @js($bulkDeleteTicketConfirmTemplate).replace('%COUNT%', selectedTicketIds.length).replace('%ITEMS%', items.join(', '));
+                                if (confirm(message)) {
+                                    $wire.bulkDeleteTicket(selectedTicketIds);
+                                    selectedTicketIds = [];
+                                }
+                            "
+                            class="text-sm text-danger-600 hover:text-danger-700 dark:text-danger-400"
+                        >
+                            {{ __('Bulk Delete') }}
+                        </button>
+                        <button
+                            type="button"
+                            x-on:click="
+                                let items = Array.from($root.querySelectorAll('[data-ticket-checkbox]:checked')).map((cb) => cb.dataset.ticketName + (cb.dataset.ticketState === 'trashed' ? ' ({{ __('trashed') }})' : ''));
+                                let message = @js($bulkRestoreTicketConfirmTemplate).replace('%COUNT%', selectedTicketIds.length).replace('%ITEMS%', items.join(', '));
+                                if (confirm(message)) {
+                                    $wire.bulkRestoreTicket(selectedTicketIds);
+                                    selectedTicketIds = [];
+                                }
+                            "
+                            class="text-sm text-primary-600 hover:text-primary-700 dark:text-primary-400"
+                        >
+                            {{ __('Bulk Restore') }}
+                        </button>
+                    </div>
+                @endif
 
                 <table class="w-full text-sm border-collapse">
                     <thead>
                         <tr class="text-left border-b border-gray-200 dark:border-gray-700">
+                            @if ($session->isFullAccess())
+                                <th class="py-2 pr-4">
+                                    <input
+                                        type="checkbox"
+                                        x-on:change="selectedTicketIds = $event.target.checked ? @js($ticketsForBulk->pluck('id')->all()) : []"
+                                    />
+                                    <span class="sr-only">{{ __('Select all') }}</span>
+                                </th>
+                            @endif
                             <th class="py-2 pr-4">{{ __('Ticket name') }}</th>
                             <th class="py-2 pr-4">{{ __('Projects') }}</th>
                             <th class="py-2 pr-4">{{ __('Status') }}</th>
@@ -140,11 +240,26 @@
                             <th class="py-2 pr-4">{{ __('Responsible') }}</th>
                             <th class="py-2 pr-4">{{ __('Due date') }}</th>
                             <th class="py-2 pr-4">{{ __('Created at') }}</th>
+                            @if ($session->isFullAccess())
+                                <th class="py-2 pr-4">{{ __('Actions') }}</th>
+                            @endif
                         </tr>
                     </thead>
                     <tbody>
-                        @forelse ($this->tickets() as $ticket)
-                            <tr class="border-b border-gray-100 dark:border-gray-800">
+                        @forelse ($ticketsForBulk as $ticket)
+                            <tr class="border-b border-gray-100 dark:border-gray-800 @if ($ticket->trashed()) opacity-50 @endif">
+                                @if ($session->isFullAccess())
+                                    <td class="py-2 pr-4">
+                                        <input
+                                            type="checkbox"
+                                            data-ticket-checkbox
+                                            data-ticket-name="{{ $ticket->name }}"
+                                            data-ticket-state="{{ $ticket->trashed() ? 'trashed' : 'active' }}"
+                                            value="{{ $ticket->id }}"
+                                            x-model.number="selectedTicketIds"
+                                        />
+                                    </td>
+                                @endif
                                 <td class="py-2 pr-4">
                                     {{ $ticket->code }} —
                                     @if ($session->isSupportAction())
@@ -175,11 +290,13 @@
                                 </td>
                                 <td class="py-2 pr-4">{{ $ticket->project?->name }}</td>
                                 <td class="py-2 pr-4">
-                                    @if ($session->isSupportAction())
-                                        {{-- Support Action only: a confirm() gate sits in front of the
-                                             Livewire call itself (not just a UI affordance) — canceling
-                                             resets the <select> back to the ticket's current status so
-                                             the control never shows a value that was not actually saved. --}}
+                                    @if ($session->isSupportAction() || $session->isFullAccess())
+                                        {{-- Support Action and Full Access both reach changeTicketStatus()
+                                             (Phase 9: change_ticket_status is Full Access's pilot
+                                             capability) — a confirm() gate sits in front of the Livewire
+                                             call itself (not just a UI affordance); canceling resets the
+                                             <select> back to the ticket's current status so the control
+                                             never shows a value that was not actually saved. --}}
                                         <select
                                             x-data
                                             x-on:change="
@@ -319,10 +436,54 @@
                                     @endif
                                 </td>
                                 <td class="py-2 pr-4">{{ $ticket->created_at?->toDateTimeString() }}</td>
+                                @if ($session->isFullAccess())
+                                    <td class="py-2 pr-4">
+                                        {{-- Phase 11: the first destructive Full Access control. Same
+                                             confirm()-gated pattern as every other write control on this
+                                             page, but x-on:click (a button, not a <select>/<input>) —
+                                             mirrors sprintStart()/sprintStop()'s buttons below. The
+                                             confirm message names the ticket and the organization, and
+                                             states the actual, verified impact (soft-delete/restore —
+                                             TicketObserver::deleted()/restored() only invalidate cached
+                                             statistics, confirmed by reading it in full; nothing else is
+                                             claimed here). Delete is offered only for a live ticket,
+                                             Restore only for an already-trashed one, matching how every
+                                             other precondition-gated control on this page (e.g. sprint
+                                             start/stop) only offers the transition the current state
+                                             actually allows. --}}
+                                        @if (! $ticket->trashed())
+                                            <button
+                                                type="button"
+                                                x-data
+                                                x-on:click="
+                                                    if (confirm(@js(__('Delete ticket :ticket from :organization? The ticket will be soft-deleted (moved to trash) and can be restored later.', ['ticket' => $ticket->name, 'organization' => $session->organization->name])))) {
+                                                        $wire.deleteTicket({{ $ticket->id }})
+                                                    }
+                                                "
+                                                class="text-sm text-danger-600 hover:text-danger-700 dark:text-danger-400"
+                                            >
+                                                {{ __('Delete') }}
+                                            </button>
+                                        @else
+                                            <button
+                                                type="button"
+                                                x-data
+                                                x-on:click="
+                                                    if (confirm(@js(__('Restore ticket :ticket in :organization? The ticket will be moved out of trash and become visible again.', ['ticket' => $ticket->name, 'organization' => $session->organization->name])))) {
+                                                        $wire.restoreTicket({{ $ticket->id }})
+                                                    }
+                                                "
+                                                class="text-sm text-primary-600 hover:text-primary-700 dark:text-primary-400"
+                                            >
+                                                {{ __('Restore') }}
+                                            </button>
+                                        @endif
+                                    </td>
+                                @endif
                             </tr>
                         @empty
                             <tr>
-                                <td colspan="8" class="py-4 text-gray-500">{{ __('No tickets yet') }}</td>
+                                <td colspan="{{ $session->isFullAccess() ? 10 : 8 }}" class="py-4 text-gray-500">{{ __('No tickets yet') }}</td>
                             </tr>
                         @endforelse
                     </tbody>
@@ -330,12 +491,58 @@
             </div>
 
             {{-- Sprints --}}
-            <div class="flex flex-col gap-2">
+            @php($sprintsForBulk = $this->sprints())
+            @php($bulkDeleteSprintConfirmTemplate = __('Delete %COUNT% selected sprint(s) from :organization? Items: %ITEMS%. Sprints will be soft-deleted (moved to trash) and can be restored later.', ['organization' => $session->organization->name]))
+            @php($bulkRestoreSprintConfirmTemplate = __('Restore %COUNT% selected sprint(s) in :organization? Items: %ITEMS%. Sprints will be moved out of trash and become visible again. Any linked epic that was also deleted separately will be restored along with its sprint.', ['organization' => $session->organization->name]))
+            <div class="flex flex-col gap-2" x-data="{ selectedSprintIds: [] }">
                 <h3 class="text-base font-medium">{{ __('Sprints') }}</h3>
+
+                @if ($session->isFullAccess())
+                    <div class="flex items-center gap-3">
+                        <span class="text-xs text-gray-500" x-show="selectedSprintIds.length > 0" x-text="selectedSprintIds.length + ' {{ __('selected') }}'"></span>
+                        <button
+                            type="button"
+                            x-on:click="
+                                let items = Array.from($root.querySelectorAll('[data-sprint-checkbox]:checked')).map((cb) => cb.dataset.sprintName + (cb.dataset.sprintState === 'trashed' ? ' ({{ __('trashed') }})' : ''));
+                                let message = @js($bulkDeleteSprintConfirmTemplate).replace('%COUNT%', selectedSprintIds.length).replace('%ITEMS%', items.join(', '));
+                                if (confirm(message)) {
+                                    $wire.bulkDeleteSprint(selectedSprintIds);
+                                    selectedSprintIds = [];
+                                }
+                            "
+                            class="text-sm text-danger-600 hover:text-danger-700 dark:text-danger-400"
+                        >
+                            {{ __('Bulk Delete') }}
+                        </button>
+                        <button
+                            type="button"
+                            x-on:click="
+                                let items = Array.from($root.querySelectorAll('[data-sprint-checkbox]:checked')).map((cb) => cb.dataset.sprintName + (cb.dataset.sprintState === 'trashed' ? ' ({{ __('trashed') }})' : ''));
+                                let message = @js($bulkRestoreSprintConfirmTemplate).replace('%COUNT%', selectedSprintIds.length).replace('%ITEMS%', items.join(', '));
+                                if (confirm(message)) {
+                                    $wire.bulkRestoreSprint(selectedSprintIds);
+                                    selectedSprintIds = [];
+                                }
+                            "
+                            class="text-sm text-primary-600 hover:text-primary-700 dark:text-primary-400"
+                        >
+                            {{ __('Bulk Restore') }}
+                        </button>
+                    </div>
+                @endif
 
                 <table class="w-full text-sm border-collapse">
                     <thead>
                         <tr class="text-left border-b border-gray-200 dark:border-gray-700">
+                            @if ($session->isFullAccess())
+                                <th class="py-2 pr-4">
+                                    <input
+                                        type="checkbox"
+                                        x-on:change="selectedSprintIds = $event.target.checked ? @js($sprintsForBulk->pluck('id')->all()) : []"
+                                    />
+                                    <span class="sr-only">{{ __('Select all') }}</span>
+                                </th>
+                            @endif
                             <th class="py-2 pr-4">{{ __('Sprints') }}</th>
                             <th class="py-2 pr-4">{{ __('Projects') }}</th>
                             <th class="py-2 pr-4">{{ __('Status') }}</th>
@@ -344,12 +551,27 @@
                             <th class="py-2 pr-4">{{ __('Todo') }}</th>
                             <th class="py-2 pr-4">{{ __('In progress') }}</th>
                             <th class="py-2 pr-4">{{ __('Done') }}</th>
+                            @if ($session->isFullAccess())
+                                <th class="py-2 pr-4">{{ __('Actions') }}</th>
+                            @endif
                         </tr>
                     </thead>
                     <tbody>
-                        @forelse ($this->sprints() as $sprint)
+                        @forelse ($sprintsForBulk as $sprint)
                             @php($breakdown = $this->sprintStatusBreakdown($sprint))
                             <tr class="border-b border-gray-100 dark:border-gray-800">
+                                @if ($session->isFullAccess())
+                                    <td class="py-2 pr-4">
+                                        <input
+                                            type="checkbox"
+                                            data-sprint-checkbox
+                                            data-sprint-name="{{ $sprint->name }}"
+                                            data-sprint-state="{{ $sprint->trashed() ? 'trashed' : 'active' }}"
+                                            value="{{ $sprint->id }}"
+                                            x-model.number="selectedSprintIds"
+                                        />
+                                    </td>
+                                @endif
                                 <td class="py-2 pr-4">{{ $sprint->name }}</td>
                                 <td class="py-2 pr-4">{{ $sprint->project?->name }}</td>
                                 <td class="py-2 pr-4">
@@ -447,10 +669,57 @@
                                 <td class="py-2 pr-4">{{ $breakdown['todo'] }}</td>
                                 <td class="py-2 pr-4">{{ $breakdown['in_progress'] }}</td>
                                 <td class="py-2 pr-4">{{ $breakdown['done'] }}</td>
+                                @if ($session->isFullAccess())
+                                    <td class="py-2 pr-4">
+                                        {{-- Phase 12: the second destructive Full Access control, same
+                                             confirm()-gated button pattern as Delete/Restore Ticket
+                                             (Phase 11). deleteSprint() never touches the sprint's mirrored
+                                             epic (App\Observers\SprintObserver has no deleting()/deleted()
+                                             hook, confirmed in full during Phase 12 inspection), so the
+                                             delete confirm names only the sprint and organization.
+                                             restoreSprint() can genuinely cascade-restore the mirrored
+                                             epic if it was independently trashed in the meantime (e.g. via
+                                             the Road Map's own Epic delete) — $sprint->epic is eager
+                                             loaded withTrashed() in sprints() specifically so this message
+                                             can say so truthfully instead of guessing or staying silent
+                                             about a real impact. --}}
+                                        @if (! $sprint->trashed())
+                                            @php($sprintDeleteConfirm = __('Delete sprint :sprint from :organization? The sprint will be soft-deleted (moved to trash) and can be restored later.', ['sprint' => $sprint->name, 'organization' => $session->organization->name]))
+                                            <button
+                                                type="button"
+                                                x-data
+                                                x-on:click="
+                                                    if (confirm(@js($sprintDeleteConfirm))) {
+                                                        $wire.deleteSprint({{ $sprint->id }})
+                                                    }
+                                                "
+                                                class="text-sm text-danger-600 hover:text-danger-700 dark:text-danger-400"
+                                            >
+                                                {{ __('Delete') }}
+                                            </button>
+                                        @else
+                                            @php($sprintRestoreConfirm = ($sprint->epic && $sprint->epic->trashed())
+                                                ? __('Restore sprint :sprint in :organization? The sprint will be moved out of trash and become visible again. Its linked epic :epic, which was also deleted separately, will be restored along with it.', ['sprint' => $sprint->name, 'organization' => $session->organization->name, 'epic' => $sprint->epic->name])
+                                                : __('Restore sprint :sprint in :organization? The sprint will be moved out of trash and become visible again.', ['sprint' => $sprint->name, 'organization' => $session->organization->name]))
+                                            <button
+                                                type="button"
+                                                x-data
+                                                x-on:click="
+                                                    if (confirm(@js($sprintRestoreConfirm))) {
+                                                        $wire.restoreSprint({{ $sprint->id }})
+                                                    }
+                                                "
+                                                class="text-sm text-primary-600 hover:text-primary-700 dark:text-primary-400"
+                                            >
+                                                {{ __('Restore') }}
+                                            </button>
+                                        @endif
+                                    </td>
+                                @endif
                             </tr>
                         @empty
                             <tr>
-                                <td colspan="8" class="py-4 text-gray-500">{{ __('No sprints yet') }}</td>
+                                <td colspan="{{ $session->isFullAccess() ? 10 : 8 }}" class="py-4 text-gray-500">{{ __('No sprints yet') }}</td>
                             </tr>
                         @endforelse
                     </tbody>
