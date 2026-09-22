@@ -119,7 +119,11 @@ class OrganizationDemoSeeder extends Seeder
         $beta = Organization::firstOrCreate(['name' => 'Organization Beta']);
         $gamma = Organization::firstOrCreate(['name' => 'Organization Gamma']);
         // A fourth organization with a single member (its owner) - the
-        // "newly created / empty organization" manual test case.
+        // "newly created organization with only its owner, no teammates
+        // invited yet" manual test case. It still gets its own project below
+        // (a solo Owner exploring the product before inviting anyone is a
+        // realistic state, not an empty one) - what stays deliberately
+        // minimal is the *membership*, not the work.
         $delta = Organization::firstOrCreate(['name' => 'Organization Delta']);
 
         $this->membership($alpha, $owner, 'owner');
@@ -141,6 +145,8 @@ class OrganizationDemoSeeder extends Seeder
         // fallback. Guarded so re-running this seeder never duplicates them.
         $this->seedOrganizationDefaultsOnce($alpha);
         $this->seedOrganizationDefaultsOnce($beta);
+        $this->seedOrganizationDefaultsOnce($gamma);
+        $this->seedOrganizationDefaultsOnce($delta);
 
         $visibleToMember = $this->project(
             $alpha,
@@ -167,9 +173,40 @@ class OrganizationDemoSeeder extends Seeder
             type: 'scrum',
         );
 
+        // multi@example.test's second Owner-ed project, on the Organization
+        // it reaches via the switcher (see "SECOND THING" in the class
+        // docblock). member@example.test is a plain 'member' of Gamma at
+        // the Organization level (see membership() above) and, unlike Alpha's
+        // "Internal HR Tool", IS added as a project member here - the mirror
+        // image of the Alpha case: same account, same Organization role,
+        // opposite visibility outcome, purely because of explicit project
+        // membership either way. That contrast is the point.
+        $gammaProject = $this->project(
+            $gamma,
+            name: 'Gamma - Aplikasi Manajemen Inventori',
+            ticketPrefix: 'GMI',
+            owner: $multi,
+        );
+        $this->addProjectMember($gammaProject, $member);
+
+        // owner@example.test's second Owner-ed project, reached the same way
+        // via the switcher. Deliberately no other project member: Delta only
+        // has one Organization member at all (see the comment above its
+        // firstOrCreate() call), so there is nobody else to add yet - a solo
+        // Owner's own internal tooling project is exactly what a brand-new
+        // Organization realistically looks like before its first invite.
+        $deltaProject = $this->project(
+            $delta,
+            name: 'Delta - Dashboard Analitik Internal',
+            ticketPrefix: 'DAI',
+            owner: $owner,
+        );
+
         $this->populateCompanyWebsite($visibleToMember, $owner, $member);
         $this->populateHrTool($hiddenFromMember, $owner);
         $this->populateMobileApp($betaProject, $multi);
+        $this->populateInventoryApp($gammaProject, $multi, $member);
+        $this->populateInternalDashboard($deltaProject, $owner);
 
         $this->printCheatSheet();
     }
@@ -219,6 +256,42 @@ class OrganizationDemoSeeder extends Seeder
         $this->ticket($project, 'Desain ulang halaman login', status: 'Done', epic: $uiRevamp, sprint: $sprint, responsible: $owner, estimation: 5);
         $this->ticket($project, 'Implementasi dark mode', status: 'In progress', epic: $uiRevamp, sprint: $sprint, responsible: $owner, estimation: 6);
         $this->ticket($project, 'Optimasi waktu loading splash screen', status: 'Todo', epic: $uiRevamp, sprint: $sprint, responsible: $owner, estimation: 3);
+    }
+
+    /**
+     * multi@example.test's second project (Gamma), as fully fleshed out as
+     * Company Website / Mobile App Revamp - see the "mirror image of the
+     * Alpha case" comment in run() for why member@example.test is a project
+     * member here despite not seeing Alpha's HR Tool.
+     */
+    private function populateInventoryApp(Project $project, User $owner, User $member): void
+    {
+        $stockTracking = $this->epic($project, 'Modul Pelacakan Stok Real-time', now(), now()->addWeeks(5));
+        $sprint = $this->sprint($project, 'Sprint 1', startedAt: now()->subDays(3));
+
+        $this->ticket($project, 'Contoh tugas di Organization Gamma');
+        $this->ticket($project, 'Desain skema database produk & stok', status: 'Done', epic: $stockTracking, sprint: $sprint, responsible: $owner, estimation: 6);
+        $this->ticket($project, 'Implementasi fitur pemindaian barcode', status: 'In progress', epic: $stockTracking, sprint: $sprint, responsible: $owner, estimation: 8);
+        $this->ticket($project, 'Uji integrasi dengan sistem kasir (POS)', status: 'Todo', epic: $stockTracking, sprint: $sprint, responsible: $member, estimation: 4);
+    }
+
+    /**
+     * owner@example.test's second project (Delta) - Delta's Organization
+     * membership stays deliberately minimal (only its Owner - see the
+     * comment above its firstOrCreate() call), but that is a statement about
+     * team size, not about work existing: this gives Delta the same
+     * Epic + active Sprint + spread-of-statuses shape as every other demo
+     * project, worked solo by owner@example.test.
+     */
+    private function populateInternalDashboard(Project $project, User $owner): void
+    {
+        $usageReporting = $this->epic($project, 'Modul Laporan Penggunaan Fitur', now(), now()->addWeeks(4));
+        $sprint = $this->sprint($project, 'Sprint 1', startedAt: now()->subDay());
+
+        $this->ticket($project, 'Contoh tugas di Organization Delta');
+        $this->ticket($project, 'Rancang skema tabel event tracking', status: 'Done', epic: $usageReporting, sprint: $sprint, responsible: $owner, estimation: 5);
+        $this->ticket($project, 'Implementasi dashboard ringkasan mingguan', status: 'In progress', epic: $usageReporting, sprint: $sprint, responsible: $owner, estimation: 7);
+        $this->ticket($project, 'Tambahkan filter rentang tanggal pada laporan', status: 'Todo', epic: $usageReporting, sprint: $sprint, responsible: $owner, estimation: 3);
     }
 
     /**
@@ -416,8 +489,8 @@ class OrganizationDemoSeeder extends Seeder
                 [
                     'owner@example.test',
                     'Alpha: Owner · Delta: Owner',
-                    'Semua project Alpha (Company Website, Internal HR Tool) - pindah ke Delta lewat switcher untuk lihat "organisasi kosong"',
-                    'Ya, semua project Alpha (Owner selalu bisa)',
+                    'Semua project Alpha (Company Website, Internal HR Tool) - pindah ke Delta lewat switcher untuk lihat "Dashboard Analitik Internal" (organisasi baru, tim masih cuma dia sendiri)',
+                    'Ya, semua project Alpha & Delta (Owner selalu bisa)',
                 ],
                 [
                     'admin@example.test',
@@ -428,14 +501,14 @@ class OrganizationDemoSeeder extends Seeder
                 [
                     'member@example.test',
                     'Alpha: Member · Gamma: Member',
-                    'HANYA "Company Website" (ditambahkan manual jadi anggota project itu) — TIDAK lihat "Internal HR Tool"',
+                    '"Company Website" (Alpha) dan "Aplikasi Manajemen Inventori" (Gamma) - ditambahkan manual jadi anggota kedua project itu — TIDAK lihat "Internal HR Tool" (Alpha, sengaja tidak ditambahkan)',
                     'Tidak',
                 ],
                 [
                     'multi@example.test',
                     'Beta: Owner · Gamma: Owner · Alpha: Member',
-                    'Di Beta: "Mobile App Revamp" (dia Owner Beta, dan Beta yang otomatis kepilih login) - pindah ke Gamma lewat switcher untuk lihat "organisasi kosong" — Di Alpha: TIDAK ada, cuma "member" biasa di sana',
-                    'Ya, tapi cuma project Beta miliknya',
+                    'Di Beta: "Mobile App Revamp" — Di Gamma: "Aplikasi Manajemen Inventori" (dia Owner keduanya, pindah lewat switcher) — Di Alpha: TIDAK ada, cuma "member" biasa di sana',
+                    'Ya, project Beta & Gamma miliknya',
                 ],
                 [
                     'noorg@example.test',
@@ -448,7 +521,9 @@ class OrganizationDemoSeeder extends Seeder
         $this->command->line('');
         $this->command->comment(
             'Baris "member@example.test" vs "Internal HR Tool" itu BUKAN bug - itu memang inti yang mau ditunjukkan seeder ini: '
-            .'jadi anggota Organization tidak otomatis membuka semua Project di dalamnya, kecuali Owner/Admin.'
+            .'jadi anggota Organization tidak otomatis membuka semua Project di dalamnya, kecuali Owner/Admin. Bandingkan dengan '
+            .'"Aplikasi Manajemen Inventori" di Gamma - member@example.test punya role Organization yang sama persis ("member") di '
+            .'kedua organisasi, tapi DI SANA dia terlihat, karena memang ditambahkan manual sebagai anggota project itu.'
         );
         $this->command->line('');
         $this->command->comment(

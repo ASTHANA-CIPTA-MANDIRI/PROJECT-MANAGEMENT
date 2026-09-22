@@ -41,14 +41,20 @@ class TicketResource extends Resource
      * Living here instead of only on ListTickets::getTableQuery() means any
      * other page or action built on this resource inherits the same scope by
      * default, rather than needing to repeat it.
+     *
+     * Uses Ticket::scopeVisibleTo() (not a hand-rolled owner/responsible/
+     * project clause) specifically because the Fase 6 audit fix on that
+     * scope closes a cross-Organization leak the naive version has: a
+     * ticket's owner_id/responsible_id branch bypasses project membership
+     * entirely, so without the scope's extra Organization-context check, a
+     * user who owns tickets in more than one Organization would see all of
+     * them here regardless of which Organization is currently active.
      */
     public static function getEloquentQuery(): \Illuminate\Database\Eloquent\Builder
     {
         return parent::getEloquentQuery()
             ->withoutGlobalScopes([SoftDeletingScope::class])
-            ->where(fn ($query) => $query->where('owner_id', auth()->user()->id)
-                ->orWhere('responsible_id', auth()->user()->id)
-                ->orWhereHas('project', fn ($query) => $query->accessibleBy(auth()->user())))
+            ->visibleTo(auth()->user())
             ->with([
                 'project',
                 'owner' => fn ($query) => $query->withTicketsAndProjectsCounts(),

@@ -41,11 +41,11 @@ class LatestActivities extends BaseWidget
                 'user' => fn ($query) => $query->withTicketsAndProjectsCounts(),
             ])
             ->limit(5)
-            ->whereHas('ticket', function ($query) {
-                return $query->where('owner_id', auth()->user()->id)
-                    ->orWhere('responsible_id', auth()->user()->id)
-                    ->orWhereHas('project', fn ($query) => $query->accessibleBy(auth()->user()));
-            })
+            // See LatestTickets::getTableQuery() for why this must be
+            // Ticket::scopeVisibleTo() and not a hand-rolled
+            // owner_id/responsible_id/project check: the latter skips
+            // scopeVisibleTo()'s organization-context gate.
+            ->whereHas('ticket', fn ($query) => $query->visibleTo(auth()->user()))
             ->latest();
     }
 

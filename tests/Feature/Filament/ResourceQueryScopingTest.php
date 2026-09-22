@@ -6,8 +6,10 @@ use App\Filament\Resources\ProjectResource;
 use App\Filament\Resources\ProjectResource\Pages\ListProjects;
 use App\Filament\Resources\TicketResource;
 use App\Filament\Resources\TicketResource\Pages\ListTickets;
+use App\Models\Organization;
 use App\Models\Project;
 use App\Models\Ticket;
+use App\Support\OrganizationContext;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Livewire\Livewire;
 use Tests\InteractsWithPermissions;
@@ -66,6 +68,40 @@ class ResourceQueryScopingTest extends TestCase
         $ticket = Ticket::factory()->create(['project_id' => $project->id]);
 
         $this->assertContains($ticket->id, TicketResource::getEloquentQuery()->pluck('id')->all());
+    }
+
+    /**
+     * Reproduces a real cross-Organization leak: an Owner of two
+     * Organizations (e.g. owner@example.test in OrganizationDemoSeeder,
+     * Owner of both Alpha and Delta) has tickets in both, but only the
+     * currently active Organization's tickets should ever appear here.
+     * getEloquentQuery() used to reimplement the owner_id/responsible_id/
+     * project-membership check inline instead of calling
+     * Ticket::scopeVisibleTo(), missing that scope's Organization-boundary
+     * clause (see Ticket::scopeVisibleTo()'s docblock, Fase 6 audit).
+     */
+    public function test_ticket_resource_query_excludes_tickets_from_a_different_organization_the_user_also_owns(): void
+    {
+        $user = $this->userWithPermissions(['List tickets', 'View ticket']);
+        $this->actingAs($user);
+
+        $orgA = Organization::factory()->create();
+        $orgB = Organization::factory()->create();
+        $orgA->users()->attach($user);
+        $orgB->users()->attach($user);
+
+        $projectA = Project::factory()->create(['organization_id' => $orgA->id, 'owner_id' => $user->id]);
+        $ticketA = Ticket::factory()->create(['project_id' => $projectA->id, 'owner_id' => $user->id]);
+
+        $projectB = Project::factory()->create(['organization_id' => $orgB->id, 'owner_id' => $user->id]);
+        $ticketB = Ticket::factory()->create(['project_id' => $projectB->id, 'owner_id' => $user->id]);
+
+        OrganizationContext::switch($user, $orgB->id);
+
+        $ids = TicketResource::getEloquentQuery()->pluck('id')->all();
+
+        $this->assertContains($ticketB->id, $ids);
+        $this->assertNotContains($ticketA->id, $ids);
     }
 
     public function test_the_ticket_list_page_still_hides_the_same_tickets_now_that_the_scope_moved(): void

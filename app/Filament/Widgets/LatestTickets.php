@@ -36,11 +36,15 @@ class LatestTickets extends BaseWidget
                 'responsible' => fn ($query) => $query->withTicketsAndProjectsCounts(),
             ])
             ->limit(5)
-            ->where(function ($query) {
-                return $query->where('owner_id', auth()->user()->id)
-                    ->orWhere('responsible_id', auth()->user()->id)
-                    ->orWhereHas('project', fn ($query) => $query->accessibleBy(auth()->user()));
-            })
+            // visibleTo(), not a hand-rolled owner_id/responsible_id/project
+            // check: the latter (what this used to be) bypasses
+            // Ticket::scopeVisibleTo()'s organization-context gate, so a
+            // ticket the user owns in an Organization they are not currently
+            // acting as leaks into this widget regardless of which
+            // Organization is active (Fase 6 audit fixed this exact gap in
+            // scopeVisibleTo() itself, but this widget had its own inline
+            // copy that never got the fix).
+            ->visibleTo(auth()->user())
             ->latest();
     }
 

@@ -11,6 +11,7 @@ use App\Models\TicketComment;
 use App\Models\TicketHour;
 use App\Models\TicketType;
 use App\Models\User;
+use App\Support\OrganizationContext;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Notification;
 use Livewire\Livewire;
@@ -279,6 +280,82 @@ class WidgetsTest extends TestCase
         Livewire::test(\App\Filament\Widgets\LatestProjects::class)->assertSuccessful();
         Livewire::test(\App\Filament\Widgets\LatestTickets::class)->assertSuccessful();
         Livewire::test(\App\Filament\Widgets\TicketsByType::class)->assertSuccessful();
+    }
+
+    // ------------------------------------ REPRO: cross-organization data leak
+
+    /**
+     * Reproduction for the bug report: an Owner of two Organizations (exactly
+     * $owner@example.test's shape in OrganizationDemoSeeder — Owner of both
+     * Alpha and Delta) switches active context to Organization B, but the
+     * dashboard still shows a ticket that lives in Organization A only
+     * because this user happens to be its owner_id. LatestTickets's own
+     * query reimplements the "owner_id/responsible_id/project member" check
+     * inline instead of calling Ticket::scopeVisibleTo(), and is missing that
+     * scope's second whereHas() clause that gates by the ticket's project's
+     * organization_id vs OrganizationContext::current() — see
+     * Ticket::scopeVisibleTo()'s docblock (Fase 6 audit) for why that second
+     * clause exists at all: ownership bypasses project membership but must
+     * not bypass the organization boundary.
+     */
+    public function test_the_latest_tickets_widget_hides_tickets_from_the_inactive_organization(): void
+    {
+        $orgA = Organization::factory()->create();
+        $orgB = Organization::factory()->create();
+        $orgA->users()->attach($this->user);
+        $orgB->users()->attach($this->user);
+
+        $projectA = Project::factory()->create(['organization_id' => $orgA->id, 'owner_id' => $this->user->id]);
+        Ticket::factory()->create([
+            'project_id' => $projectA->id,
+            'owner_id' => $this->user->id,
+            'name' => 'Tugas Rahasia Organisasi A',
+        ]);
+
+        $projectB = Project::factory()->create(['organization_id' => $orgB->id, 'owner_id' => $this->user->id]);
+        Ticket::factory()->create([
+            'project_id' => $projectB->id,
+            'owner_id' => $this->user->id,
+            'name' => 'Tugas Organisasi B',
+        ]);
+
+        OrganizationContext::switch($this->user, $orgB->id);
+
+        Livewire::test(\App\Filament\Widgets\LatestTickets::class)
+            ->assertSuccessful()
+            ->assertSee('Tugas Organisasi B')
+            ->assertDontSee('Tugas Rahasia Organisasi A');
+    }
+
+    public function test_the_latest_comments_widget_hides_comments_from_the_inactive_organization(): void
+    {
+        $orgA = Organization::factory()->create();
+        $orgB = Organization::factory()->create();
+        $orgA->users()->attach($this->user);
+        $orgB->users()->attach($this->user);
+
+        $projectA = Project::factory()->create(['organization_id' => $orgA->id, 'owner_id' => $this->user->id]);
+        $ticketA = Ticket::factory()->create(['project_id' => $projectA->id, 'owner_id' => $this->user->id]);
+        TicketComment::factory()->create([
+            'ticket_id' => $ticketA->id,
+            'user_id' => $this->user->id,
+            'content' => 'Komentar rahasia Organisasi A',
+        ]);
+
+        $projectB = Project::factory()->create(['organization_id' => $orgB->id, 'owner_id' => $this->user->id]);
+        $ticketB = Ticket::factory()->create(['project_id' => $projectB->id, 'owner_id' => $this->user->id]);
+        TicketComment::factory()->create([
+            'ticket_id' => $ticketB->id,
+            'user_id' => $this->user->id,
+            'content' => 'Komentar Organisasi B',
+        ]);
+
+        OrganizationContext::switch($this->user, $orgB->id);
+
+        Livewire::test(\App\Filament\Widgets\LatestComments::class)
+            ->assertSuccessful()
+            ->assertSee($ticketB->code)
+            ->assertDontSee($ticketA->code);
     }
 
     // -------------------------------------------- widget cache invalidation (M-4)
