@@ -52,8 +52,10 @@ class TicketResource extends Resource
      */
     public static function getEloquentQuery(): \Illuminate\Database\Eloquent\Builder
     {
-        return parent::getEloquentQuery()
-            ->withoutGlobalScopes([SoftDeletingScope::class])
+        /** @var \Illuminate\Database\Eloquent\Builder<\App\Models\Ticket> $query */
+        $query = parent::getEloquentQuery()->withoutGlobalScopes([SoftDeletingScope::class]);
+
+        return $query
             ->visibleTo(auth()->user())
             ->with([
                 'project',
