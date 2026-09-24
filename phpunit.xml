@@ -18,8 +18,13 @@
         </include>
     </coverage>
     <php>
-        <!-- Filament page/widget rendering tests peak above the 128M default. -->
-        <ini name="memory_limit" value="512M"/>
+        <!-- Filament page/widget rendering tests peak above the 128M default;
+             512M itself stopped being enough once code coverage collection
+             (CI's coverage-clover run) is layered on top of a suite this
+             size - repeatable "Allowed memory size of 536870912 bytes
+             exhausted" in BladeCompiler.php across many tests, only under
+             coverage, confirmed 2026-09-24. -->
+        <ini name="memory_limit" value="1G"/>
         <env name="APP_ENV" value="testing"/>
         <env name="BCRYPT_ROUNDS" value="4"/>
         <env name="BROADCAST_DRIVER" value="null"/>
