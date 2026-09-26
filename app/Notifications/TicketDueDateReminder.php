@@ -40,7 +40,7 @@ class TicketDueDateReminder extends Notification implements ShouldQueue
      */
     public function via($notifiable)
     {
-        return ['mail', 'database'];
+        return ['database', 'mail'];
     }
 
     /**

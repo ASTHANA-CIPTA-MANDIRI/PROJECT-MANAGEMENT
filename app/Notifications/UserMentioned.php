@@ -34,7 +34,7 @@ class UserMentioned extends Notification implements ShouldQueue
      */
     public function via($notifiable): array
     {
-        return ['mail', 'database'];
+        return ['database', 'mail'];
     }
 
     /**
