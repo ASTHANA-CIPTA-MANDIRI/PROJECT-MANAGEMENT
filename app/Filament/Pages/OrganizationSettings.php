@@ -643,6 +643,102 @@ class OrganizationSettings extends AuthorizedPage implements HasForms, HasTable
             ->send();
     }
 
+    /**
+     * Owner-only cleanup for a single row, same scoped-lookup-before-acting
+     * discipline as approveFullAccessGrant()/revokeFullAccessGrant() above:
+     * a grant id belonging to a different organization is never found here
+     * at all, and a not-found grant is a silent no-op.
+     *
+     * Deliberately refuses REQUESTED/APPROVED grants — those are still
+     * "alive" (awaiting the Owner's own Approve/Reject, or already
+     * consumable into a session) and have their own dedicated
+     * approve/revoke actions above; this action only ever clears rows
+     * status() already calls consumed/revoked/expired, i.e. grants that can
+     * no longer do anything. Same silent-no-op treatment as an unknown
+     * grant id, rather than surfacing an error for what is really just a
+     * stale button click (e.g. a second browser tab that approved the
+     * grant after this one's row rendered).
+     */
+    public function deleteFullAccessGrant(int $grantId): void
+    {
+        $organization = $this->organization();
+
+        abort_unless($organization !== null, 404);
+        abort_unless($organization->isOwnedBy(auth()->user()), 403);
+
+        $grant = OrganizationSupportAccessGrant::query()
+            ->where('organization_id', $organization->id)
+            ->whereKey($grantId)
+            ->first();
+
+        if ($grant === null) {
+            return;
+        }
+
+        if (in_array($grant->status(), ['requested', 'approved'], true)) {
+            return;
+        }
+
+        $grant->delete();
+
+        Notification::make()
+            ->title(__('Full Access request deleted'))
+            ->success()
+            ->send();
+    }
+
+    /**
+     * Bulk counterpart to deleteFullAccessGrant() above: removes every
+     * finished (consumed/revoked/expired) grant belonging to this
+     * organization in one query. status() itself is derived from timestamp
+     * columns rather than a stored enum (see that model's own docblock), so
+     * "finished" has to be re-expressed here as the equivalent WHERE clause
+     * instead of loading every row into PHP just to call status() on each
+     * one — the four branches below mirror status()'s own branching
+     * exactly: revoked (revoked_at set) OR consumed (consumed_at set) OR
+     * approved-but-its-own-grant-window-lapsed-without-being-consumed OR
+     * never-approved-and-the-request-window-lapsed. REQUESTED/APPROVED
+     * grants still inside their window never match any branch, so they are
+     * never touched by this — same as deleteFullAccessGrant() above, and
+     * never across organizations, since the query is scoped to
+     * $organization->id first.
+     */
+    public function deleteAllFinishedFullAccessGrants(): void
+    {
+        $organization = $this->organization();
+
+        abort_unless($organization !== null, 404);
+        abort_unless($organization->isOwnedBy(auth()->user()), 403);
+
+        OrganizationSupportAccessGrant::query()
+            ->where('organization_id', $organization->id)
+            ->where(function (Builder $query) {
+                $query->whereNotNull('revoked_at')
+                    ->orWhereNotNull('consumed_at')
+                    ->orWhere(function (Builder $query) {
+                        $query->whereNotNull('approved_at')
+                            ->whereNull('consumed_at')
+                            ->whereNull('revoked_at')
+                            ->where(function (Builder $query) {
+                                $query->whereNull('grant_expires_at')
+                                    ->orWhere('grant_expires_at', '<=', now());
+                            });
+                    })
+                    ->orWhere(function (Builder $query) {
+                        $query->whereNull('approved_at')
+                            ->whereNull('consumed_at')
+                            ->whereNull('revoked_at')
+                            ->where('request_expires_at', '<=', now());
+                    });
+            })
+            ->delete();
+
+        Notification::make()
+            ->title(__('Finished Full Access requests deleted'))
+            ->success()
+            ->send();
+    }
+
     protected function getTableColumns(): array
     {
         return [

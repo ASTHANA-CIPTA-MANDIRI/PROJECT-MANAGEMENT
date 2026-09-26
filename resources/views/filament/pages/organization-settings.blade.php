@@ -51,10 +51,36 @@
                  method's own docblock on the Filament page class. --}}
             @if ($this->canApproveFullAccess())
                 @php($fullAccessGrants = $this->fullAccessGrants())
+                @php($finishedFullAccessGrantStatuses = ['consumed', 'revoked', 'expired'])
+                @php($hasFinishedFullAccessGrants = $fullAccessGrants->contains(fn ($grant) => in_array($grant->status(), $finishedFullAccessGrantStatuses, true)))
 
                 @if ($fullAccessGrants->isNotEmpty())
                     <div class="flex flex-col gap-2">
-                        <h3 class="text-base font-medium">{{ __('Full Access requests') }}</h3>
+                        <div class="flex items-center justify-between gap-4">
+                            <h3 class="text-base font-medium">{{ __('Full Access requests') }}</h3>
+
+                            @if ($hasFinishedFullAccessGrants)
+                                {{-- Same confirm()-gated Livewire call pattern as the destructive
+                                     controls on organization-support-view.blade.php (Delete/Restore
+                                     Project) — bulk-deletes every consumed/revoked/expired grant for
+                                     this organization in one call, never the still-active
+                                     requested/approved ones (see deleteAllFinishedFullAccessGrants()'s
+                                     own docblock). --}}
+                                @php($deleteAllFinishedConfirm = __('Delete all finished Full Access requests (consumed, revoked, or expired)? Requests still awaiting a decision are never affected.'))
+                                <button
+                                    type="button"
+                                    x-data
+                                    x-on:click="
+                                        if (confirm(@js($deleteAllFinishedConfirm))) {
+                                            $wire.deleteAllFinishedFullAccessGrants()
+                                        }
+                                    "
+                                    class="text-sm text-danger-600 hover:text-danger-700 dark:text-danger-400"
+                                >
+                                    {{ __('Delete all finished') }}
+                                </button>
+                            @endif
+                        </div>
 
                         <div class="divide-y divide-gray-100 dark:divide-gray-700 border border-gray-100 dark:border-gray-700 rounded-lg">
                             @foreach ($fullAccessGrants as $grant)
@@ -132,6 +158,26 @@
                                             <x-filament::button size="sm" color="danger" wire:click="revokeFullAccessGrant({{ $grant->id }})">
                                                 {{ __('Revoke') }}
                                             </x-filament::button>
+                                        </div>
+                                    @elseif (in_array($status, $finishedFullAccessGrantStatuses, true))
+                                        {{-- Only ever shown for consumed/revoked/expired rows —
+                                             deleteFullAccessGrant() itself silently refuses
+                                             requested/approved grants too, this just keeps the
+                                             button from appearing on a row it would no-op on. --}}
+                                        <div class="flex gap-2">
+                                            @php($deleteGrantConfirm = __('Delete this Full Access request? This cannot be undone.'))
+                                            <button
+                                                type="button"
+                                                x-data
+                                                x-on:click="
+                                                    if (confirm(@js($deleteGrantConfirm))) {
+                                                        $wire.deleteFullAccessGrant({{ $grant->id }})
+                                                    }
+                                                "
+                                                class="text-sm text-danger-600 hover:text-danger-700 dark:text-danger-400"
+                                            >
+                                                {{ __('Delete') }}
+                                            </button>
                                         </div>
                                     @endif
                                 </div>

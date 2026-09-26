@@ -7,9 +7,11 @@ use App\Models\OrganizationSupportAccessGrant;
 use App\Models\OrganizationSupportSession;
 use App\Models\Role;
 use App\Models\User;
+use App\Notifications\FullAccessRequested;
 use App\Support\SupportSessionContext;
 use Illuminate\Database\Eloquent\ModelNotFoundException;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\Notification;
 use Symfony\Component\HttpKernel\Exception\HttpException;
 use Tests\TestCase;
 
@@ -465,6 +467,51 @@ class SupportSessionContextTest extends TestCase
         $this->assertNull($grant->approved_at);
         $this->assertNull($grant->consumed_at);
         $this->assertNull($grant->revoked_at);
+    }
+
+    /**
+     * The Owner is the only actor who can approve/reject a Full Access
+     * request (OrganizationSettings::approveFullAccessGrant()/
+     * revokeFullAccessGrant()), so they are the only one who should be
+     * notified — never an Admin/Member of the same organization, and never
+     * the requesting Super Admin themselves.
+     */
+    public function test_request_full_access_notifies_the_organizations_owner(): void
+    {
+        Notification::fake();
+
+        $admin = $this->superAdmin();
+        $organization = Organization::factory()->create();
+        $owner = $this->owner($organization);
+        $otherMember = User::factory()->create();
+        $organization->users()->attach($otherMember->id, ['role' => 'member']);
+
+        SupportSessionContext::requestFullAccess($admin, $organization, 'Need to fix broken data');
+
+        Notification::assertSentTo($owner, FullAccessRequested::class);
+        Notification::assertNotSentTo($otherMember, FullAccessRequested::class);
+        Notification::assertNotSentTo($admin, FullAccessRequested::class);
+    }
+
+    /**
+     * An organization always has at least one Owner (see OrganizationPolicy
+     * — the same invariant OrganizationFullAccessApprovalTest relies on),
+     * but every Owner it has should hear about a Full Access request, not
+     * just whichever one happens to be first.
+     */
+    public function test_request_full_access_notifies_every_owner_when_there_is_more_than_one(): void
+    {
+        Notification::fake();
+
+        $admin = $this->superAdmin();
+        $organization = Organization::factory()->create();
+        $firstOwner = $this->owner($organization);
+        $secondOwner = $this->owner($organization);
+
+        SupportSessionContext::requestFullAccess($admin, $organization, 'Reason');
+
+        Notification::assertSentTo($firstOwner, FullAccessRequested::class);
+        Notification::assertSentTo($secondOwner, FullAccessRequested::class);
     }
 
     public function test_request_full_access_is_denied_for_a_non_super_admin(): void

@@ -6,7 +6,9 @@ use App\Models\Organization;
 use App\Models\OrganizationSupportAccessGrant;
 use App\Models\OrganizationSupportSession;
 use App\Models\User;
+use App\Notifications\FullAccessRequested;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Notification;
 
 /**
  * The single place that starts, resolves, and ends a Super Admin's
@@ -258,7 +260,7 @@ final class SupportSessionContext
     {
         abort_unless($superAdmin->isSuperAdmin(), 403);
 
-        return DB::transaction(function () use ($superAdmin, $organization, $reason) {
+        $grant = DB::transaction(function () use ($superAdmin, $organization, $reason) {
             $hasActiveGrant = OrganizationSupportAccessGrant::query()
                 ->where('organization_id', $organization->id)
                 ->whereNull('consumed_at')
@@ -285,6 +287,20 @@ final class SupportSessionContext
                 'request_expires_at' => now()->addHours(self::FULL_ACCESS_REQUEST_WINDOW_HOURS),
             ]);
         }, 3);
+
+        // Notified only once the transaction above has actually committed
+        // (we are past DB::transaction() here, not inside it) — the
+        // notification's own afterCommit=true additionally protects against
+        // any *ambient* outer transaction a caller might be running this
+        // inside of, the same belt-and-suspenders discipline
+        // FullAccessRequested borrows from TicketCreated. Every Owner is
+        // notified (an organization always has at least one — see
+        // OrganizationPolicy), never just one arbitrarily picked Owner.
+        $owners = $organization->users()->wherePivot('role', 'owner')->get();
+
+        Notification::send($owners, new FullAccessRequested($grant));
+
+        return $grant;
     }
 
     /**

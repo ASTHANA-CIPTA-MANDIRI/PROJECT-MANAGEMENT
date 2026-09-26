@@ -4,6 +4,7 @@ namespace Tests\Feature\Organization;
 
 use App\Filament\Pages\OrganizationSettings;
 use App\Models\Organization;
+use App\Models\OrganizationSupportAccessGrant;
 use App\Models\Role;
 use App\Models\User;
 use App\Support\SupportSessionContext;
@@ -316,5 +317,206 @@ class OrganizationFullAccessApprovalTest extends TestCase
 
         $this->assertArrayNotHasKey('scope', $grant->getAttributes());
         $this->assertArrayNotHasKey('capability', $grant->getAttributes());
+    }
+
+    // ------------------------------------------------- deleteFullAccessGrant()
+
+    /**
+     * A REQUESTED grant is still awaiting the Owner's own decision — it has
+     * its own Approve/Reject controls (approveFullAccessGrant()/
+     * revokeFullAccessGrant()) and must not be removable through the
+     * cleanup action instead.
+     */
+    public function test_owner_cannot_delete_a_requested_full_access_grant(): void
+    {
+        $organization = Organization::factory()->create();
+        $owner = $this->panelUser();
+        $organization->users()->attach($owner->id, ['role' => 'owner']);
+        $admin = $this->superAdmin();
+
+        $grant = SupportSessionContext::requestFullAccess($admin, $organization, 'Reason');
+
+        $this->actingAs($owner);
+
+        Livewire::test(OrganizationSettings::class)->call('deleteFullAccessGrant', $grant->id);
+
+        $this->assertNotNull($grant->fresh());
+        $this->assertSame('requested', $grant->fresh()->status());
+    }
+
+    /**
+     * An APPROVED grant is still consumable into a real session — same
+     * "still alive, do not let cleanup touch it" reasoning as the REQUESTED
+     * case above.
+     */
+    public function test_owner_cannot_delete_an_approved_full_access_grant(): void
+    {
+        $organization = Organization::factory()->create();
+        $owner = $this->panelUser();
+        $organization->users()->attach($owner->id, ['role' => 'owner']);
+        $admin = $this->superAdmin();
+
+        $grant = SupportSessionContext::requestFullAccess($admin, $organization, 'Reason');
+        SupportSessionContext::approveFullAccessGrant($owner, $grant);
+
+        $this->actingAs($owner);
+
+        Livewire::test(OrganizationSettings::class)->call('deleteFullAccessGrant', $grant->id);
+
+        $this->assertNotNull($grant->fresh());
+        $this->assertSame('approved', $grant->fresh()->status());
+    }
+
+    public function test_owner_can_delete_a_consumed_full_access_grant(): void
+    {
+        $organization = Organization::factory()->create();
+        $owner = $this->panelUser();
+        $organization->users()->attach($owner->id, ['role' => 'owner']);
+        $admin = $this->superAdmin();
+
+        $grant = SupportSessionContext::requestFullAccess($admin, $organization, 'Reason');
+        $grant = SupportSessionContext::approveFullAccessGrant($owner, $grant);
+        SupportSessionContext::consumeFullAccessGrant($admin, $grant);
+
+        $this->actingAs($owner);
+
+        Livewire::test(OrganizationSettings::class)->call('deleteFullAccessGrant', $grant->id);
+
+        $this->assertNull(OrganizationSupportAccessGrant::find($grant->id));
+    }
+
+    public function test_owner_can_delete_a_revoked_full_access_grant(): void
+    {
+        $organization = Organization::factory()->create();
+        $owner = $this->panelUser();
+        $organization->users()->attach($owner->id, ['role' => 'owner']);
+        $admin = $this->superAdmin();
+
+        $grant = SupportSessionContext::requestFullAccess($admin, $organization, 'Reason');
+        SupportSessionContext::revokeFullAccessGrant($owner, $grant);
+
+        $this->actingAs($owner);
+
+        Livewire::test(OrganizationSettings::class)->call('deleteFullAccessGrant', $grant->id);
+
+        $this->assertNull(OrganizationSupportAccessGrant::find($grant->id));
+    }
+
+    public function test_owner_can_delete_a_grant_that_expired_without_ever_being_approved(): void
+    {
+        $organization = Organization::factory()->create();
+        $owner = $this->panelUser();
+        $organization->users()->attach($owner->id, ['role' => 'owner']);
+        $admin = $this->superAdmin();
+
+        $grant = SupportSessionContext::requestFullAccess($admin, $organization, 'Reason');
+
+        $this->travel(25)->hours();
+
+        $this->actingAs($owner);
+
+        Livewire::test(OrganizationSettings::class)->call('deleteFullAccessGrant', $grant->id);
+
+        $this->assertNull(OrganizationSupportAccessGrant::find($grant->id));
+    }
+
+    public function test_owner_can_delete_a_grant_that_was_approved_but_expired_before_being_consumed(): void
+    {
+        $organization = Organization::factory()->create();
+        $owner = $this->panelUser();
+        $organization->users()->attach($owner->id, ['role' => 'owner']);
+        $admin = $this->superAdmin();
+
+        $grant = SupportSessionContext::requestFullAccess($admin, $organization, 'Reason');
+        SupportSessionContext::approveFullAccessGrant($owner, $grant);
+
+        $this->travel(31)->minutes();
+
+        $this->actingAs($owner);
+
+        Livewire::test(OrganizationSettings::class)->call('deleteFullAccessGrant', $grant->id);
+
+        $this->assertNull(OrganizationSupportAccessGrant::find($grant->id));
+    }
+
+    /**
+     * Same cross-organization protection as approveFullAccessGrant()/
+     * revokeFullAccessGrant() above: the lookup is scoped to Owner B's own
+     * current organization, so Organization A's grant is never found at
+     * all, even though it is in a deletable (revoked) state.
+     */
+    public function test_owner_of_organization_b_cannot_delete_a_grant_belonging_to_organization_a(): void
+    {
+        $organizationA = Organization::factory()->create();
+        $organizationB = Organization::factory()->create();
+        $ownerA = $this->panelUser();
+        $ownerB = $this->panelUser();
+        $organizationA->users()->attach($ownerA->id, ['role' => 'owner']);
+        $organizationB->users()->attach($ownerB->id, ['role' => 'owner']);
+        $admin = $this->superAdmin();
+
+        $grantA = SupportSessionContext::requestFullAccess($admin, $organizationA, 'Reason');
+        SupportSessionContext::revokeFullAccessGrant($admin, $grantA);
+
+        $this->actingAs($ownerB);
+
+        Livewire::test(OrganizationSettings::class)->call('deleteFullAccessGrant', $grantA->id);
+
+        $this->assertNotNull(OrganizationSupportAccessGrant::find($grantA->id));
+    }
+
+    // ------------------------------------------------- deleteAllFinishedFullAccessGrants()
+
+    public function test_delete_all_finished_removes_finished_grants_but_leaves_active_ones(): void
+    {
+        $organization = Organization::factory()->create();
+        $owner = $this->panelUser();
+        $organization->users()->attach($owner->id, ['role' => 'owner']);
+        $admin = $this->superAdmin();
+
+        $consumedGrant = SupportSessionContext::requestFullAccess($admin, $organization, 'Consumed');
+        $consumedGrant = SupportSessionContext::approveFullAccessGrant($owner, $consumedGrant);
+        SupportSessionContext::consumeFullAccessGrant($admin, $consumedGrant);
+
+        $revokedGrant = SupportSessionContext::requestFullAccess($admin, $organization, 'Revoked');
+        SupportSessionContext::revokeFullAccessGrant($owner, $revokedGrant);
+
+        $activeGrant = SupportSessionContext::requestFullAccess($admin, $organization, 'Still requested');
+
+        $this->actingAs($owner);
+
+        Livewire::test(OrganizationSettings::class)->call('deleteAllFinishedFullAccessGrants');
+
+        $this->assertNull(OrganizationSupportAccessGrant::find($consumedGrant->id));
+        $this->assertNull(OrganizationSupportAccessGrant::find($revokedGrant->id));
+        $this->assertNotNull(OrganizationSupportAccessGrant::find($activeGrant->id));
+        $this->assertSame('requested', $activeGrant->fresh()->status());
+    }
+
+    /**
+     * The bulk cleanup is scoped to $this->organization()->id at the query
+     * level (never Model::all() filtered in PHP) — same discipline as
+     * fullAccessGrants()/approveFullAccessGrant() above — so a finished
+     * grant belonging to a different organization is never touched by
+     * another organization's Owner running this action.
+     */
+    public function test_delete_all_finished_does_not_touch_another_organizations_grants(): void
+    {
+        $organizationA = Organization::factory()->create();
+        $organizationB = Organization::factory()->create();
+        $ownerA = $this->panelUser();
+        $ownerB = $this->panelUser();
+        $organizationA->users()->attach($ownerA->id, ['role' => 'owner']);
+        $organizationB->users()->attach($ownerB->id, ['role' => 'owner']);
+        $admin = $this->superAdmin();
+
+        $grantA = SupportSessionContext::requestFullAccess($admin, $organizationA, 'Reason');
+        SupportSessionContext::revokeFullAccessGrant($admin, $grantA);
+
+        $this->actingAs($ownerB);
+
+        Livewire::test(OrganizationSettings::class)->call('deleteAllFinishedFullAccessGrants');
+
+        $this->assertNotNull(OrganizationSupportAccessGrant::find($grantA->id));
     }
 }
