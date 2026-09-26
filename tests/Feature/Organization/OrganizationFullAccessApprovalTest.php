@@ -465,6 +465,55 @@ class OrganizationFullAccessApprovalTest extends TestCase
         $this->assertNotNull(OrganizationSupportAccessGrant::find($grantA->id));
     }
 
+    // ------------------------------------------------- notification link targets the right Organization
+
+    /**
+     * App\Notifications\FullAccessRequested's "Review request" / "view"
+     * links carry the grant's Organization id as ?organization=. Before
+     * that fix, OrganizationSettings always rendered whichever Organization
+     * happened to be active in OrganizationContext (the first one attached,
+     * absent a session override) — for an Owner of more than one
+     * Organization, that is not necessarily the one the request is about.
+     * Attaching Organization B first makes it the default active context,
+     * so this proves the query param actually switches to Organization A
+     * rather than the page silently rendering B.
+     */
+    public function test_owner_of_two_organizations_lands_on_the_grants_organization_via_query_param(): void
+    {
+        $organizationA = Organization::factory()->create(['name' => 'Organization A']);
+        $organizationB = Organization::factory()->create(['name' => 'Organization B']);
+        $owner = $this->panelUser();
+        $organizationB->users()->attach($owner->id, ['role' => 'owner']);
+        $organizationA->users()->attach($owner->id, ['role' => 'owner']);
+
+        $this->actingAs($owner);
+
+        $this->get(OrganizationSettings::getUrl(['organization' => $organizationA->id]))
+            ->assertSuccessful()
+            ->assertSee('Organization A');
+    }
+
+    /**
+     * A crafted/stale ?organization= id the current user does not actually
+     * belong to must never switch the active context — OrganizationContext
+     * ::switch() re-verifies real membership and silently no-ops, so the
+     * page keeps rendering whatever was already active instead of erroring
+     * or leaking another organization's data.
+     */
+    public function test_an_organization_id_the_user_does_not_belong_to_is_ignored(): void
+    {
+        $organizationA = Organization::factory()->create(['name' => 'Organization A']);
+        $organizationB = Organization::factory()->create(['name' => 'Organization B']);
+        $owner = $this->panelUser();
+        $organizationB->users()->attach($owner->id, ['role' => 'owner']);
+
+        $this->actingAs($owner);
+
+        $this->get(OrganizationSettings::getUrl(['organization' => $organizationA->id]))
+            ->assertSuccessful()
+            ->assertSee('Organization B');
+    }
+
     // ------------------------------------------------- deleteAllFinishedFullAccessGrants()
 
     public function test_delete_all_finished_removes_finished_grants_but_leaves_active_ones(): void

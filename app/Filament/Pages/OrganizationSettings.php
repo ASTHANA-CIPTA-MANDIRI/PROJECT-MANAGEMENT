@@ -86,8 +86,23 @@ class OrganizationSettings extends AuthorizedPage implements HasForms, HasTable
         return $this->currentOrganization ??= OrganizationContext::current(auth()->user());
     }
 
+    /**
+     * ?organization=<id> (sent by App\Notifications\FullAccessRequested's
+     * links, since an Owner in more than one Organization otherwise always
+     * lands on whichever one OrganizationContext currently has active, not
+     * necessarily the one the notification is about) switches the active
+     * context first. Same discipline as RoadMap's ?p= project id: the
+     * posted id is never trusted on its own - OrganizationContext::switch()
+     * re-verifies real membership and silently no-ops if the current user
+     * isn't actually a member of it, leaving the existing context in place
+     * rather than erroring out.
+     */
     public function mount(): void
     {
+        if ($organizationId = request()->get('organization')) {
+            OrganizationContext::switch(auth()->user(), (int) $organizationId);
+        }
+
         abort_unless($this->organization() !== null, 404);
 
         $this->form->fill([

@@ -23,6 +23,16 @@ use Illuminate\Notifications\Notification;
  * Same shape as App\Notifications\TicketCreated: queued, mail+database,
  * afterCommit so the grant row this reads from is guaranteed already
  * committed by the time the queued job actually runs.
+ *
+ * Both links below carry the target Organization's id as an explicit
+ * ?organization= query parameter, not a bare route() call: an Owner can
+ * belong to more than one Organization, and OrganizationSettings otherwise
+ * always renders whichever one is currently active in
+ * App\Support\OrganizationContext (session-based), which is not necessarily
+ * this grant's Organization. OrganizationSettings::mount() re-verifies real
+ * membership before switching context on that id (same discipline as
+ * RoadMap's ?p= project id) - the value is never trusted just because it
+ * came from a notification link.
  */
 class FullAccessRequested extends Notification implements ShouldQueue
 {
@@ -57,7 +67,7 @@ class FullAccessRequested extends Notification implements ShouldQueue
             ->line(__('Requested by :name', ['name' => $this->grant->requester->name]))
             ->line(__('Reason').': '.$this->grant->reason)
             ->line(__('Expires').': '.$this->grant->request_expires_at->format('d M Y H:i'))
-            ->action(__('Review request'), route('filament.pages.organization'));
+            ->action(__('Review request'), route('filament.pages.organization', ['organization' => $this->grant->organization_id]));
     }
 
     public function toDatabase(User $notifiable): array
@@ -70,7 +80,7 @@ class FullAccessRequested extends Notification implements ShouldQueue
                 Action::make('view')
                     ->link()
                     ->icon('heroicon-s-eye')
-                    ->url(route('filament.pages.organization')),
+                    ->url(route('filament.pages.organization', ['organization' => $this->grant->organization_id])),
             ])
             ->getDatabaseMessage();
     }
