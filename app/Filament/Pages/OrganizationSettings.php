@@ -727,31 +727,69 @@ class OrganizationSettings extends AuthorizedPage implements HasForms, HasTable
 
         OrganizationSupportAccessGrant::query()
             ->where('organization_id', $organization->id)
-            ->where(function (Builder $query) {
-                $query->whereNotNull('revoked_at')
-                    ->orWhereNotNull('consumed_at')
-                    ->orWhere(function (Builder $query) {
-                        $query->whereNotNull('approved_at')
-                            ->whereNull('consumed_at')
-                            ->whereNull('revoked_at')
-                            ->where(function (Builder $query) {
-                                $query->whereNull('grant_expires_at')
-                                    ->orWhere('grant_expires_at', '<=', now());
-                            });
-                    })
-                    ->orWhere(function (Builder $query) {
-                        $query->whereNull('approved_at')
-                            ->whereNull('consumed_at')
-                            ->whereNull('revoked_at')
-                            ->where('request_expires_at', '<=', now());
-                    });
-            })
+            ->where(fn (Builder $query) => $this->scopeFinishedFullAccessGrants($query))
             ->delete();
 
         Notification::make()
             ->title(__('Finished Full Access requests deleted'))
             ->success()
             ->send();
+    }
+
+    /**
+     * The exact same "finished" WHERE clause deleteAllFinishedFullAccessGrants()
+     * deletes by, factored out so both call sites can never drift apart —
+     * see that method's own docblock for what each branch means.
+     */
+    private function scopeFinishedFullAccessGrants(Builder $query): Builder
+    {
+        return $query
+            ->whereNotNull('revoked_at')
+            ->orWhereNotNull('consumed_at')
+            ->orWhere(function (Builder $query) {
+                $query->whereNotNull('approved_at')
+                    ->whereNull('consumed_at')
+                    ->whereNull('revoked_at')
+                    ->where(function (Builder $query) {
+                        $query->whereNull('grant_expires_at')
+                            ->orWhere('grant_expires_at', '<=', now());
+                    });
+            })
+            ->orWhere(function (Builder $query) {
+                $query->whereNull('approved_at')
+                    ->whereNull('consumed_at')
+                    ->whereNull('revoked_at')
+                    ->where('request_expires_at', '<=', now());
+            });
+    }
+
+    /**
+     * Whether this organization has AT LEAST ONE finished
+     * (consumed/revoked/expired) grant, independent of fullAccessGrants()'s
+     * own ->limit(20) — a plain ->contains() over that limited list is what
+     * the "Delete all finished" button used to gate on, which meant an
+     * organization with more than 20 grants where the 20 newest were all
+     * still requested/approved never showed the button at all, even though
+     * older finished grants existed and deleteAllFinishedFullAccessGrants()
+     * (no limit) would happily have deleted them. This runs its own
+     * unlimited exists() query, scoped to $organization->id exactly like
+     * every other lookup on this page, using the identical WHERE clause
+     * deleteAllFinishedFullAccessGrants() deletes by (scopeFinishedFullAccessGrants()
+     * above) so "the button shows" and "the button actually finds something
+     * to delete" can never disagree.
+     */
+    public function hasFinishedFullAccessGrants(): bool
+    {
+        $organization = $this->organization();
+
+        if ($organization === null) {
+            return false;
+        }
+
+        return OrganizationSupportAccessGrant::query()
+            ->where('organization_id', $organization->id)
+            ->where(fn (Builder $query) => $this->scopeFinishedFullAccessGrants($query))
+            ->exists();
     }
 
     protected function getTableColumns(): array

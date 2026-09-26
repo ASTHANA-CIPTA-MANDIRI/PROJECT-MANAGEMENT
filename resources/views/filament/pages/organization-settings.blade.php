@@ -52,7 +52,13 @@
             @if ($this->canApproveFullAccess())
                 @php($fullAccessGrants = $this->fullAccessGrants())
                 @php($finishedFullAccessGrantStatuses = ['consumed', 'revoked', 'expired'])
-                @php($hasFinishedFullAccessGrants = $fullAccessGrants->contains(fn ($grant) => in_array($grant->status(), $finishedFullAccessGrantStatuses, true)))
+                {{-- Deliberately NOT $fullAccessGrants->contains(...): that collection is
+                     capped at 20 rows (fullAccessGrants()'s own ->limit(20)), so an
+                     organization with more than 20 grants where the 20 newest are all
+                     still requested/approved would never show this button even though
+                     older finished grants exist. hasFinishedFullAccessGrants() runs its
+                     own unlimited query instead — see its docblock on the Page class. --}}
+                @php($hasFinishedFullAccessGrants = $this->hasFinishedFullAccessGrants())
 
                 @if ($fullAccessGrants->isNotEmpty())
                     <div class="flex flex-col gap-2">

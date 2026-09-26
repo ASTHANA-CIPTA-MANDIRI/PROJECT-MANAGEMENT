@@ -568,4 +568,62 @@ class OrganizationFullAccessApprovalTest extends TestCase
 
         $this->assertNotNull(OrganizationSupportAccessGrant::find($grantA->id));
     }
+
+    /**
+     * Regression test for a real bug: fullAccessGrants() caps its list at
+     * the 20 newest rows (->limit(20)), but the Blade view used to decide
+     * whether to show "Delete all finished" by calling ->contains() on that
+     * SAME capped collection. With more than 20 grants where the 20 newest
+     * are all still "requested" and an older (21st+) grant is already
+     * finished, the button never appeared — the Owner had no way to know a
+     * finished grant existed at all, even though
+     * deleteAllFinishedFullAccessGrants() itself has no limit and would
+     * have deleted it. hasFinishedFullAccessGrants() fixes this by running
+     * its own unlimited exists() query instead of trusting the capped list.
+     */
+    public function test_has_finished_full_access_grants_is_true_even_when_the_finished_grant_is_outside_the_top_20(): void
+    {
+        $organization = Organization::factory()->create();
+        $owner = $this->panelUser();
+        $organization->users()->attach($owner->id, ['role' => 'owner']);
+        $admin = $this->superAdmin();
+
+        // The one finished grant: oldest of all (requested 30 days ago,
+        // revoked 29 days ago), so it sorts well outside fullAccessGrants()'s
+        // top 20 newest-first rows.
+        $oldFinishedGrant = OrganizationSupportAccessGrant::create([
+            'organization_id' => $organization->id,
+            'requested_by' => $admin->id,
+            'reason' => 'Old, already handled',
+            'requested_at' => now()->subDays(30),
+            'request_expires_at' => now()->subDays(30)->addHours(24),
+            'revoked_by' => $owner->id,
+            'revoked_at' => now()->subDays(29),
+        ]);
+
+        // 20 still-active ("requested") grants, all newer than the finished
+        // one above, so they fill up fullAccessGrants()'s entire limit(20)
+        // and push the finished grant out of that list.
+        for ($i = 0; $i < 20; $i++) {
+            OrganizationSupportAccessGrant::create([
+                'organization_id' => $organization->id,
+                'requested_by' => $admin->id,
+                'reason' => "Still pending #{$i}",
+                'requested_at' => now()->subMinutes(20 - $i),
+                'request_expires_at' => now()->addHours(24),
+            ]);
+        }
+
+        $this->actingAs($owner);
+
+        $component = Livewire::test(OrganizationSettings::class);
+
+        $grants = $component->instance()->fullAccessGrants();
+        $this->assertCount(20, $grants);
+        $this->assertTrue($grants->every(fn ($grant) => $grant->status() === 'requested'));
+        $this->assertFalse($grants->contains(fn ($grant) => $grant->is($oldFinishedGrant)));
+
+        $this->assertTrue($component->instance()->hasFinishedFullAccessGrants());
+        $component->assertSee(__('Delete all finished'));
+    }
 }
