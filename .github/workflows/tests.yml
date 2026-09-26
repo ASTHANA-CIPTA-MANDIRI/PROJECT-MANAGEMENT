@@ -140,8 +140,7 @@ jobs:
         # pulled in by Filament 2, unavoidable until the Filament 3 upgrade)
         # alongside any advisories. The gate step below makes the actual
         # pass/fail decision, so this step is allowed to exit non-zero.
-        continue-on-error: true
-        run: composer audit --abandoned=report
+        run: composer audit --abandoned=report || true
 
       - name: Composer audit gate (fail on new/unaccepted advisories)
         run: |
@@ -174,8 +173,7 @@ jobs:
 
       - name: npm audit (human-readable log)
         # Informational only, same reasoning as the composer log step above.
-        continue-on-error: true
-        run: npm audit
+        run: npm audit || true
 
       - name: npm audit gate (fail on new/unaccepted advisories)
         run: |
