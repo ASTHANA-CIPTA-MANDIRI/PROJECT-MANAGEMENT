@@ -1,10 +1,11 @@
 name: Deploy (staging)
 
-# Auto-deploys to staging on every push to the main branch. Configure branch
-# protection so this only runs after the CI workflow passes.
+# Manual deploy to staging. The auto-deploy-on-push-to-main trigger is
+# paused until a real staging server exists (see Settings -> Environments
+# -> staging) -- until then there is nothing to SSH into and every push to
+# main would fail. Re-add `push: branches: [main]` once the server is up.
+# Configure branch protection so this only runs after the CI workflow passes.
 on:
-  push:
-    branches: [ main ]
   workflow_dispatch:
 
 concurrency:
