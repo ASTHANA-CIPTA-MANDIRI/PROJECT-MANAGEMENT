@@ -1,9 +1,10 @@
 name: Database backup
 
-# Nightly database backup. Also runnable on demand.
+# On-demand database backup. The nightly schedule is paused until the
+# "production" GitHub Environment exists (see Settings -> Environments) --
+# until then this job has no server to reach and would just fail every
+# night. Re-add `schedule: - cron: '0 2 * * *'` once production is live.
 on:
-  schedule:
-    - cron: '0 2 * * *'   # every day at 02:00 UTC
   workflow_dispatch:
 
 concurrency:
