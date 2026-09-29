@@ -5,7 +5,7 @@
 # supervisor. Shared by the dependency stage and the final image so the PHP
 # installation happens exactly once.
 # =============================================================================
-FROM debian:bullseye-slim AS base
+FROM debian:bookworm-slim AS base
 
 ENV DEBIAN_FRONTEND=noninteractive
 
@@ -13,7 +13,7 @@ RUN apt-get update -y && \
     apt-get install -y --no-install-recommends ca-certificates gnupg2 wget && \
     mkdir -p /etc/apt/keyrings && \
     wget -qO /etc/apt/keyrings/sury-php.gpg https://packages.sury.org/php/apt.gpg && \
-    echo "deb [signed-by=/etc/apt/keyrings/sury-php.gpg] https://packages.sury.org/php/ bullseye main" \
+    echo "deb [signed-by=/etc/apt/keyrings/sury-php.gpg] https://packages.sury.org/php/ bookworm main" \
         > /etc/apt/sources.list.d/sury-php.list && \
     apt-get update -y && \
     apt-get install -y --no-install-recommends \
