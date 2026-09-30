@@ -33,13 +33,15 @@ class TrialGateTest extends TestCase
     }
 
     /**
-     * Organization::isSubscribed() is a Fase 7 stub that always returns
-     * false today. Asserting that here too would just be re-testing a
-     * hardcoded `return false;` — the real coverage this class needs is
-     * the trial_ends_at branch above; the subscribed branch becomes
-     * meaningful (and testable for real) once Fase 7 gives it a body.
+     * Organization::isSubscribed() (Fase 7) is real now — see
+     * tests/Feature/Organization/SubscriptionTest.php for its full matrix
+     * of active/expired/cancelled/isolation coverage. This class only needs
+     * to keep asserting the case TrialGate::active() itself actually
+     * depends on: an organization with no subscription row at all (the
+     * default for every factory-created Organization in this file) is not
+     * subscribed, so a trial-expired organization with none stays locked.
      */
-    public function test_an_organization_never_reports_subscribed_before_fase_7_exists(): void
+    public function test_an_organization_with_no_subscription_never_reports_subscribed(): void
     {
         $organization = Organization::factory()->trialExpired()->create();
 

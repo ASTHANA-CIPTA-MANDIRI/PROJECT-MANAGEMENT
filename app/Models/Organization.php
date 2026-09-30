@@ -33,6 +33,19 @@ class Organization extends Model
     }
 
     /**
+     * Fase 7 — every subscription period this organization has ever had,
+     * active or not. isSubscribed() below is the only thing that reduces
+     * this to a yes/no; nothing here mutates the relation. Scoped to this
+     * organization's own `id` through the FK exactly like every other
+     * hasMany on this model, so there is no code path from here that could
+     * read another Organization's subscription rows.
+     */
+    public function subscriptions(): HasMany
+    {
+        return $this->hasMany(Subscription::class);
+    }
+
+    /**
      * Phase 5.4 — every invitation ever created for this organization,
      * pending or not. The Organization Settings "Invitations" list filters
      * this down with OrganizationInvitation::scopePending().
@@ -97,16 +110,29 @@ class Organization extends Model
     }
 
     /**
-     * Whether this organization has a paid subscription active. Always
-     * false today — Fase 7 (Subscription/Payment/Billing) is the only
-     * phase allowed to change this, once a real gateway/plan exists.
-     * App\Support\TrialGate reads this alongside trial_ends_at, so this
-     * stub is what makes "trial expired but subscribed" already a
-     * meaningful (if currently unreachable) state rather than a TODO
-     * scattered across every call site.
+     * Whether this organization currently has an active paid subscription —
+     * the single yes/no App\Support\TrialGate reads alongside
+     * trial_ends_at, and the only thing Fase 8-9 (payment/billing) will
+     * ever need to make true, by writing a Subscription row from a
+     * verified payment event:
+     *
+     *   Payment Gateway -> Verified Payment Event -> Subscription state -> isSubscribed()
+     *
+     * never Payment Gateway -> isSubscribed() directly, and never a role
+     * mutation — subscription state and authorization (Spatie roles/
+     * permissions, Policies) stay fully independent, same as every other
+     * axis documented on this class.
+     *
+     * Read-only: one `exists()` query against this organization's own
+     * subscriptions() relation (already scoped to this organization's id,
+     * so this can never read another Organization's rows), no writes, no
+     * gateway/HTTP call, safe to call repeatedly and on every request.
+     * Deliberately does not consider trial_ends_at at all — that is
+     * TrialGate's job, not this method's; this only ever answers "is there
+     * a currently-active *paid* subscription".
      */
     public function isSubscribed(): bool
     {
-        return false;
+        return $this->subscriptions()->active()->exists();
     }
 }

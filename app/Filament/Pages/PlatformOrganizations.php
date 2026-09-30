@@ -823,10 +823,9 @@ class PlatformOrganizations extends AuthorizedPage implements HasForms, Tables\C
         // Past its trial window: TrialGate::active() is what the rest of the
         // app actually gates access on, so this reads the same source of
         // truth rather than re-deciding "expired but subscribed" locally.
-        // Not reachable today (Organization::isSubscribed() is a Fase 7
-        // stub that always returns false, so this branch is always "Trial
-        // habis" for now) but kept distinct so the label stays correct once
-        // billing exists.
+        // Reachable as soon as an Organization has an active Subscription
+        // row (Fase 7) — Fase 8-9 (payment/billing) is what will actually
+        // create one.
         return TrialGate::active($organization) ? __('Subscribed') : __('Trial ended');
     }
 

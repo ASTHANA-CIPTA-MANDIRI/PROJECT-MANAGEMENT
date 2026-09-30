@@ -53,6 +53,15 @@ class PolicyRegistrationTest extends TestCase
      * Policy — the same deliberately-separate Support authorization axis
      * OrganizationSupportSession's own entry above already documents.
      *
+     * Subscription (Fase 7) is exempt for the same shape of reason once
+     * more: no Filament Resource exposes it, nothing in this phase writes
+     * to it at all, and App\Models\Organization::isSubscribed() (the only
+     * thing that reads it) is a read-only query, not a Policy-guarded
+     * action. Fase 8-9 will write rows here from a verified payment event,
+     * never from user input, so there is no ability for an ordinary user to
+     * make themselves subscribed regardless of whether a Policy exists —
+     * see this table's own migration docblock and Organization::isSubscribed().
+     *
      * @var array<int, string>
      */
     private const UNGUARDED_MODELS = [
@@ -62,6 +71,7 @@ class PolicyRegistrationTest extends TestCase
         \App\Models\OrganizationSupportSession::class,
         \App\Models\ProjectFavorite::class,
         \App\Models\ProjectUser::class,
+        \App\Models\Subscription::class,
         \App\Models\TicketActivity::class,
         \App\Models\TicketRelation::class,
         \App\Models\TicketSubscriber::class,
