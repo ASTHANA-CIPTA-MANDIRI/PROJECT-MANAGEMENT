@@ -6,12 +6,16 @@ use App\Models\Organization;
 use App\Models\OrganizationInvitation;
 use App\Models\OrganizationSupportAccessGrant;
 use App\Models\OrganizationSupportSession;
+use App\Models\Project;
 use App\Models\Role;
+use App\Models\Subscription;
+use App\Models\Ticket;
 use App\Models\User;
 use App\Notifications\OrganizationInvitationCreated;
 use App\Support\OrganizationDefaults;
 use App\Support\SupportSessionContext;
 use App\Support\TrialGate;
+use Carbon\Carbon;
 use Closure;
 use Filament\Forms\Components\DatePicker;
 use Filament\Forms\Components\Placeholder;
@@ -26,8 +30,11 @@ use Filament\Tables;
 use Illuminate\Contracts\Support\Htmlable;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\QueryException;
+use Illuminate\Support\Collection as SupportCollection;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Notification as NotificationFacade;
+use Illuminate\Support\HtmlString;
 use Illuminate\Validation\ValidationException;
 use Symfony\Component\HttpKernel\Exception\HttpException;
 
@@ -87,6 +94,21 @@ class PlatformOrganizations extends AuthorizedPage implements HasForms, Tables\C
     protected static string $view = 'filament.pages.platform-organizations';
 
     /**
+     * The organization whose detail panel is open (beside the activity feed).
+     * Set by clicking a table row; the id is only ever used to look the row up
+     * again, and this whole page is Super Admin only.
+     */
+    public ?int $selectedOrganizationId = null;
+
+    public function mount(): void
+    {
+        // ?organization=<id> opens that organization's panel straight away.
+        $id = request()->integer('organization');
+
+        $this->selectedOrganizationId = $id > 0 && Organization::query()->whereKey($id)->exists() ? $id : null;
+    }
+
+    /**
      * Overrides {@see \App\Filament\Pages\Concerns\AuthorizesPageAccess::userCanAccessPage()}.
      * Both `boot()` (runs on every Livewire request, not just mount) and
      * `shouldRegisterNavigation()` already call this method via late static
@@ -111,6 +133,381 @@ class PlatformOrganizations extends AuthorizedPage implements HasForms, Tables\C
     protected function getHeading(): string|Htmlable
     {
         return __('Organizations');
+    }
+
+    // ------------------------------------------------- platform dashboard
+
+    /**
+     * Headline numbers for the cards above the table. Platform-wide on purpose:
+     * this page is Super Admin only (userCanAccessPage(), re-checked on every
+     * Livewire request by boot()) and none of these models carries a
+     * per-organization global scope. "Since last month" is the growth against
+     * the total at the start of the current month.
+     *
+     * @return array<int, array{label: string, total: int, delta: ?float, icon: string, tone: string}>
+     */
+    public function platformStats(): array
+    {
+        // Months are the ones the Super Admin sees (display timezone); the
+        // database stores UTC, so the boundary is converted before comparing.
+        $monthStart = now(config('app.display_timezone'))->startOfMonth()->utc();
+
+        $row = function (string $label, string $icon, string $tone, int $total, int $before): array {
+            return [
+                'label' => $label,
+                'total' => $total,
+                'delta' => $before > 0 ? round(($total - $before) / $before * 100, 1) : null,
+                'icon' => $icon,
+                'tone' => $tone,
+            ];
+        };
+
+        // The three big tables are counted at most once a minute; organizations
+        // are few and read live, so a freshly created one shows up at once.
+        $counts = Cache::remember('platform.dashboard.counts.'.$monthStart->format('Y-m'), 60, fn () => [
+            User::class => [User::query()->count(), User::query()->where('created_at', '<', $monthStart)->count()],
+            Project::class => [Project::query()->count(), Project::query()->where('created_at', '<', $monthStart)->count()],
+            Ticket::class => [Ticket::query()->count(), Ticket::query()->where('created_at', '<', $monthStart)->count()],
+        ]);
+
+        return [
+            $row(__('Total organizations'), 'office-building', 'blue', Organization::query()->count(), Organization::query()->where('created_at', '<', $monthStart)->count()),
+            $row(__('Total users'), 'users', 'green', ...$counts[User::class]),
+            $row(__('Total projects'), 'collection', 'purple', ...$counts[Project::class]),
+            $row(__('Total tickets'), 'ticket', 'yellow', ...$counts[Ticket::class]),
+        ];
+    }
+
+    /**
+     * New organizations per month, oldest first, for the last 6 and 12 months
+     * (the card's dropdown switches between them in the browser). Grouped in
+     * PHP so it runs on any database driver.
+     *
+     * @return array{6: array{labels: array<int, string>, data: array<int, int>}, 12: array{labels: array<int, string>, data: array<int, int>}}
+     */
+    public function organizationGrowth(): array
+    {
+        $timezone = config('app.display_timezone');
+        $first = now($timezone)->startOfMonth()->subMonths(11);
+
+        $perMonth = Organization::query()
+            ->where('created_at', '>=', $first->copy()->utc())
+            ->pluck('created_at')
+            ->countBy(fn (Carbon $date) => $date->copy()->setTimezone($timezone)->format('Y-n'));
+
+        $months = collect(range(0, 11))->map(fn (int $i) => $first->copy()->addMonths($i));
+
+        $labels = $months->map(fn (Carbon $month) => $month->translatedFormat('M'))->all();
+        $data = $months->map(fn (Carbon $month) => (int) ($perMonth[$month->format('Y-n')] ?? 0))->all();
+
+        return [
+            '6' => ['labels' => array_slice($labels, -6), 'data' => array_slice($data, -6)],
+            '12' => ['labels' => $labels, 'data' => $data],
+        ];
+    }
+
+    /**
+     * How the installation's organizations split by trial/subscription state,
+     * using the same four meanings as trialStatusLabel(): no time limit
+     * (trial_ends_at null), trial running, subscribed after the trial, and
+     * trial ended.
+     *
+     * @return array{total: int, rows: array<int, array{label: string, count: int, percent: int, color: string}>}
+     */
+    public function organizationStatus(): array
+    {
+        $total = Organization::query()->count();
+        $unlimited = Organization::query()->whereNull('trial_ends_at')->count();
+        $running = Organization::query()->where('trial_ends_at', '>', now())->count();
+
+        $past = Organization::query()->whereNotNull('trial_ends_at')->where('trial_ends_at', '<=', now());
+        $subscribed = (clone $past)->whereIn('id', Subscription::query()->active()->select('organization_id'))->count();
+        $ended = (clone $past)->count() - $subscribed;
+
+        $rows = [
+            [__('Subscribed'), $subscribed, '#72cc90'],
+            [__('Trial active'), $running, '#3b82d6'],
+            [__('No time limit'), $unlimited, '#c4c9d0'],
+            [__('Trial ended'), $ended, '#ee9a82'],
+        ];
+
+        // Largest-remainder rounding so the legend always adds up to 100%.
+        $percents = array_map(fn (array $row) => $total > 0 ? (int) floor($row[1] / $total * 100) : 0, $rows);
+
+        if ($total > 0) {
+            $remainders = [];
+            foreach ($rows as $i => $row) {
+                $remainders[$i] = ($row[1] / $total * 100) - $percents[$i];
+            }
+            arsort($remainders);
+
+            foreach (array_slice(array_keys($remainders), 0, 100 - array_sum($percents)) as $i) {
+                $percents[$i]++;
+            }
+        }
+
+        return [
+            'total' => $total,
+            'rows' => array_map(fn (array $row, int $i) => [
+                'label' => $row[0],
+                'count' => $row[1],
+                'percent' => $percents[$i],
+                'color' => $row[2],
+            ], $rows, array_keys($rows)),
+        ];
+    }
+
+    /**
+     * A merged feed of what happened across the platform: the newest event of every kind first (so one busy kind - say a seeded batch of tickets - cannot push the others out), then whatever is newest, shown newest first. Deliberately only
+     * the kind of event and the organization it belongs to - never ticket
+     * titles or project names: tenant content is reached through an audited
+     * support session (OrganizationSupportView), not from this overview.
+     *
+     * @return SupportCollection<int, array{title: string, text: string, at: Carbon, icon: string, tone: string, kind: string}>
+     */
+    public function recentPlatformActivity(): SupportCollection
+    {
+        $events = collect();
+
+        Organization::query()->latest()->limit(3)->get()->each(fn (Organization $organization) => $events->push([
+            'title' => $organization->name,
+            'text' => __('Organization created'),
+            'at' => $organization->created_at,
+            'icon' => 'office-building',
+            'tone' => 'blue',
+            'kind' => 'organization',
+        ]));
+
+        User::query()->latest()->limit(3)->get()->each(fn (User $user) => $events->push([
+            'title' => __('New user'),
+            'text' => __(':name joined', ['name' => $user->name]),
+            'at' => $user->created_at,
+            'icon' => 'user-add',
+            'tone' => 'purple',
+            'kind' => 'user',
+        ]));
+
+        OrganizationSupportAccessGrant::query()->with('organization')->latest('requested_at')->limit(3)->get()
+            ->each(fn (OrganizationSupportAccessGrant $grant) => $events->push([
+                'title' => __('Full Access request'),
+                'text' => __('For :organization', ['organization' => $grant->organization?->name ?? '-']),
+                'at' => $grant->requested_at,
+                'icon' => 'shield-check',
+                'tone' => 'green',
+                'kind' => 'grant',
+            ]));
+
+        Project::query()->with('organization')->latest()->limit(3)->get()->each(fn (Project $project) => $events->push([
+            'title' => __('New project'),
+            'text' => __('In :organization', ['organization' => $project->organization?->name ?? __('No organization')]),
+            'at' => $project->created_at,
+            'icon' => 'collection',
+            'tone' => 'blue',
+            'kind' => 'project',
+        ]));
+
+        Ticket::query()->with(['project' => fn ($query) => $query->withTrashed()->with('organization')])->latest()->limit(3)->get()->each(fn (Ticket $ticket) => $events->push([
+            'title' => __('New ticket'),
+            'text' => __('In :organization', ['organization' => $ticket->project?->organization?->name ?? __('No organization')]),
+            'at' => $ticket->created_at,
+            'icon' => 'ticket',
+            'tone' => 'yellow',
+            'kind' => 'ticket',
+        ]));
+
+        OrganizationInvitation::query()->with('organization')->latest()->limit(3)->get()
+            ->each(fn (OrganizationInvitation $invitation) => $events->push([
+                'title' => __('Invitation sent'),
+                'text' => __('For :organization', ['organization' => $invitation->organization?->name ?? '-']),
+                'at' => $invitation->created_at,
+                'icon' => 'mail',
+                'tone' => 'gray',
+                'kind' => 'invitation',
+            ]));
+
+        $events = $events->filter(fn (array $event) => $event['at'] !== null)->sortByDesc('at')->values();
+
+        // The newest event of every kind always makes the list; the remaining
+        // slots go to whatever is newest overall.
+        $firstOfEachKind = $events->unique('kind')->keys();
+        $rest = $events->keys()->diff($firstOfEachKind);
+
+        return $firstOfEachKind->merge($rest)->take(6)->sort()->map(fn (int $key) => $events[$key])->values();
+    }
+
+    /**
+     * Shortcuts for the side card. "Create organization" opens this page's own
+     * header action; the others are plain links to pages Super Admins already use.
+     *
+     * @return array<int, array{label: string, hint: string, icon: string, tone: string, href: ?string}>
+     */
+    public function quickActions(): array
+    {
+        return [
+            ['label' => __('Create organization'), 'hint' => __('Add a new organization to the platform'), 'icon' => 'office-building', 'tone' => 'blue', 'href' => null],
+            ['label' => __('Manage users'), 'hint' => __('Control users and their roles'), 'icon' => 'users', 'tone' => 'green', 'href' => \App\Filament\Resources\UserResource::getUrl('index')],
+            ['label' => __('Roles & permissions'), 'hint' => __('Decide who can do what'), 'icon' => 'shield-check', 'tone' => 'purple', 'href' => \App\Filament\Resources\RoleResource::getUrl('index')],
+            ['label' => __('General settings'), 'hint' => __('Site name, logo and language'), 'icon' => 'cog', 'tone' => 'yellow', 'href' => ManageGeneralSettings::getUrl()],
+        ];
+    }
+
+    public function selectOrganization(int $organizationId): void
+    {
+        $this->selectedOrganizationId = Organization::query()->whereKey($organizationId)->exists() ? $organizationId : null;
+    }
+
+    public function clearOrganizationSelection(): void
+    {
+        $this->selectedOrganizationId = null;
+    }
+
+    /**
+     * Everything the detail panel shows for the selected organization: the
+     * basics, plan state, a short member list and a platform-level history.
+     * Like the activity feed it carries no tenant content (no project or
+     * ticket names): that stays behind an audited support session.
+     *
+     * @return array<string, mixed>|null
+     */
+    public function organizationDetail(): ?array
+    {
+        if ($this->selectedOrganizationId === null) {
+            return null;
+        }
+
+        $organization = Organization::query()
+            ->withCount('users')
+            ->with(['users' => fn ($query) => $query->wherePivot('role', 'owner')])
+            ->with(['invitations' => fn ($query) => $query->pending()->where('role', 'owner')])
+            ->find($this->selectedOrganizationId);
+
+        if ($organization === null) {
+            return null;
+        }
+
+        $timezone = config('app.display_timezone');
+        $owner = $organization->users->first();
+        $pendingOwnerInvite = $organization->invitations->first();
+        $endsAt = $organization->trial_ends_at?->copy()->timezone($timezone);
+
+        $state = match (true) {
+            $organization->trial_ends_at === null => 'legacy',
+            $organization->trial_ends_at->isFuture() => 'trial',
+            $organization->isSubscribed() => 'subscribed',
+            default => 'ended',
+        };
+
+        $daysLeft = $state === 'trial' ? max(0, (int) now($timezone)->startOfDay()->diffInDays($endsAt->copy()->startOfDay())) : null;
+
+        [$chipLabel, $chipTone] = match ($state) {
+            'legacy' => [__('Legacy'), 'blue'],
+            'trial' => [__('Trial active (:days days left)', ['days' => $daysLeft]), 'green'],
+            'subscribed' => [__('Subscribed'), 'green'],
+            default => [__('Trial ended'), 'red'],
+        };
+
+        $plan = match ($state) {
+            'legacy' => ['tone' => 'blue', 'title' => __('No time limit'), 'text' => __('This organization was grandfathered in and has no trial deadline.'), 'cta' => __('Set a trial period')],
+            'trial' => ['tone' => 'yellow', 'title' => __('Trial in progress'), 'text' => __('The trial ends on :date.', ['date' => $endsAt->translatedFormat('d M Y')]), 'cta' => __('Extend trial')],
+            'subscribed' => ['tone' => 'green', 'title' => __('Active subscription'), 'text' => __('This organization has an active subscription.'), 'cta' => null],
+            default => ['tone' => 'red', 'title' => __('The trial has ended'), 'text' => __('This organization no longer has access. Extend the trial to let them back in, or wait for a subscription.'), 'cta' => __('Extend trial')],
+        };
+
+        $members = $organization->users()->withPivot('role')->orderBy('name')->limit(8)->get()
+            ->map(fn (User $member) => ['name' => $member->name, 'email' => $member->email, 'role' => __(ucfirst((string) $member->getRelation('pivot')->role))])
+            ->all();
+
+        $fullAccess = $this->latestFullAccessGrant($organization);
+
+        return [
+            'id' => $organization->id,
+            'name' => $organization->name,
+            'initial' => mb_strtoupper(mb_substr($organization->name, 0, 1)),
+            'tint' => ['blue', 'green', 'yellow', 'red'][$organization->id % 4],
+            'owner_name' => $owner?->name ?? ($pendingOwnerInvite !== null ? __('Invitation pending') : __('No owner')),
+            'owner_email' => $owner?->email ?? $pendingOwnerInvite?->email,
+            'members_count' => $organization->users_count,
+            'members' => $members,
+            'members_more' => max(0, $organization->users_count - count($members)),
+            'state' => $state,
+            'chip_label' => $chipLabel,
+            'chip_tone' => $chipTone,
+            'ends_text' => $endsAt !== null ? __('Ends on :date', ['date' => $endsAt->translatedFormat('d M Y')]) : __('No time limit'),
+            'full_access_label' => $this->fullAccessStatusLabel($organization),
+            'full_access_note' => $this->fullAccessStatusDescription($organization),
+            'full_access_tone' => $fullAccess === null ? 'gray' : match ($fullAccess->status()) {
+                'requested' => 'yellow',
+                'approved' => 'blue',
+                'revoked', 'expired' => 'gray',
+                default => 'green',
+            },
+            'created_at' => $organization->created_at?->copy()->timezone($timezone)->translatedFormat('d M Y H:i:s'),
+            'plan' => $plan,
+            'can_request_full_access' => $this->canRequestFullAccess($organization),
+            'can_start_full_access' => $this->canStartFullAccess($organization),
+            'activity' => $this->organizationHistory($organization),
+        ];
+    }
+
+    /**
+     * Platform-level history of one organization, newest first.
+     *
+     * @return array<int, array<string, mixed>>
+     */
+    private function organizationHistory(Organization $organization): array
+    {
+        /** @var SupportCollection<int, array<string, mixed>> $events */
+        $events = collect([[
+            'title' => __('Organization created'),
+            'text' => $organization->name,
+            'at' => $organization->created_at,
+            'icon' => 'office-building',
+            'tone' => 'blue',
+        ]]);
+
+        OrganizationInvitation::query()->where('organization_id', $organization->id)->latest()->limit(5)->get()
+            ->each(function (OrganizationInvitation $invitation) use ($events) {
+                $events->push(['title' => __('Invitation sent'), 'text' => __(ucfirst($invitation->role)), 'at' => $invitation->created_at, 'icon' => 'mail', 'tone' => 'gray']);
+
+                if ($invitation->accepted_at !== null) {
+                    $events->push(['title' => __('Invitation accepted'), 'text' => __(ucfirst($invitation->role)), 'at' => $invitation->accepted_at, 'icon' => 'user-add', 'tone' => 'green']);
+                }
+            });
+
+        OrganizationSupportAccessGrant::query()->with(['requester', 'approver'])->where('organization_id', $organization->id)->latest('requested_at')->limit(3)->get()
+            ->each(function (OrganizationSupportAccessGrant $grant) use ($events) {
+                $events->push(['title' => __('Full Access request'), 'text' => __('By :name', ['name' => $grant->requester?->name ?? '-']), 'at' => $grant->requested_at, 'icon' => 'shield-check', 'tone' => 'yellow']);
+
+                if ($grant->approved_at !== null) {
+                    $events->push(['title' => __('Full Access approved'), 'text' => __('By :name', ['name' => $grant->approver?->name ?? '-']), 'at' => $grant->approved_at, 'icon' => 'shield-check', 'tone' => 'green']);
+                }
+            });
+
+        OrganizationSupportSession::query()->with('superAdmin')->where('organization_id', $organization->id)->latest('started_at')->limit(3)->get()
+            ->each(fn (OrganizationSupportSession $session) => $events->push([
+                'title' => __('Support session started'),
+                'text' => __('By :name', ['name' => $session->superAdmin?->name ?? '-']),
+                'at' => $session->started_at,
+                'icon' => 'eye',
+                'tone' => 'purple',
+            ]));
+
+        return $events->filter(fn (array $event) => $event['at'] !== null)->sortByDesc('at')->take(8)->values()->all();
+    }
+
+    protected function getTableRecordActionUsing(): ?Closure
+    {
+        return fn (): string => 'selectOrganization';
+    }
+
+    protected function getTableRecordClassesUsing(): ?Closure
+    {
+        return fn (Organization $record): ?string => $record->id === $this->selectedOrganizationId ? 'rk-pl__row-selected' : null;
+    }
+
+    protected function getTableDescription(): ?string
+    {
+        return __('Click a row to see the organization\'s details.');
     }
 
     /**
@@ -143,6 +540,11 @@ class PlatformOrganizations extends AuthorizedPage implements HasForms, Tables\C
         return [
             Tables\Columns\TextColumn::make('name')
                 ->label(__('Organization'))
+                ->html()
+                ->formatStateUsing(fn (string $state, Organization $record) => new HtmlString(
+                    '<span class="rk-pl__org"><i class="rk-pl__tile rk-pf__tile--'.['blue', 'green', 'yellow', 'red'][$record->id % 4].'">'
+                    .e(mb_strtoupper(mb_substr($state, 0, 1))).'</i><b>'.e($state).'</b></span>'
+                ))
                 ->searchable()
                 ->sortable(),
 
@@ -157,8 +559,14 @@ class PlatformOrganizations extends AuthorizedPage implements HasForms, Tables\C
                         ? __('Invitation pending')
                         : __('No owner');
                 })
-                ->description(fn (Organization $record) => $record->users->first()?->email
-                    ?? $record->invitations->first()?->email)
+                // HtmlString on purpose: Filament runs plain-string descriptions through
+                // Markdown, which turns an e-mail address into a mailto: link inside a
+                // row that is itself clickable (the click opened the mail app).
+                ->description(function (Organization $record) {
+                    $email = $record->users->first()?->email ?? $record->invitations->first()?->email;
+
+                    return $email === null ? null : new HtmlString(e($email));
+                })
                 ->color(fn (Organization $record) => $record->users->isEmpty() && $record->invitations->isNotEmpty()
                     ? 'warning'
                     : null),
@@ -170,7 +578,15 @@ class PlatformOrganizations extends AuthorizedPage implements HasForms, Tables\C
             Tables\Columns\TextColumn::make('trial_status')
                 ->label(__('Trial status'))
                 ->getStateUsing(fn (Organization $record) => $this->trialStatusLabel($record))
-                ->color(fn (Organization $record) => $this->trialStatusColor($record)),
+                ->html()
+                ->formatStateUsing(function (string $state, Organization $record) {
+                    $legacy = $record->trial_ends_at === null;
+
+                    return new HtmlString(
+                        '<span title="'.e($state).'" class="rk-og__chip rk-og__chip--'.($legacy ? 'blue' : ['success' => 'green', 'danger' => 'red', 'gray' => 'gray'][$this->trialStatusColor($record)]).'">'
+                        .e($legacy ? __('Legacy') : $state).'</span>'
+                    );
+                }),
 
             // Phase 7 (Full Access UI/UX Gate). Reads through
             // latestFullAccessGrant() rather than an eager-loaded relation:
@@ -183,13 +599,27 @@ class PlatformOrganizations extends AuthorizedPage implements HasForms, Tables\C
             Tables\Columns\TextColumn::make('full_access_status')
                 ->label(__('Full Access'))
                 ->getStateUsing(fn (Organization $record) => $this->fullAccessStatusLabel($record))
-                ->description(fn (Organization $record) => $this->fullAccessStatusDescription($record)),
+                ->description(function (Organization $record) {
+                    $note = $this->fullAccessStatusDescription($record);
+
+                    return $note === null ? null : new HtmlString(e($note));
+                }),
 
             Tables\Columns\TextColumn::make('created_at')
                 ->label(__('Created at'))
-                ->dateTime()
+                ->html()
+                ->formatStateUsing(function ($state) {
+                    $at = Carbon::parse($state)->timezone(config('app.display_timezone'));
+
+                    return new HtmlString('<span class="rk-pl__date"><b>'.e($at->translatedFormat('d M Y')).'</b><small>'.e($at->format('H:i:s')).'</small></span>');
+                })
                 ->sortable(),
         ];
+    }
+
+    protected function getTableHeading(): ?string
+    {
+        return __('Organizations');
     }
 
     protected function getTableEmptyStateHeading(): ?string
@@ -448,6 +878,12 @@ class PlatformOrganizations extends AuthorizedPage implements HasForms, Tables\C
     protected function getTableActions(): array
     {
         return [
+            // Row click (getTableRecordActionUsing) and the first icon in the row bar.
+            Tables\Actions\Action::make('selectOrganization')
+                ->label(__('Details'))
+                ->icon('heroicon-o-information-circle')
+                ->action(fn (Organization $record) => $this->selectOrganization($record->id)),
+
             Tables\Actions\Action::make('editOrganization')
                 ->label(__('Edit'))
                 ->icon('heroicon-o-pencil')

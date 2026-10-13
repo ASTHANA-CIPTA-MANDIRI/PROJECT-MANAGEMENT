@@ -129,7 +129,13 @@ class OrganizationSupportView extends AuthorizedPage
      */
     private const RECENT_TICKETS_LIMIT = 25;
 
-    private const RECENT_ACTIVITY_LIMIT = 20;
+    private const RECENT_ACTIVITY_LIMIT = 8;
+
+    /**
+     * Only the last N days are listed. Display-only: the underlying
+     * ticket history is the tenant's own record and is never pruned here.
+     */
+    private const RECENT_ACTIVITY_DAYS = 30;
 
     /**
      * Phase 14 — the maximum number of ids a single bulk call
@@ -2605,6 +2611,7 @@ class OrganizationSupportView extends AuthorizedPage
         return TicketActivity::query()
             ->whereHas('ticket.project', fn ($query) => $query->where('organization_id', $organization->id))
             ->with(['ticket:id,name,code', 'oldStatus:id,name', 'newStatus:id,name', 'user:id,name'])
+            ->where('created_at', '>=', now()->subDays(self::RECENT_ACTIVITY_DAYS))
             ->latest()
             ->limit(self::RECENT_ACTIVITY_LIMIT)
             ->get();

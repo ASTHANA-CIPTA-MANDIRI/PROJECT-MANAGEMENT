@@ -6,10 +6,13 @@ use App\Filament\Pages\OrganizationSupportView;
 use App\Filament\Pages\PlatformOrganizations;
 use App\Models\Organization;
 use App\Models\OrganizationInvitation;
+use App\Models\OrganizationSupportAccessGrant;
 use App\Models\OrganizationSupportSession;
 use App\Models\Project;
 use App\Models\ProjectStatus;
 use App\Models\Role;
+use App\Models\Subscription;
+use App\Models\Ticket;
 use App\Models\User;
 use App\Notifications\OrganizationInvitationCreated;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -703,5 +706,356 @@ class PlatformOrganizationsTest extends TestCase
         Livewire::test(PlatformOrganizations::class)->assertForbidden();
 
         $this->assertFalse(OrganizationSupportSession::where('organization_id', $organization->id)->exists());
+    }
+
+    // ------------------------------------------------- platform dashboard
+
+    public function test_platform_stats_count_everything_and_report_growth_since_last_month(): void
+    {
+        $this->actingAs($this->superAdmin());
+
+        // Two organizations existed before this month, one was created this month.
+        Organization::factory()->count(2)->create(['created_at' => now()->startOfMonth()->subMonthNoOverflow()->addDays(3)]);
+        Organization::factory()->create(['created_at' => now()]);
+        $project = Project::factory()->create();
+        Ticket::factory()->count(2)->create(['project_id' => $project->id]);
+
+        $stats = Livewire::test(PlatformOrganizations::class)->instance()->platformStats();
+
+        $this->assertSame(3, $stats[0]['total']);
+        $this->assertEqualsWithDelta(50.0, $stats[0]['delta'], 0.01);
+        $this->assertGreaterThanOrEqual(1, $stats[1]['total']);
+        $this->assertSame(Project::count(), $stats[2]['total']);
+        $this->assertSame(2, $stats[3]['total']);
+        // Nothing existed before this month for projects/tickets: no percentage to claim.
+        $this->assertNull($stats[3]['delta']);
+    }
+
+    public function test_organization_growth_buckets_new_organizations_per_month(): void
+    {
+        $this->actingAs($this->superAdmin());
+
+        Organization::factory()->create(['created_at' => now()->startOfMonth()->addDay()]);
+        Organization::factory()->count(2)->create(['created_at' => now()->startOfMonth()->subMonthsNoOverflow(2)->addDay()]);
+        Organization::factory()->create(['created_at' => now()->startOfMonth()->subMonthsNoOverflow(9)->addDay()]);
+
+        $growth = Livewire::test(PlatformOrganizations::class)->instance()->organizationGrowth();
+
+        $this->assertCount(6, $growth['6']['labels']);
+        $this->assertCount(12, $growth['12']['labels']);
+        // Last bucket = this month, third from last = two months ago; the 9-month-old one is only in the 12-month view.
+        $this->assertSame(1, $growth['6']['data'][5]);
+        $this->assertSame(2, $growth['6']['data'][3]);
+        $this->assertSame(4, array_sum($growth['12']['data']));
+        $this->assertSame(3, array_sum($growth['6']['data']));
+    }
+
+    public function test_organization_status_splits_by_the_same_rules_as_the_trial_label(): void
+    {
+        $this->actingAs($this->superAdmin());
+
+        Organization::factory()->create(['trial_ends_at' => null]);
+        Organization::factory()->create(['trial_ends_at' => now()->addDays(3)]);
+        Organization::factory()->create(['trial_ends_at' => now()->subDay()]);
+        $subscribed = Organization::factory()->create(['trial_ends_at' => now()->subDay()]);
+        Subscription::factory()->for($subscribed)->active()->create();
+
+        $status = Livewire::test(PlatformOrganizations::class)->instance()->organizationStatus();
+        $counts = collect($status['rows'])->pluck('count', 'label');
+
+        $this->assertSame(4, $status['total']);
+        $this->assertSame(1, $counts[__('Subscribed')]);
+        $this->assertSame(1, $counts[__('Trial active')]);
+        $this->assertSame(1, $counts[__('No time limit')]);
+        $this->assertSame(1, $counts[__('Trial ended')]);
+        $this->assertSame(100, array_sum(array_column($status['rows'], 'percent')));
+    }
+
+    public function test_status_percentages_still_add_up_to_100_when_they_do_not_divide_evenly(): void
+    {
+        $this->actingAs($this->superAdmin());
+
+        Organization::factory()->create(['trial_ends_at' => null]);
+        Organization::factory()->create(['trial_ends_at' => now()->addDays(3)]);
+        Organization::factory()->create(['trial_ends_at' => now()->subDay()]);
+
+        $status = Livewire::test(PlatformOrganizations::class)->instance()->organizationStatus();
+
+        $this->assertSame(100, array_sum(array_column($status['rows'], 'percent')));
+    }
+
+    public function test_recent_activity_never_reveals_ticket_or_project_content(): void
+    {
+        $this->actingAs($this->superAdmin());
+
+        $organization = Organization::factory()->create(['name' => 'Org Terlihat']);
+        $project = Project::factory()->create(['organization_id' => $organization->id, 'name' => 'PROYEK-RAHASIA']);
+        Ticket::factory()->create(['project_id' => $project->id, 'name' => 'JUDUL-TIKET-RAHASIA']);
+
+        $feed = Livewire::test(PlatformOrganizations::class)->instance()->recentPlatformActivity();
+        $text = $feed->map(fn (array $event) => $event['title'].' '.$event['text'])->implode(' | ');
+
+        $this->assertStringContainsString('Org Terlihat', $text);
+        $this->assertStringNotContainsString('PROYEK-RAHASIA', $text);
+        $this->assertStringNotContainsString('JUDUL-TIKET-RAHASIA', $text);
+        $this->assertLessThanOrEqual(6, $feed->count());
+    }
+
+    public function test_dashboard_renders_for_super_admin_and_stays_closed_to_others(): void
+    {
+        Organization::factory()->create(['name' => 'Org Dasbor']);
+
+        $this->actingAs($this->superAdmin());
+        Livewire::test(PlatformOrganizations::class)->assertSee('Org Dasbor')->assertSee(__('Latest activity'))->assertSee(__('Quick actions'));
+
+        $plain = User::factory()->create();
+        $this->actingAs($plain);
+        $this->get('/platform/organizations')->assertForbidden();
+    }
+
+    public function test_recent_activity_picks_up_every_kind_of_new_record(): void
+    {
+        $admin = $this->superAdmin();
+        $this->actingAs($admin);
+
+        $organization = Organization::factory()->create(['name' => 'Org Aktivitas']);
+        $project = Project::factory()->create(['organization_id' => $organization->id]);
+        Ticket::factory()->create(['project_id' => $project->id]);
+        OrganizationInvitation::factory()->create(['organization_id' => $organization->id]);
+        OrganizationSupportAccessGrant::forceCreate([
+            'organization_id' => $organization->id,
+            'requested_by' => $admin->id,
+            'reason' => 'uji',
+            'requested_at' => now(),
+            'request_expires_at' => now()->addDay(),
+        ]);
+
+        $titles = Livewire::test(PlatformOrganizations::class)->instance()->recentPlatformActivity()->pluck('title')->all();
+
+        foreach ([__('New project'), __('New ticket'), __('Invitation sent'), __('Full Access request'), __('New user'), 'Org Aktivitas'] as $expected) {
+            $this->assertContains($expected, $titles, "feed is missing: $expected");
+        }
+    }
+
+    public function test_one_busy_kind_cannot_push_the_other_kinds_out_of_the_feed(): void
+    {
+        $this->actingAs($this->superAdmin());
+
+        $organization = Organization::factory()->create();
+        $project = Project::factory()->create(['organization_id' => $organization->id, 'created_at' => now()->subDays(2)]);
+        // A burst of tickets, all newer than the project.
+        Ticket::factory()->count(12)->create(['project_id' => $project->id, 'created_at' => now()]);
+
+        $feed = Livewire::test(PlatformOrganizations::class)->instance()->recentPlatformActivity();
+
+        $this->assertLessThanOrEqual(2, $feed->where('title', __('New ticket'))->count());
+        $this->assertTrue($feed->contains('title', __('New project')));
+    }
+
+    public function test_big_table_counts_are_cached_briefly_but_organizations_are_read_live(): void
+    {
+        $this->actingAs($this->superAdmin());
+        $component = Livewire::test(PlatformOrganizations::class)->instance();
+
+        $first = $component->platformStats();
+        User::factory()->create();
+        Organization::factory()->create();
+        $second = $component->platformStats();
+
+        $this->assertSame($first[1]['total'], $second[1]['total'], 'user count is served from the 60 second cache');
+        $this->assertSame($first[0]['total'] + 1, $second[0]['total'], 'organizations are counted live');
+    }
+
+    public function test_months_follow_the_display_timezone_not_utc(): void
+    {
+        config(['app.display_timezone' => 'Asia/Jakarta']);
+        \Carbon\Carbon::setTestNow('2026-10-15 12:00:00');
+        $this->actingAs($this->superAdmin());
+
+        // 18:00 UTC on 30 Sep is 01:00 on 1 Oct in Jakarta: an October organization.
+        Organization::factory()->create(['created_at' => '2026-09-30 18:00:00']);
+
+        $growth = Livewire::test(PlatformOrganizations::class)->instance()->organizationGrowth();
+
+        $this->assertSame(1, $growth['6']['data'][5], 'counted in October');
+        $this->assertSame(0, $growth['6']['data'][4], 'not in September');
+
+        \Carbon\Carbon::setTestNow();
+    }
+
+    // ------------------------------------------------- organization detail panel
+
+    public function test_clicking_a_row_opens_the_detail_panel_and_closing_empties_it_again(): void
+    {
+        $admin = $this->superAdmin();
+        $this->actingAs($admin);
+        $organization = Organization::factory()->create(['name' => 'Org Detail', 'trial_ends_at' => now()->subDay()]);
+        $owner = User::factory()->create(['name' => 'Pemilik Detail', 'email' => 'pemilik@detail.test']);
+        $organization->users()->attach($owner->id, ['role' => 'owner']);
+
+        $component = Livewire::test(PlatformOrganizations::class);
+        $this->assertNull($component->instance()->organizationDetail(), 'nothing is shown until a row is clicked');
+
+        $component->callTableAction('selectOrganization', $organization)->assertSet('selectedOrganizationId', $organization->id);
+
+        $detail = $component->instance()->organizationDetail();
+        $this->assertSame('Org Detail', $detail['name']);
+        $this->assertSame('Pemilik Detail', $detail['owner_name']);
+        $this->assertSame('pemilik@detail.test', $detail['owner_email']);
+        $this->assertSame(1, $detail['members_count']);
+        $this->assertSame('ended', $detail['state']);
+        $component->assertSee('Org Detail')->assertSee(__('Plan & subscription'));
+
+        $component->call('clearOrganizationSelection')->assertSet('selectedOrganizationId', null);
+        $this->assertNull($component->instance()->organizationDetail());
+    }
+
+    public function test_an_unknown_organization_id_selects_nothing(): void
+    {
+        $this->actingAs($this->superAdmin());
+
+        Livewire::test(PlatformOrganizations::class)
+            ->call('selectOrganization', 999999)
+            ->assertSet('selectedOrganizationId', null);
+    }
+
+    public function test_the_plan_box_follows_the_four_trial_states(): void
+    {
+        $this->actingAs($this->superAdmin());
+
+        $legacy = Organization::factory()->create(['trial_ends_at' => null]);
+        $trial = Organization::factory()->create(['trial_ends_at' => now()->addDays(5)]);
+        $ended = Organization::factory()->create(['trial_ends_at' => now()->subDay()]);
+        $subscribed = Organization::factory()->create(['trial_ends_at' => now()->subDay()]);
+        Subscription::factory()->for($subscribed)->active()->create();
+
+        $component = Livewire::test(PlatformOrganizations::class);
+        $plan = function (Organization $organization) use ($component) {
+            $component->call('selectOrganization', $organization->id);
+
+            return $component->instance()->organizationDetail();
+        };
+
+        $this->assertSame(['legacy', 'blue'], [$plan($legacy)['state'], $plan($legacy)['plan']['tone']]);
+        $this->assertNotNull($plan($legacy)['plan']['cta']);
+        $this->assertSame(['trial', 'yellow'], [$plan($trial)['state'], $plan($trial)['plan']['tone']]);
+        $this->assertNotNull($plan($trial)['plan']['cta']);
+        $this->assertSame(['ended', 'red'], [$plan($ended)['state'], $plan($ended)['plan']['tone']]);
+        $this->assertNotNull($plan($ended)['plan']['cta']);
+        $this->assertSame(['subscribed', 'green'], [$plan($subscribed)['state'], $plan($subscribed)['plan']['tone']]);
+        $this->assertNull($plan($subscribed)['plan']['cta'], 'nothing to extend while subscribed');
+    }
+
+    public function test_the_detail_panel_lists_a_few_members_and_never_tenant_content(): void
+    {
+        $admin = $this->superAdmin();
+        $this->actingAs($admin);
+        $organization = Organization::factory()->create();
+        foreach (User::factory()->count(10)->create() as $member) {
+            $organization->users()->attach($member->id, ['role' => 'member']);
+        }
+        $project = Project::factory()->create(['organization_id' => $organization->id, 'name' => 'PROYEK-RAHASIA']);
+        Ticket::factory()->create(['project_id' => $project->id, 'name' => 'JUDUL-TIKET-RAHASIA']);
+        OrganizationInvitation::factory()->create(['organization_id' => $organization->id]);
+        OrganizationSupportSession::create([
+            'organization_id' => $organization->id,
+            'super_admin_id' => $admin->id,
+            'reason' => 'ALASAN-INTERNAL',
+            'level' => OrganizationSupportSession::LEVEL_READ_ONLY,
+            'started_at' => now(),
+            'expires_at' => now()->addHour(),
+        ]);
+
+        $component = Livewire::test(PlatformOrganizations::class)->call('selectOrganization', $organization->id);
+        $detail = $component->instance()->organizationDetail();
+
+        $this->assertCount(8, $detail['members']);
+        $this->assertSame(2, $detail['members_more']);
+
+        $titles = array_column($detail['activity'], 'title');
+        foreach ([__('Organization created'), __('Invitation sent'), __('Support session started')] as $expected) {
+            $this->assertContains($expected, $titles);
+        }
+
+        $dump = json_encode($detail);
+        $this->assertStringNotContainsString('PROYEK-RAHASIA', $dump);
+        $this->assertStringNotContainsString('JUDUL-TIKET-RAHASIA', $dump);
+        $this->assertStringNotContainsString('ALASAN-INTERNAL', $dump);
+    }
+
+    public function test_the_panel_only_offers_the_full_access_buttons_that_apply(): void
+    {
+        $admin = $this->superAdmin();
+        $this->actingAs($admin);
+        $organization = Organization::factory()->create();
+
+        $component = Livewire::test(PlatformOrganizations::class)->call('selectOrganization', $organization->id);
+        $this->assertTrue($component->instance()->organizationDetail()['can_request_full_access']);
+        $this->assertFalse($component->instance()->organizationDetail()['can_start_full_access']);
+
+        OrganizationSupportAccessGrant::forceCreate([
+            'organization_id' => $organization->id,
+            'requested_by' => $admin->id,
+            'reason' => 'uji',
+            'requested_at' => now(),
+            'request_expires_at' => now()->addDay(),
+        ]);
+
+        $this->assertFalse($component->instance()->organizationDetail()['can_request_full_access'], 'a request is already in flight');
+    }
+
+    public function test_a_deep_link_opens_the_panel_for_that_organization(): void
+    {
+        $this->actingAs($this->superAdmin());
+        $organization = Organization::factory()->create();
+
+        Livewire::withQueryParams(['organization' => $organization->id])
+            ->test(PlatformOrganizations::class)
+            ->assertSet('selectedOrganizationId', $organization->id);
+
+        Livewire::withQueryParams(['organization' => 999999])
+            ->test(PlatformOrganizations::class)
+            ->assertSet('selectedOrganizationId', null);
+    }
+
+    public function test_the_panel_html_never_contains_tenant_content_and_stays_closed_to_non_super_admins(): void
+    {
+        $admin = $this->superAdmin();
+        $this->actingAs($admin);
+        $organization = Organization::factory()->create();
+        $project = Project::factory()->create(['organization_id' => $organization->id, 'name' => 'PROYEK-RAHASIA']);
+        Ticket::factory()->create(['project_id' => $project->id, 'name' => 'JUDUL-TIKET-RAHASIA']);
+
+        Livewire::test(PlatformOrganizations::class)
+            ->call('selectOrganization', $organization->id)
+            ->assertDontSee('PROYEK-RAHASIA')
+            ->assertDontSee('JUDUL-TIKET-RAHASIA');
+
+        $this->actingAs(User::factory()->create());
+        Livewire::test(PlatformOrganizations::class)->assertForbidden();
+    }
+
+    public function test_a_selected_organization_that_is_deleted_just_closes_the_panel(): void
+    {
+        $this->actingAs($this->superAdmin());
+        $organization = Organization::factory()->create();
+
+        $component = Livewire::test(PlatformOrganizations::class)->call('selectOrganization', $organization->id);
+        $organization->delete();
+
+        $this->assertNull($component->instance()->organizationDetail());
+        $component->call('$refresh')->assertSuccessful();
+    }
+
+    public function test_owner_e_mails_in_the_table_are_plain_text_not_mail_links(): void
+    {
+        $this->actingAs($this->superAdmin());
+        $organization = Organization::factory()->create();
+        $owner = User::factory()->create(['email' => 'pemilik.tabel@contoh.test']);
+        $organization->users()->attach($owner->id, ['role' => 'owner']);
+
+        Livewire::test(PlatformOrganizations::class)
+            ->assertSee('pemilik.tabel@contoh.test')
+            ->assertDontSeeHtml('mailto:');
     }
 }

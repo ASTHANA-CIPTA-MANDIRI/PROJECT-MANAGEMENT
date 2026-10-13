@@ -7,23 +7,74 @@
 
         <div class="w-full flex flex-col gap-8">
 
-            <div class="bg-warning-500 border border-warning-600 text-white py-3 px-4 text-sm rounded-lg flex flex-col gap-1">
-                <span class="font-medium">{{ $session->organization->name }}</span>
-                <span class="font-normal">{{ __('Alasan') }}: {{ $session->reason }}</span>
-                <span class="font-normal">
-                    {{ __('Started at') }}: {{ $session->started_at->diffForHumans() }}
-                    &middot;
-                    {{ __('Expires at') }}: {{ $session->expires_at->diffForHumans() }}
-                </span>
-                <span class="font-normal">
-                    {{ __('Support level') }}:
-                    {{
-                        $session->isFullAccess()
-                            ? __('Support level: Full Access')
-                            : ($session->isSupportAction() ? __('Support level: Support Action') : __('Support level: Read Only'))
-                    }}
-                </span>
-            </div>
+            <?php
+                $level = $session->isFullAccess() ? 'full_access' : ($session->isSupportAction() ? 'support_action' : 'read_only');
+                $levelText = $session->isFullAccess()
+                    ? __('Support level: Full Access')
+                    : ($session->isSupportAction() ? __('Support level: Support Action') : __('Support level: Read Only'));
+                $levelTone = ['read_only' => 'gray', 'support_action' => 'yellow', 'full_access' => 'red'][$level];
+                $can = [
+                    'read_only' => [__('See the overview, projects, tickets, sprints, members and activity')],
+                    'support_action' => [
+                        __('Change ticket status, priority, assignee, due date, title and labels'),
+                        __('Change a project\'s status'),
+                        __('Start or stop a sprint and change its dates'),
+                    ],
+                    'full_access' => [
+                        __('Change ticket status'),
+                        __('Move projects, tickets and sprints to the trash and bring them back (also in bulk)'),
+                    ],
+                ][$level];
+                $cannot = [
+                    'read_only' => [__('Change anything: this level only looks')],
+                    'support_action' => [__('Move anything to the trash')],
+                    'full_access' => [__('Edit priority, labels, assignee, dates or titles: these are not part of this level')],
+                ][$level];
+            ?>
+
+            <section class="rk-sp__head rk-sp__head--{{ $levelTone }}">
+                <div class="rk-sp__head-top">
+                    <span class="rk-sp__tile">{{ \Illuminate\Support\Str::upper(\Illuminate\Support\Str::substr($session->organization->name, 0, 1)) }}</span>
+                    <div class="rk-sp__head-title">
+                        <h2>{{ $session->organization->name }}</h2>
+                        <span class="rk-sp__level-label">{{ __('Support level') }}</span>
+                        <span class="rk-sp__chip">{{ $levelText }}</span>
+                    </div>
+                    <x-filament::button color="danger" wire:click="endSession"
+                        data-swal-confirm="{{ __('End this support session?') }}" data-swal-severity="danger">
+                        {{ __('Akhiri Sesi') }}
+                    </x-filament::button>
+                </div>
+
+                <dl class="rk-sp__meta">
+                    <div><dt><x-heroicon-o-chat-alt class="h-4 w-4" /> {{ __('Alasan') }}</dt><dd>{{ $session->reason }}</dd></div>
+                    <div><dt><x-heroicon-o-play class="h-4 w-4" /> {{ __('Started at') }}</dt><dd>{{ $session->started_at->diffForHumans() }}</dd></div>
+                    <div><dt><x-heroicon-o-clock class="h-4 w-4" /> {{ __('Expires at') }}</dt><dd>{{ $session->expires_at->diffForHumans() }}</dd></div>
+                </dl>
+
+                <div class="rk-sp__can">
+                    <div>
+                        <b>{{ __('What you can do here') }}</b>
+                        <ul>@foreach ($can as $line)<li class="is-yes"><x-heroicon-s-check-circle class="h-4 w-4" /> {{ $line }}</li>@endforeach</ul>
+                    </div>
+                    <div>
+                        <b>{{ __('What you cannot do here') }}</b>
+                        <ul>@foreach ($cannot as $line)<li class="is-no"><x-heroicon-s-x-circle class="h-4 w-4" /> {{ $line }}</li>@endforeach</ul>
+                    </div>
+                </div>
+
+                @if ($level !== 'read_only')
+                    <p class="rk-sp__audit"><x-heroicon-o-shield-check class="h-4 w-4" /> {{ __('Every change asks for confirmation first and is written to the session\'s audit log.') }}</p>
+                @endif
+            </section>
+
+            <nav class="rk-sp__nav">
+                <a href="#sp-projects">{{ __('Projects') }}</a>
+                <a href="#sp-tickets">{{ __('Tickets') }}</a>
+                <a href="#sp-sprints">{{ __('Sprints') }}</a>
+                <a href="#sp-members">{{ __('Organization members') }}</a>
+                <a href="#sp-activity">{{ __('Recent activity') }}</a>
+            </nav>
 
             {{-- Organization overview --}}
             @if ($overview)
@@ -64,13 +115,18 @@
             @endif
 
             {{-- Projects --}}
+            @php($projectsList = $this->projects())
             <div class="flex flex-col gap-2">
-                <h3 class="text-base font-medium">{{ __('Projects') }}</h3>
+                <span class="rk-sp__anchor" id="sp-projects"></span>
+                <div class="rk-sp__section-head">
+                    <h3>{{ __('Projects') }} <span class="rk-sp__count">{{ $projectsList->count() }}</span></h3>
+                    <p>{{ $session->isFullAccess() ? __('Projects can be moved to the trash and restored. Deleting one also removes its tickets, sprints and epics (all restorable).') : ($session->isSupportAction() ? __('A project\'s status can be changed here.') : __('Read only.')) }}</p>
+                </div>
 
                 <table class="w-full text-sm border-collapse">
                     <thead>
                         <tr class="text-left border-b border-gray-200 dark:border-gray-700">
-                            <th class="py-2 pr-4">{{ __('Organization') }}</th>
+                            <th class="py-2 pr-4">{{ __('Project') }}</th>
                             <th class="py-2 pr-4">{{ __('Ticket prefix') }}</th>
                             <th class="py-2 pr-4">{{ __('Status') }}</th>
                             <th class="py-2 pr-4">{{ __('Tickets') }}</th>
@@ -84,30 +140,19 @@
                         </tr>
                     </thead>
                     <tbody>
-                        @forelse ($this->projects() as $project)
+                        @forelse ($projectsList as $project)
                             <tr class="border-b border-gray-100 dark:border-gray-800 @if ($project->trashed()) opacity-50 @endif">
-                                <td class="py-2 pr-4">{{ $project->name }}</td>
+                                <td class="py-2 pr-4">{{ $project->name }} @if ($project->trashed())<span class="rk-sp__trash">{{ __('In trash') }}</span>@endif</td>
                                 <td class="py-2 pr-4">{{ $project->ticket_prefix }}</td>
                                 <td class="py-2 pr-4">
                                     @if ($session->isSupportAction())
                                         {{-- Same confirm()-gated pattern as Ticket Status above. --}}
-                                        <select
-                                            x-data
-                                            x-on:change="
-                                                if (confirm(@js(__('Are you sure you want to change this project\'s status?')))) {
-                                                    $wire.changeProjectStatus({{ $project->id }}, parseInt($event.target.value))
-                                                } else {
-                                                    $event.target.value = '{{ $project->status_id }}'
-                                                }
-                                            "
-                                            class="text-sm rounded-md border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-200"
-                                        >
-                                            @foreach ($this->projectStatusOptions() as $status)
-                                                <option value="{{ $status->id }}" @selected($status->id === $project->status_id)>
-                                                    {{ $status->name }}
-                                                </option>
-                                            @endforeach
-                                        </select>
+                                        <x-support-select
+                                            :options="$this->projectStatusOptions()->map(fn ($o) => ['id' => $o->id, 'label' => $o->name, 'color' => $o->color])->all()"
+                                            :current="$project->status_id"
+                                            method="changeProjectStatus"
+                                            :record-id="$project->id"
+                                            :confirm="__('Are you sure you want to change this project\'s status?')" />
                                     @elseif ($project->status)
                                         @include('components.color-badge', ['color' => $project->status->color, 'label' => $project->status->name])
                                     @endif
@@ -133,9 +178,9 @@
                                                 type="button"
                                                 x-data
                                                 x-on:click="
-                                                    if (confirm(@js($projectDeleteConfirm))) {
+                                                    RencanakanAlert.confirm({ severity: 'danger', text: @js($projectDeleteConfirm) }).then((confirmed) => { if (confirmed) {
                                                         $wire.deleteProject({{ $project->id }})
-                                                    }
+                                                    } })
                                                 "
                                                 class="text-sm text-danger-600 hover:text-danger-700 dark:text-danger-400"
                                             >
@@ -148,9 +193,9 @@
                                                 type="button"
                                                 x-data
                                                 x-on:click="
-                                                    if (confirm(@js($projectRestoreConfirm))) {
+                                                    RencanakanAlert.confirm({ severity: 'warning', text: @js($projectRestoreConfirm) }).then((confirmed) => { if (confirmed) {
                                                         $wire.restoreProject({{ $project->id }})
-                                                    }
+                                                    } })
                                                 "
                                                 class="text-sm text-primary-600 hover:text-primary-700 dark:text-primary-400"
                                             >
@@ -174,7 +219,11 @@
             @php($bulkDeleteTicketConfirmTemplate = __('Delete %COUNT% selected ticket(s) from :organization? Items: %ITEMS%. Tickets will be soft-deleted (moved to trash) and can be restored later.', ['organization' => $session->organization->name]))
             @php($bulkRestoreTicketConfirmTemplate = __('Restore %COUNT% selected ticket(s) in :organization? Items: %ITEMS%. Tickets will be moved out of trash and become visible again.', ['organization' => $session->organization->name]))
             <div class="flex flex-col gap-2" x-data="{ selectedTicketIds: [] }">
-                <h3 class="text-base font-medium">{{ __('Tickets') }}</h3>
+                <span class="rk-sp__anchor" id="sp-tickets"></span>
+                <div class="rk-sp__section-head">
+                    <h3>{{ __('Tickets') }} <span class="rk-sp__count">{{ $ticketsForBulk->count() }}</span></h3>
+                    <p>{{ $session->isFullAccess() ? __('A ticket\'s status can be changed; tickets can be moved to the trash and restored, also in bulk. Priority, labels, assignee and dates cannot be edited at this level.') : ($session->isSupportAction() ? __('Title, status, priority, labels, assignee and due date can be changed right in the table. Each change asks for confirmation.') : __('Read only.')) }}</p>
+                </div>
 
                 @if ($session->isFullAccess())
                     {{-- Phase 14: bulk delete/restore. Both buttons stay
@@ -191,28 +240,28 @@
                         <span class="text-xs text-gray-500" x-show="selectedTicketIds.length > 0" x-text="selectedTicketIds.length + ' {{ __('selected') }}'"></span>
                         <button
                             type="button"
-                            x-on:click="
+                            x-on:click="(() => {
                                 let items = Array.from($root.querySelectorAll('[data-ticket-checkbox]:checked')).map((cb) => cb.dataset.ticketName + (cb.dataset.ticketState === 'trashed' ? ' ({{ __('trashed') }})' : ''));
                                 let message = @js($bulkDeleteTicketConfirmTemplate).replace('%COUNT%', selectedTicketIds.length).replace('%ITEMS%', items.join(', '));
-                                if (confirm(message)) {
+                                RencanakanAlert.confirm({ severity: 'danger', text: message }).then((confirmed) => { if (confirmed) {
                                     $wire.bulkDeleteTicket(selectedTicketIds);
                                     selectedTicketIds = [];
-                                }
-                            "
+                                } })
+})()"
                             class="text-sm text-danger-600 hover:text-danger-700 dark:text-danger-400"
                         >
                             {{ __('Bulk Delete') }}
                         </button>
                         <button
                             type="button"
-                            x-on:click="
+                            x-on:click="(() => {
                                 let items = Array.from($root.querySelectorAll('[data-ticket-checkbox]:checked')).map((cb) => cb.dataset.ticketName + (cb.dataset.ticketState === 'trashed' ? ' ({{ __('trashed') }})' : ''));
                                 let message = @js($bulkRestoreTicketConfirmTemplate).replace('%COUNT%', selectedTicketIds.length).replace('%ITEMS%', items.join(', '));
-                                if (confirm(message)) {
+                                RencanakanAlert.confirm({ severity: 'warning', text: message }).then((confirmed) => { if (confirmed) {
                                     $wire.bulkRestoreTicket(selectedTicketIds);
                                     selectedTicketIds = [];
-                                }
-                            "
+                                } })
+})()"
                             class="text-sm text-primary-600 hover:text-primary-700 dark:text-primary-400"
                         >
                             {{ __('Bulk Restore') }}
@@ -261,7 +310,7 @@
                                     </td>
                                 @endif
                                 <td class="py-2 pr-4">
-                                    {{ $ticket->code }} —
+                                    {{ $ticket->code }} @if ($ticket->trashed())<span class="rk-sp__trash">{{ __('In trash') }}</span>@endif —
                                     @if ($session->isSupportAction())
                                         {{-- Same confirm()-gated pattern as the other Support Action
                                              controls. @js() (not raw Blade interpolation) is required
@@ -274,11 +323,11 @@
                                             type="text"
                                             x-data
                                             x-on:change="
-                                                if (confirm(@js(__('Are you sure you want to change this ticket\'s title?')))) {
+                                                RencanakanAlert.confirm({ severity: 'warning', text: @js(__('Are you sure you want to change this ticket\'s title?')) }).then((confirmed) => { if (confirmed) {
                                                     $wire.changeTicketTitle({{ $ticket->id }}, $event.target.value)
                                                 } else {
                                                     $event.target.value = @js($ticket->name)
-                                                }
+                                                } })
                                             "
                                             value="{{ $ticket->name }}"
                                             maxlength="255"
@@ -297,23 +346,12 @@
                                              call itself (not just a UI affordance); canceling resets the
                                              <select> back to the ticket's current status so the control
                                              never shows a value that was not actually saved. --}}
-                                        <select
-                                            x-data
-                                            x-on:change="
-                                                if (confirm(@js(__('Are you sure you want to change this ticket\'s status?')))) {
-                                                    $wire.changeTicketStatus({{ $ticket->id }}, parseInt($event.target.value))
-                                                } else {
-                                                    $event.target.value = '{{ $ticket->status_id }}'
-                                                }
-                                            "
-                                            class="text-sm rounded-md border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-200"
-                                        >
-                                            @foreach ($this->ticketStatusOptions($ticket) as $status)
-                                                <option value="{{ $status->id }}" @selected($status->id === $ticket->status_id)>
-                                                    {{ $status->name }}
-                                                </option>
-                                            @endforeach
-                                        </select>
+                                        <x-support-select
+                                            :options="$this->ticketStatusOptions($ticket)->map(fn ($o) => ['id' => $o->id, 'label' => $o->name, 'color' => $o->color])->all()"
+                                            :current="$ticket->status_id"
+                                            method="changeTicketStatus"
+                                            :record-id="$ticket->id"
+                                            :confirm="__('Are you sure you want to change this ticket\'s status?')" />
                                     @elseif ($ticket->status)
                                         @include('components.color-badge', ['color' => $ticket->status->color, 'label' => $ticket->status->name])
                                     @endif
@@ -323,23 +361,12 @@
                                         {{-- Same confirm()-gated pattern as the Status select above:
                                              canceling resets the <select> back to the ticket's current
                                              priority so it never shows a value that was not saved. --}}
-                                        <select
-                                            x-data
-                                            x-on:change="
-                                                if (confirm(@js(__('Are you sure you want to change this ticket\'s priority?')))) {
-                                                    $wire.changeTicketPriority({{ $ticket->id }}, parseInt($event.target.value))
-                                                } else {
-                                                    $event.target.value = '{{ $ticket->priority_id }}'
-                                                }
-                                            "
-                                            class="text-sm rounded-md border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-200"
-                                        >
-                                            @foreach ($this->priorityOptions() as $priority)
-                                                <option value="{{ $priority->id }}" @selected($priority->id === $ticket->priority_id)>
-                                                    {{ $priority->name }}
-                                                </option>
-                                            @endforeach
-                                        </select>
+                                        <x-support-select
+                                            :options="$this->priorityOptions()->map(fn ($o) => ['id' => $o->id, 'label' => $o->name, 'color' => $o->color])->all()"
+                                            :current="$ticket->priority_id"
+                                            method="changeTicketPriority"
+                                            :record-id="$ticket->id"
+                                            :confirm="__('Are you sure you want to change this ticket\'s priority?')" />
                                     @elseif ($ticket->priority)
                                         @include('components.color-badge', ['color' => $ticket->priority->color, 'label' => $ticket->priority->name])
                                     @endif
@@ -352,28 +379,12 @@
                                              client input), and a cancel restores the option list back to
                                              $ticket's own current labels rather than leaving the browser's
                                              now-changed selection on screen unsent. --}}
-                                        <select
-                                            multiple
-                                            x-data
-                                            x-on:change="
-                                                let selected = Array.from($event.target.selectedOptions).map((option) => parseInt(option.value));
-                                                if (confirm(@js(__('Are you sure you want to change this ticket\'s labels?')))) {
-                                                    $wire.changeTicketLabels({{ $ticket->id }}, selected)
-                                                } else {
-                                                    let current = @js($ticket->labels->pluck('id')->all());
-                                                    Array.from($event.target.options).forEach((option) => {
-                                                        option.selected = current.includes(parseInt(option.value));
-                                                    });
-                                                }
-                                            "
-                                            class="text-sm rounded-md border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-200"
-                                        >
-                                            @foreach ($this->labelOptions() as $label)
-                                                <option value="{{ $label->id }}" @selected($ticket->labels->pluck('id')->contains($label->id))>
-                                                    {{ $label->name }}
-                                                </option>
-                                            @endforeach
-                                        </select>
+                                        <x-support-multiselect
+                                            :options="$this->labelOptions()->map(fn ($o) => ['id' => $o->id, 'label' => $o->name, 'color' => $o->color])->all()"
+                                            :current="$ticket->labels->pluck('id')->all()"
+                                            method="changeTicketLabels"
+                                            :record-id="$ticket->id"
+                                            :confirm="__('Are you sure you want to change this ticket\'s labels?')" />
                                     @else
                                         <div class="flex flex-wrap gap-1">
                                             @forelse ($ticket->labels as $label)
@@ -389,25 +400,12 @@
                                         {{-- Same confirm()-gated pattern as Status/Priority above. An
                                              empty <option value=""> is the "clear assignment" choice —
                                              the confirm handler passes null (not parseInt('')) for it. --}}
-                                        <select
-                                            x-data
-                                            x-on:change="
-                                                if (confirm(@js(__('Are you sure you want to change this ticket\'s responsible?')))) {
-                                                    let value = $event.target.value;
-                                                    $wire.changeTicketResponsible({{ $ticket->id }}, value === '' ? null : parseInt(value))
-                                                } else {
-                                                    $event.target.value = '{{ $ticket->responsible_id ?? '' }}'
-                                                }
-                                            "
-                                            class="text-sm rounded-md border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-200"
-                                        >
-                                            <option value="" @selected($ticket->responsible_id === null)>{{ __('Unassigned') }}</option>
-                                            @foreach ($this->responsibleOptions($ticket->id) as $user)
-                                                <option value="{{ $user->id }}" @selected($user->id === $ticket->responsible_id)>
-                                                    {{ $user->name }}
-                                                </option>
-                                            @endforeach
-                                        </select>
+                                        <x-support-select
+                                            :options="$this->responsibleOptions($ticket->id)->map(fn ($o) => ['id' => $o->id, 'label' => $o->name])->prepend(['id' => null, 'label' => __('Unassigned')])->values()->all()"
+                                            :current="$ticket->responsible_id"
+                                            method="changeTicketResponsible"
+                                            :record-id="$ticket->id"
+                                            :confirm="__('Are you sure you want to change this ticket\'s responsible?')" />
                                     @else
                                         {{ $ticket->responsible?->name ?? '—' }}
                                     @endif
@@ -421,12 +419,12 @@
                                             type="date"
                                             x-data
                                             x-on:change="
-                                                if (confirm(@js(__('Are you sure you want to change this ticket\'s due date?')))) {
+                                                RencanakanAlert.confirm({ severity: 'warning', text: @js(__('Are you sure you want to change this ticket\'s due date?')) }).then((confirmed) => { if (confirmed) {
                                                     let value = $event.target.value;
                                                     $wire.changeTicketDueDate({{ $ticket->id }}, value === '' ? null : value)
                                                 } else {
                                                     $event.target.value = '{{ $ticket->due_date?->toDateString() }}'
-                                                }
+                                                } })
                                             "
                                             value="{{ $ticket->due_date?->toDateString() }}"
                                             class="text-sm rounded-md border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-200"
@@ -456,9 +454,9 @@
                                                 type="button"
                                                 x-data
                                                 x-on:click="
-                                                    if (confirm(@js(__('Delete ticket :ticket from :organization? The ticket will be soft-deleted (moved to trash) and can be restored later.', ['ticket' => $ticket->name, 'organization' => $session->organization->name])))) {
+                                                    RencanakanAlert.confirm({ severity: 'danger', text: @js(__('Delete ticket :ticket from :organization? The ticket will be soft-deleted (moved to trash) and can be restored later.', ['ticket' => $ticket->name, 'organization' => $session->organization->name])) }).then((confirmed) => { if (confirmed) {
                                                         $wire.deleteTicket({{ $ticket->id }})
-                                                    }
+                                                    } })
                                                 "
                                                 class="text-sm text-danger-600 hover:text-danger-700 dark:text-danger-400"
                                             >
@@ -469,9 +467,9 @@
                                                 type="button"
                                                 x-data
                                                 x-on:click="
-                                                    if (confirm(@js(__('Restore ticket :ticket in :organization? The ticket will be moved out of trash and become visible again.', ['ticket' => $ticket->name, 'organization' => $session->organization->name])))) {
+                                                    RencanakanAlert.confirm({ severity: 'warning', text: @js(__('Restore ticket :ticket in :organization? The ticket will be moved out of trash and become visible again.', ['ticket' => $ticket->name, 'organization' => $session->organization->name])) }).then((confirmed) => { if (confirmed) {
                                                         $wire.restoreTicket({{ $ticket->id }})
-                                                    }
+                                                    } })
                                                 "
                                                 class="text-sm text-primary-600 hover:text-primary-700 dark:text-primary-400"
                                             >
@@ -495,35 +493,39 @@
             @php($bulkDeleteSprintConfirmTemplate = __('Delete %COUNT% selected sprint(s) from :organization? Items: %ITEMS%. Sprints will be soft-deleted (moved to trash) and can be restored later.', ['organization' => $session->organization->name]))
             @php($bulkRestoreSprintConfirmTemplate = __('Restore %COUNT% selected sprint(s) in :organization? Items: %ITEMS%. Sprints will be moved out of trash and become visible again. Any linked epic that was also deleted separately will be restored along with its sprint.', ['organization' => $session->organization->name]))
             <div class="flex flex-col gap-2" x-data="{ selectedSprintIds: [] }">
-                <h3 class="text-base font-medium">{{ __('Sprints') }}</h3>
+                <span class="rk-sp__anchor" id="sp-sprints"></span>
+                <div class="rk-sp__section-head">
+                    <h3>{{ __('Sprints') }} <span class="rk-sp__count">{{ $sprintsForBulk->count() }}</span></h3>
+                    <p>{{ $session->isFullAccess() ? __('Sprints can be moved to the trash and restored, also in bulk.') : ($session->isSupportAction() ? __('Sprints can be started or stopped and their dates changed.') : __('Read only.')) }}</p>
+                </div>
 
                 @if ($session->isFullAccess())
                     <div class="flex items-center gap-3">
                         <span class="text-xs text-gray-500" x-show="selectedSprintIds.length > 0" x-text="selectedSprintIds.length + ' {{ __('selected') }}'"></span>
                         <button
                             type="button"
-                            x-on:click="
+                            x-on:click="(() => {
                                 let items = Array.from($root.querySelectorAll('[data-sprint-checkbox]:checked')).map((cb) => cb.dataset.sprintName + (cb.dataset.sprintState === 'trashed' ? ' ({{ __('trashed') }})' : ''));
                                 let message = @js($bulkDeleteSprintConfirmTemplate).replace('%COUNT%', selectedSprintIds.length).replace('%ITEMS%', items.join(', '));
-                                if (confirm(message)) {
+                                RencanakanAlert.confirm({ severity: 'danger', text: message }).then((confirmed) => { if (confirmed) {
                                     $wire.bulkDeleteSprint(selectedSprintIds);
                                     selectedSprintIds = [];
-                                }
-                            "
+                                } })
+})()"
                             class="text-sm text-danger-600 hover:text-danger-700 dark:text-danger-400"
                         >
                             {{ __('Bulk Delete') }}
                         </button>
                         <button
                             type="button"
-                            x-on:click="
+                            x-on:click="(() => {
                                 let items = Array.from($root.querySelectorAll('[data-sprint-checkbox]:checked')).map((cb) => cb.dataset.sprintName + (cb.dataset.sprintState === 'trashed' ? ' ({{ __('trashed') }})' : ''));
                                 let message = @js($bulkRestoreSprintConfirmTemplate).replace('%COUNT%', selectedSprintIds.length).replace('%ITEMS%', items.join(', '));
-                                if (confirm(message)) {
+                                RencanakanAlert.confirm({ severity: 'warning', text: message }).then((confirmed) => { if (confirmed) {
                                     $wire.bulkRestoreSprint(selectedSprintIds);
                                     selectedSprintIds = [];
-                                }
-                            "
+                                } })
+})()"
                             class="text-sm text-primary-600 hover:text-primary-700 dark:text-primary-400"
                         >
                             {{ __('Bulk Restore') }}
@@ -572,7 +574,7 @@
                                         />
                                     </td>
                                 @endif
-                                <td class="py-2 pr-4">{{ $sprint->name }}</td>
+                                <td class="py-2 pr-4">{{ $sprint->name }} @if ($sprint->trashed())<span class="rk-sp__trash">{{ __('In trash') }}</span>@endif</td>
                                 <td class="py-2 pr-4">{{ $sprint->project?->name }}</td>
                                 <td class="py-2 pr-4">
                                     @if ($session->isSupportAction())
@@ -586,9 +588,9 @@
                                                 type="button"
                                                 x-data
                                                 x-on:click="
-                                                    if (confirm(@js(__('Are you sure you want to start this sprint?')))) {
+                                                    RencanakanAlert.confirm({ severity: 'warning', text: @js(__('Are you sure you want to start this sprint?')) }).then((confirmed) => { if (confirmed) {
                                                         $wire.sprintStart({{ $sprint->id }})
-                                                    }
+                                                    } })
                                                 "
                                                 class="text-xs px-2 py-1 rounded-md bg-success-500 text-white"
                                             >
@@ -599,9 +601,9 @@
                                                 type="button"
                                                 x-data
                                                 x-on:click="
-                                                    if (confirm(@js(__('Are you sure you want to stop this sprint?')))) {
+                                                    RencanakanAlert.confirm({ severity: 'warning', text: @js(__('Are you sure you want to stop this sprint?')) }).then((confirmed) => { if (confirmed) {
                                                         $wire.sprintStop({{ $sprint->id }})
-                                                    }
+                                                    } })
                                                 "
                                                 class="text-xs px-2 py-1 rounded-md bg-danger-500 text-white"
                                             >
@@ -628,15 +630,15 @@
                                             type="date"
                                             data-field="starts_at"
                                             x-data
-                                            x-on:change="
+                                            x-on:change="(() => {
                                                 let startsAt = $event.target.value;
                                                 let endsAt = $el.closest('tr').querySelector('[data-field=ends_at]').value;
-                                                if (confirm(@js(__('Are you sure you want to change this sprint\'s dates?')))) {
+                                                RencanakanAlert.confirm({ severity: 'warning', text: @js(__('Are you sure you want to change this sprint\'s dates?')) }).then((confirmed) => { if (confirmed) {
                                                     $wire.changeSprintDates({{ $sprint->id }}, startsAt, endsAt)
                                                 } else {
                                                     $event.target.value = '{{ $sprint->starts_at?->toDateString() }}'
-                                                }
-                                            "
+                                                } })
+})()"
                                             value="{{ $sprint->starts_at?->toDateString() }}"
                                             class="text-sm rounded-md border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-200"
                                         />
@@ -650,15 +652,15 @@
                                             type="date"
                                             data-field="ends_at"
                                             x-data
-                                            x-on:change="
+                                            x-on:change="(() => {
                                                 let endsAt = $event.target.value;
                                                 let startsAt = $el.closest('tr').querySelector('[data-field=starts_at]').value;
-                                                if (confirm(@js(__('Are you sure you want to change this sprint\'s dates?')))) {
+                                                RencanakanAlert.confirm({ severity: 'warning', text: @js(__('Are you sure you want to change this sprint\'s dates?')) }).then((confirmed) => { if (confirmed) {
                                                     $wire.changeSprintDates({{ $sprint->id }}, startsAt, endsAt)
                                                 } else {
                                                     $event.target.value = '{{ $sprint->ends_at?->toDateString() }}'
-                                                }
-                                            "
+                                                } })
+})()"
                                             value="{{ $sprint->ends_at?->toDateString() }}"
                                             class="text-sm rounded-md border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-200"
                                         />
@@ -689,9 +691,9 @@
                                                 type="button"
                                                 x-data
                                                 x-on:click="
-                                                    if (confirm(@js($sprintDeleteConfirm))) {
+                                                    RencanakanAlert.confirm({ severity: 'danger', text: @js($sprintDeleteConfirm) }).then((confirmed) => { if (confirmed) {
                                                         $wire.deleteSprint({{ $sprint->id }})
-                                                    }
+                                                    } })
                                                 "
                                                 class="text-sm text-danger-600 hover:text-danger-700 dark:text-danger-400"
                                             >
@@ -705,9 +707,9 @@
                                                 type="button"
                                                 x-data
                                                 x-on:click="
-                                                    if (confirm(@js($sprintRestoreConfirm))) {
+                                                    RencanakanAlert.confirm({ severity: 'warning', text: @js($sprintRestoreConfirm) }).then((confirmed) => { if (confirmed) {
                                                         $wire.restoreSprint({{ $sprint->id }})
-                                                    }
+                                                    } })
                                                 "
                                                 class="text-sm text-primary-600 hover:text-primary-700 dark:text-primary-400"
                                             >
@@ -727,8 +729,12 @@
             </div>
 
             {{-- Members --}}
+            @php($membersList = $this->members())
             <div class="flex flex-col gap-2">
-                <h3 class="text-base font-medium">{{ __('Organization members') }}</h3>
+                <span class="rk-sp__anchor" id="sp-members"></span>
+                <div class="rk-sp__section-head">
+                    <h3>{{ __('Organization members') }} <span class="rk-sp__count">{{ $membersList->count() }}</span></h3>
+                </div>
 
                 <table class="w-full text-sm border-collapse">
                     <thead>
@@ -740,7 +746,7 @@
                         </tr>
                     </thead>
                     <tbody>
-                        @forelse ($this->members() as $member)
+                        @forelse ($membersList as $member)
                             <tr class="border-b border-gray-100 dark:border-gray-800">
                                 <td class="py-2 pr-4">{{ $member->name }}</td>
                                 <td class="py-2 pr-4">{{ $member->email }}</td>
@@ -757,11 +763,16 @@
             </div>
 
             {{-- Recent activity --}}
+            @php($activityList = $this->recentActivity())
             <div class="flex flex-col gap-2">
-                <h3 class="text-base font-medium">{{ __('Recent activity') }}</h3>
+                <span class="rk-sp__anchor" id="sp-activity"></span>
+                <div class="rk-sp__section-head">
+                    <h3>{{ __('Recent activity') }} <span class="rk-sp__count">{{ $activityList->count() }}</span></h3>
+                    <p>{{ __('Latest 8 changes from the last 30 days.') }}</p>
+                </div>
 
                 <div class="divide-y divide-gray-100 dark:divide-gray-700 border border-gray-100 dark:border-gray-700 rounded-lg">
-                    @forelse ($this->recentActivity() as $activity)
+                    @forelse ($activityList as $activity)
                         <div class="flex flex-col px-4 py-3 text-sm">
                             <span>
                                 {{ __(':user changed :ticket status from :old to :new', [
@@ -777,12 +788,6 @@
                         <div class="px-4 py-4 text-sm text-gray-500">{{ __('No recent activity yet') }}</div>
                     @endforelse
                 </div>
-            </div>
-
-            <div>
-                <x-filament::button color="danger" wire:click="endSession">
-                    {{ __('Akhiri Sesi') }}
-                </x-filament::button>
             </div>
         </div>
     @endif
