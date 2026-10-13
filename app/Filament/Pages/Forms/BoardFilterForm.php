@@ -29,8 +29,8 @@ class BoardFilterForm
     {
         return [
             Grid::make([
-                'default' => 2,
-                'md' => 6,
+                'default' => 1,
+                'md' => 4,
             ])
                 ->schema([
                     Select::make('users')
@@ -55,23 +55,24 @@ class BoardFilterForm
 
                     Toggle::make('includeNotAffectedTickets')
                         ->label(__('Show only not affected tickets'))
-                        ->columnSpan(2),
+                        ->columnSpan(['default' => 1, 'md' => 2]),
 
                     Placeholder::make('search')
-                        ->label(new HtmlString('&nbsp;'))
+                        ->disableLabel()
+                        ->columnSpan(['default' => 1, 'md' => 2])
                         ->content(new HtmlString('
+                            <div class="rk-filter-actions">
                             <button type="button"
                                     wire:click="filter" wire:loading.attr="disabled"
-                                    class="bg-primary-500 px-3 py-2 text-white rounded hover:bg-primary-600
-                                    disabled:bg-primary-300">
+                                    class="rk-filter-btn">
                                 '.__('Filter').'
                             </button>
                             <button type="button"
                                     wire:click="resetFilters" wire:loading.attr="disabled"
-                                    class="ml-2 bg-gray-800 px-3 py-2 text-white rounded hover:bg-gray-900
-                                    disabled:bg-gray-300">
+                                    class="rk-filter-btn rk-filter-btn--ghost">
                                 '.__('Reset filters').'
                             </button>
+                            </div>
                         ')),
                 ]),
         ];

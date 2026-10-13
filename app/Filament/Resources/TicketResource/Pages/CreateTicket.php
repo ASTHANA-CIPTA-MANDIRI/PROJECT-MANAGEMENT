@@ -4,6 +4,7 @@ namespace App\Filament\Resources\TicketResource\Pages;
 
 use App\Filament\Resources\TicketResource;
 use App\Filament\Resources\TicketResource\Forms\TicketForm;
+use Filament\Pages\Actions;
 use Filament\Resources\Pages\CreateRecord;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Facades\DB;
@@ -11,6 +12,18 @@ use Illuminate\Support\Facades\DB;
 class CreateTicket extends CreateRecord
 {
     protected static string $resource = TicketResource::class;
+
+    protected function getActions(): array
+    {
+        return [
+            Actions\Action::make('back')
+                ->label(__('Back to tickets'))
+                ->icon('heroicon-o-arrow-left')
+                ->color('secondary')
+                ->extraAttributes(['class' => 'rk-back-action'])
+                ->url(TicketResource::getUrl('index')),
+        ];
+    }
 
     /**
      * Create the ticket and its lifecycle writes (code/order generation, epic

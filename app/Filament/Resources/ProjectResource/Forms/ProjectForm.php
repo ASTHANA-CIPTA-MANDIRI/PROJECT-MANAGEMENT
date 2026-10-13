@@ -24,18 +24,39 @@ class ProjectForm
      */
     public static function schema(): array
     {
+        // Source order == mobile order (one column, required fields first,
+        // Description last). On lg+ a 12-column grid lays out two compact
+        // rows of equal-height cards, then the full-width Description card.
         return [
-            Forms\Components\Card::make()
+            Forms\Components\Grid::make(['default' => 1, 'lg' => 12])
                 ->schema([
-                    Forms\Components\Grid::make()
-                        ->columns(3)
+                    Forms\Components\Section::make(__('General'))
+                        ->schema([self::nameRow()])
+                        ->columnSpan(['lg' => 6]),
+
+                    Forms\Components\Section::make(__('Ownership & status'))
+                        ->columns(['default' => 1, 'md' => 2])
                         ->schema([
-                            self::cover(),
-                            self::detailsGrid(),
-                            self::description(),
+                            self::ownerSelect(),
+                            self::statusSelect(),
+                        ])
+                        ->columnSpan(['lg' => 6]),
+
+                    Forms\Components\Section::make(__('Project type'))
+                        ->columns(['default' => 1, 'md' => 2])
+                        ->schema([
                             self::typeSelect(),
                             self::statusTypeSelect(),
-                        ]),
+                        ])
+                        ->columnSpan(['lg' => 7]),
+
+                    Forms\Components\Section::make(__('Thumbnail'))
+                        ->schema([self::cover()])
+                        ->columnSpan(['lg' => 5]),
+
+                    Forms\Components\Section::make(__('Project description'))
+                        ->schema([self::description()])
+                        ->columnSpan(['lg' => 12]),
                 ]),
         ];
     }
@@ -56,52 +77,51 @@ class ProjectForm
             ->columnSpan(1);
     }
 
-    private static function detailsGrid(): Forms\Components\Grid
+    private static function nameRow(): Forms\Components\Grid
     {
         return Forms\Components\Grid::make()
-            ->columnSpan(2)
+            ->columns(12)
             ->schema([
-                Forms\Components\Grid::make()
-                    ->columnSpan(2)
-                    ->columns(12)
-                    ->schema([
-                        Forms\Components\TextInput::make('name')
-                            ->label(__('Project name'))
-                            ->required()
-                            ->columnSpan(10)
-                            ->maxLength(255),
+                Forms\Components\TextInput::make('name')
+                    ->label(__('Project name'))
+                    ->required()
+                    ->columnSpan(9)
+                    ->maxLength(255),
 
-                        Forms\Components\TextInput::make('ticket_prefix')
-                            ->label(__('Ticket prefix'))
-                            ->maxLength(3)
-                            ->columnSpan(2)
-                            // A plain ->unique() either locks a trashed
-                            // project's prefix forever or (if scoped to
-                            // active rows) lets it through validation only to
-                            // hit the database's own unique index on save -
-                            // see UniqueAmongTrashedRule and M-3 in
-                            // docs/soft-deletes.md.
-                            ->rule(fn ($record) => UniqueAmongTrashedRule::make(
-                                Project::class,
-                                'ticket_prefix',
-                                $record?->id,
-                                __('This ticket prefix is already used by another project.'),
-                                __('This ticket prefix belongs to a deleted project. Restore that project to reuse it, or choose a different prefix.'),
-                            ))
-                            ->disabled(
-                                fn ($record) => $record && $record->tickets()->count() != 0
-                            )
-                            ->required(),
-                    ]),
-
-                Forms\Components\Select::make('owner_id')
-                    ->label(__('Project owner'))
-                    ->searchable()
-                    ->options(fn ($record) => UserOptions::forOrganization(
-                        self::ownerOrganization($record),
-                        $record?->owner_id
+                Forms\Components\TextInput::make('ticket_prefix')
+                    ->label(__('Ticket prefix'))
+                    ->maxLength(3)
+                    ->columnSpan(3)
+                    // A plain ->unique() either locks a trashed
+                    // project's prefix forever or (if scoped to
+                    // active rows) lets it through validation only to
+                    // hit the database's own unique index on save -
+                    // see UniqueAmongTrashedRule and M-3 in
+                    // docs/soft-deletes.md.
+                    ->rule(fn ($record) => UniqueAmongTrashedRule::make(
+                        Project::class,
+                        'ticket_prefix',
+                        $record?->id,
+                        __('This ticket prefix is already used by another project.'),
+                        __('This ticket prefix belongs to a deleted project. Restore that project to reuse it, or choose a different prefix.'),
                     ))
-                    ->default(fn () => auth()->user()->id)
+                    ->disabled(
+                        fn ($record) => $record && $record->tickets()->count() != 0
+                    )
+                    ->required(),
+            ]);
+    }
+
+    private static function ownerSelect(): Forms\Components\Select
+    {
+        return Forms\Components\Select::make('owner_id')
+            ->label(__('Project owner'))
+            ->searchable()
+            ->options(fn ($record) => UserOptions::forOrganization(
+                self::ownerOrganization($record),
+                $record?->owner_id
+            ))
+            ->default(fn () => auth()->user()->id)
                     // The options list above is a UI convenience only - a
                     // crafted payload can submit any id regardless of what
                     // was rendered, so the actual gate is this rule
@@ -109,39 +129,41 @@ class ProjectForm
                     // project's Organization. A legacy project with no
                     // Organization (record's own organization is null) keeps
                     // the pre-5.3B, ungated behavior instead.
-                    ->rule(fn ($record) => OrganizationMemberRule::make(
-                        self::ownerOrganization($record),
-                        __('The project owner must be a member of the current organization.')
-                    ))
-                    ->required(),
+            ->rule(fn ($record) => OrganizationMemberRule::make(
+                self::ownerOrganization($record),
+                __('The project owner must be a member of the current organization.')
+            ))
+            ->required();
+    }
 
-                Forms\Components\Select::make('status_id')
-                    ->label(__('Project status'))
-                    ->searchable()
-                    ->options(fn () => ProjectStatus::query()->visibleTo(auth()->user())->pluck('name', 'id')->toArray())
-                    ->default(fn () => ProjectStatus::query()->visibleTo(auth()->user())->where('is_default', true)->first()?->id)
-                    ->required()
+    private static function statusSelect(): Forms\Components\Select
+    {
+        return Forms\Components\Select::make('status_id')
+            ->label(__('Project status'))
+            ->searchable()
+            ->options(fn () => ProjectStatus::query()->visibleTo(auth()->user())->pluck('name', 'id')->toArray())
+            ->default(fn () => ProjectStatus::query()->visibleTo(auth()->user())->where('is_default', true)->first()?->id)
+            ->required()
                     // Let users add a status inline instead of leaving the form.
-                    ->createOptionForm([
-                        Forms\Components\TextInput::make('name')
-                            ->label(__('Status name'))
-                            ->required()
-                            ->maxLength(255),
-                        Forms\Components\ColorPicker::make('color')
-                            ->label(__('Color'))
-                            ->default(Colors::DEFAULT)
-                            ->required()
-                            ->regex(Colors::HEX_PATTERN),
-                    ])
-                    ->createOptionUsing(fn (array $data) => ProjectStatus::create($data)->getKey()),
-            ]);
+            ->createOptionForm([
+                Forms\Components\TextInput::make('name')
+                    ->label(__('Status name'))
+                    ->required()
+                    ->maxLength(255),
+                Forms\Components\ColorPicker::make('color')
+                    ->label(__('Color'))
+                    ->default(Colors::DEFAULT)
+                    ->required()
+                    ->regex(Colors::HEX_PATTERN),
+            ])
+            ->createOptionUsing(fn (array $data) => ProjectStatus::create($data)->getKey());
     }
 
     private static function description(): Forms\Components\RichEditor
     {
         return Forms\Components\RichEditor::make('description')
             ->label(__('Project description'))
-            ->columnSpan(3);
+            ->columnSpan('full');
     }
 
     /**

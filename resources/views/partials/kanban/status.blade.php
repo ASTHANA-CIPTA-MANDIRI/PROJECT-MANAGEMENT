@@ -1,15 +1,16 @@
-<div class="kanban-statuses" wire:key="status-{{ $status['id'] }}">
-    <div class="status-header"
-         style="border-color: {{ \App\Support\Colors::safe($status['color']) }}66;">
-        <span>{{ $status['title'] }}</span>
+<div class="kanban-statuses" wire:key="status-{{ $status['id'] }}"
+     style="--c: {{ \App\Support\Colors::safe($status['color']) }};">
+    <div class="status-header">
+        <span class="status-title">{{ $status['title'] }}</span>
         @if($status['size'])
-            {{ $status['size'] }} {{ __($status['size'] > 1 ? 'tickets' : 'ticket') }}
+            <span class="status-count">
+                {{ $status['size'] }} {{ __($status['size'] > 1 ? 'tickets' : 'ticket') }}
+            </span>
         @endif
     </div>
     <div class="status-container"
          data-status="{{ $status['id'] }}"
-         id="status-records-{{ $status['id'] }}"
-         style="border-color: {{ \App\Support\Colors::safe($status['color']) }}66;">
+         id="status-records-{{ $status['id'] }}">
         @foreach($records as $record)
             @include('partials.kanban.record')
         @endforeach

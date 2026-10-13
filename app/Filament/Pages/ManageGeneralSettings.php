@@ -6,10 +6,10 @@ use App\Filament\Pages\Concerns\AuthorizesPageAccess;
 use App\Models\Role;
 use App\Models\User;
 use App\Settings\GeneralSettings;
-use Filament\Forms\Components\Card;
 use Filament\Forms\Components\FileUpload;
 use Filament\Forms\Components\Grid;
 use Filament\Forms\Components\Placeholder;
+use Filament\Forms\Components\Section;
 use Filament\Forms\Components\Select;
 use Filament\Forms\Components\TextInput;
 use Filament\Forms\Components\Toggle;
@@ -56,13 +56,36 @@ class ManageGeneralSettings extends SettingsPage
 
     protected function getFormSchema(): array
     {
+        // Presentation only: the same fields, regrouped into cards. Every
+        // closure (options, visibility, summary) is unchanged.
         return [
-            Card::make()
+            Grid::make(['default' => 1, 'lg' => 12])
                 ->schema([
-                    Grid::make(3)
+                    Section::make(__('General'))
+                        ->columns(['default' => 1, 'md' => 2])
+                        ->schema([
+                            TextInput::make('site_name')
+                                ->label(__('Site name'))
+                                ->helperText(__('This is the platform name'))
+                                ->default(fn () => config('app.name'))
+                                ->required(),
+
+                            Select::make('site_language')
+                                ->label(__('Site language'))
+                                ->helperText(__('The language used by the platform.'))
+                                ->searchable()
+                                // All locales (64): the default of 50 hid the last ones
+                                // until the user typed something.
+                                ->optionsLimit(100)
+                                ->options($this->getLanguages()),
+                        ])
+                        ->columnSpan(['lg' => 7]),
+
+                    Section::make(__('Site logo'))
                         ->schema([
                             FileUpload::make('site_logo')
                                 ->label(__('Site logo'))
+                                ->disableLabel()
                                 ->helperText(__('This is the platform logo (e.g. Used in site favicon)'))
                                 // Not ->image(): that accepts image/*, which
                                 // includes image/svg+xml. The logo is written
@@ -71,65 +94,57 @@ class ManageGeneralSettings extends SettingsPage
                                 // could embed <script> and execute for anyone
                                 // who opens it.
                                 ->acceptedFileTypes(config('system.images.accepted_mime_types'))
-                                ->columnSpan(1)
                                 ->maxSize(config('system.max_file_size')),
+                        ])
+                        ->columnSpan(['lg' => 5]),
 
-                            Grid::make(1)
-                                ->columnSpan(2)
-                                ->schema([
-                                    TextInput::make('site_name')
-                                        ->label(__('Site name'))
-                                        ->helperText(__('This is the platform name'))
-                                        ->default(fn () => config('app.name'))
-                                        ->required(),
+                    Section::make(__('User access'))
+                        ->schema([
+                            Toggle::make('enable_registration')
+                                ->label(__('Enable registration?'))
+                                ->helperText(__('If enabled, any user can create an account in this platform. But an administration need to give them permissions.')),
 
-                                    Toggle::make('enable_registration')
-                                        ->label(__('Enable registration?'))
-                                        ->helperText(__('If enabled, any user can create an account in this platform. But an administration need to give them permissions.')),
+                            Toggle::make('enable_social_login')
+                                ->label(__('Enable social login?'))
+                                ->helperText(__('If enabled, configured users can login via their social accounts.')),
 
-                                    Toggle::make('enable_social_login')
-                                        ->label(__('Enable social login?'))
-                                        ->helperText(__('If enabled, configured users can login via their social accounts.')),
+                            Toggle::make('enable_login_form')
+                                ->label(__('Enable form login?'))
+                                ->helperText(__('If enabled, a login form will be visible on the login page.')),
+                        ])
+                        ->columnSpan(['lg' => 7]),
 
-                                    Toggle::make('enable_login_form')
-                                        ->label(__('Enable form login?'))
-                                        ->helperText(__('If enabled, a login form will be visible on the login page.')),
+                    Section::make(__('Roles'))
+                        ->schema([
+                            Select::make('default_role')
+                                ->label(__('Default role'))
+                                ->helperText(__('The platform default role (assigned to newly registered users).'))
+                                ->searchable()
+                                ->options(Role::all()->pluck('name', 'id')->toArray()),
 
-                                    Select::make('site_language')
-                                        ->label(__('Site language'))
-                                        ->helperText(__('The language used by the platform.'))
-                                        ->searchable()
-                                        ->options($this->getLanguages()),
+                            Select::make('super_admin_role')
+                                ->label(__('Super Admin role'))
+                                ->helperText(__('Role treated as the main administrator (full access, 2FA policy). This role cannot be deleted while selected.'))
+                                ->searchable()
+                                ->reactive()
+                                ->rules(['nullable', 'exists:roles,id'])
+                                ->visible(fn () => static::userCanManageSuperAdminRole())
+                                ->options(Role::all()->pluck('name', 'id')->toArray()),
 
-                                    Select::make('default_role')
-                                        ->label(__('Default role'))
-                                        ->helperText(__('The platform default role (assigned to newly registered users).'))
-                                        ->searchable()
-                                        ->options(Role::all()->pluck('name', 'id')->toArray()),
-
-                                    Select::make('super_admin_role')
-                                        ->label(__('Super Admin role'))
-                                        ->helperText(__('Role treated as the main administrator (full access, 2FA policy). This role cannot be deleted while selected.'))
-                                        ->searchable()
-                                        ->reactive()
-                                        ->rules(['nullable', 'exists:roles,id'])
-                                        ->visible(fn () => static::userCanManageSuperAdminRole())
-                                        ->options(Role::all()->pluck('name', 'id')->toArray()),
-
-                                    Placeholder::make('super_admin_status')
-                                        ->label(__('Super Admin summary'))
-                                        // Without the dedicated permission the select above is hidden,
-                                        // so say why rather than making the setting look missing.
-                                        ->helperText(fn () => static::userCanManageSuperAdminRole()
-                                            ? null
-                                            : __('Changing which role counts as Super Admin requires the “:permission” permission.', ['permission' => self::SUPER_ADMIN_PERMISSION]))
-                                        ->content(fn (callable $get) => $this->superAdminSummary(
-                                            static::userCanManageSuperAdminRole()
-                                                ? $get('super_admin_role')
-                                                : app(GeneralSettings::class)->super_admin_role
-                                        )),
-                                ]),
-                        ]),
+                            Placeholder::make('super_admin_status')
+                                ->label(__('Super Admin summary'))
+                                // Without the dedicated permission the select above is hidden,
+                                // so say why rather than making the setting look missing.
+                                ->helperText(fn () => static::userCanManageSuperAdminRole()
+                                    ? null
+                                    : __('Changing which role counts as Super Admin requires the “:permission” permission.', ['permission' => self::SUPER_ADMIN_PERMISSION]))
+                                ->content(fn (callable $get) => $this->superAdminSummary(
+                                    static::userCanManageSuperAdminRole()
+                                        ? $get('super_admin_role')
+                                        : app(GeneralSettings::class)->super_admin_role
+                                )),
+                        ])
+                        ->columnSpan(['lg' => 5]),
                 ]),
         ];
     }
@@ -213,12 +228,33 @@ class ManageGeneralSettings extends SettingsPage
         ]);
     }
 
+    /**
+     * Locale code => "native name (English name)", e.g. "français (French)".
+     * Only the label changes; the stored value stays the locale code, and the
+     * round flag next to each option is drawn by CSS from that code (see the
+     * language flags in filament.scss), so the text stays plain and searchable.
+     *
+     * @return array<string, string>
+     */
     private function getLanguages(): array
     {
         $languages = config('system.locales.list');
         asort($languages);
 
-        return $languages;
+        return collect($languages)
+            ->map(function (string $english, string $code) {
+                $english = trim($english);
+                $native = class_exists(\Locale::class) ? trim((string) \Locale::getDisplayName($code, $code)) : '';
+
+                if ($code === 'en') {
+                    return 'English (UK)';
+                }
+
+                return $native === '' || mb_strtolower($native) === mb_strtolower($english)
+                    ? $english
+                    : $native.' ('.$english.')';
+            })
+            ->all();
     }
 
     /**

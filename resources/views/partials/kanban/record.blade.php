@@ -1,7 +1,4 @@
 <div class="kanban-record" data-id="{{ $record['id'] }}" wire:key="record-{{ $record['id'] }}">
-    <button type="button" class="handle">
-        <x-heroicon-o-arrows-expand class="w-5 h-5" />
-    </button>
     <div class="record-info">
         @if($this->isMultiProject())
             <span class="record-subtitle">
@@ -9,47 +6,55 @@
             </span>
         @endif
         <a href="{{ route('filament.resources.tickets.view', $record['id']) }}"
-           target="_blank"
+           target="_blank" draggable="false"
            class="record-title">
             <span class="code">{{ $record['code'] }}</span>
             <span class="title">{{ $record['title'] }}</span>
         </a>
     </div>
-    @if($record['due_date'])
-        <div class="record-due-date"
-             style="display:inline-flex;align-items:center;gap:.25rem;margin:.35rem 0;padding:.125rem .5rem;
-                    border-radius:9999px;font-size:.75rem;color:#fff;
-                    background-color: {{ $record['is_overdue'] ? '#ef4444' : '#9ca3af' }};">
-            <x-heroicon-o-calendar class="w-3 h-3" />
-            {{ $record['due_date']->format('Y-m-d') }}
-        </div>
+    @if($record['cover'])
+        <a href="{{ route('filament.resources.tickets.view', $record['id']) }}" target="_blank" draggable="false"
+           class="record-cover">
+            <img src="{{ $record['cover'] }}" alt="" loading="lazy" draggable="false">
+        </a>
     @endif
-    @if($record['labels']?->count())
-        <div class="record-labels" style="display:flex;flex-wrap:wrap;gap:.25rem;margin:.35rem 0;">
-            @foreach($record['labels'] as $label)
-                <span class="text-white text-xs px-2 py-0.5 rounded-full"
-                      style="background-color: {{ \App\Support\Colors::safe($label->color) }};">
-                    {{ $label->name }}
-                </span>
-            @endforeach
-        </div>
+    @if($record['excerpt'])
+        <p class="record-excerpt">{{ $record['excerpt'] }}</p>
     @endif
-    <div class="record-footer">
-        <div class="record-type-code">
-            @php($epic = $record['epic'])
+    @php($epic = $record['epic'])
+    @if(($epic && $epic != "") || $record['labels']?->count() || $record['priority'] || $record['type'])
+        <div class="record-tags">
             @if($epic && $epic != "")
-                <div class="px-2 py-1 rounded flex items-center justify-center text-center text-xs text-white
-                            bg-purple-500" title="{{ __('Epic') }}">
-                    {{ $epic->name }}
-                </div>
+                <span class="record-epic" title="{{ __('Epic') }}">{{ $epic->name }}</span>
             @endif
-            <x-ticket-priority :priority="$record['priority']" />
-            <x-ticket-type :type="$record['type']" />
+            @foreach($record['labels'] ?? [] as $label)
+                <x-color-badge pill :color="$label->color" :label="$label->name" />
+            @endforeach
+            <x-color-badge pill :color="$record['priority']->color" :label="$record['priority']->name" />
+            <x-color-badge pill :color="$record['type']->color" :label="$record['type']->name"
+                           :icon="$record['type']->icon" />
         </div>
-        @if($record['responsible'])
-            <x-user-avatar :user="$record['responsible']" />
-        @endif
-    </div>
+    @endif
+    @if($record['due_date'] || $record['responsible'] || $record['totalLoggedHours'])
+        <div class="record-footer">
+            <div class="record-meta">
+                @if($record['due_date'])
+                    <span @class(['record-due-date', 'is-overdue' => $record['is_overdue']])>
+                        <x-heroicon-o-calendar class="w-5 h-5" />
+                        {{ $record['due_date']->translatedFormat($record['due_date']->isCurrentYear() ? 'd M' : 'd M Y') }}
+                    </span>
+                @endif
+                @if($record['totalLoggedHours'])
+                    <span class="record-logged-hours">
+                        <x-heroicon-o-clock class="w-4 h-4" /> {{ $record['totalLoggedHours'] }}
+                    </span>
+                @endif
+            </div>
+            @if($record['responsible'])
+                <x-user-avatar :user="$record['responsible']" />
+            @endif
+        </div>
+    @endif
     @if($record['relations']?->count())
         <div class="record-relations">
             @foreach($record['relations'] as $relation)
@@ -63,11 +68,6 @@
                     </a>
                 </div>
             @endforeach
-        </div>
-    @endif
-    @if($record['totalLoggedHours'])
-        <div class="record-logged-hours">
-            <x-heroicon-o-clock class="w-4 h-4" /> {{ $record['totalLoggedHours'] }}
         </div>
     @endif
 </div>

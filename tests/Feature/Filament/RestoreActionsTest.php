@@ -177,6 +177,75 @@ class RestoreActionsTest extends TestCase
         $this->assertNotNull($project->fresh()->deleted_at);
     }
 
+    /**
+     * Row actions of the Project table are individual icon buttons (no dropdown).
+     * Each keeps its own policy check (Policy::update() / restore()).
+     */
+    public function test_project_row_actions_are_icon_buttons_and_still_policy_gated(): void
+    {
+        $status = ProjectStatus::factory()->create();
+        $viewer = $this->userWith(['List projects', 'View project']);
+        $project = Project::factory()->create(['status_id' => $status->id, 'owner_id' => $viewer->id]);
+        $this->actingAs($viewer);
+
+        $component = Livewire::test(ListProjects::class)
+            ->assertTableActionExists('favorite')
+            ->assertTableActionExists('exportLogHours')
+            ->assertTableActionExists('kanban')
+            ->assertTableActionVisible('view', $project)
+            ->assertTableActionHidden('edit', $project)
+            ->assertTableActionHidden('restore', $project)
+            ->assertTableActionExists('delete')
+            ->assertTableActionHidden('delete', $project);
+
+        $actions = collect($component->instance()->getCachedTableActions());
+
+        $this->assertEmpty(
+            $actions->filter(fn ($a) => $a instanceof \Filament\Tables\Actions\ActionGroup),
+            'row actions must no longer sit behind a dropdown ActionGroup'
+        );
+
+        foreach (['favorite', 'view', 'edit', 'restore', 'delete', 'exportLogHours', 'kanban'] as $name) {
+            $action = $actions->first(fn ($a) => $a->getName() === $name);
+            $this->assertNotNull($action, "action {$name} missing");
+            $this->assertSame('tables::actions.icon-button-action', $action->getView(), "action {$name} must be an icon button");
+
+            // The board tooltip depends on the row's record (scrum vs kanban).
+            if ($name !== 'kanban') {
+                $this->assertNotEmpty($action->getTooltip(), "action {$name} needs a tooltip label");
+            }
+        }
+    }
+
+    /**
+     * The row Delete icon is gated exactly like the Edit page / bulk delete:
+     * ProjectPolicy::delete() (Delete project permission AND isManageableBy(),
+     * or the Organization Owner). Holding the permission alone is not enough.
+     */
+    public function test_the_row_delete_action_is_policy_gated_and_soft_deletes(): void
+    {
+        $status = ProjectStatus::factory()->create();
+        $manager = $this->userWith(['List projects', 'View project', 'Delete project']);
+        $owned = Project::factory()->create(['status_id' => $status->id, 'owner_id' => $manager->id]);
+        $foreign = Project::factory()->create(['status_id' => $status->id]);
+        $foreign->users()->attach($manager->id, ['role' => config('system.projects.affectations.roles.default')]);
+        $this->actingAs($manager);
+
+        Livewire::test(ListProjects::class)
+            ->assertTableActionVisible('delete', $owned)
+            ->assertTableActionHidden('delete', $foreign)
+            ->callTableAction('delete', $owned);
+
+        $this->assertNotNull($owned->fresh()->deleted_at);
+        $this->assertNull($foreign->fresh()->deleted_at);
+
+        $noRight = $this->userWith(['List projects', 'View project']);
+        $mine = Project::factory()->create(['status_id' => $status->id, 'owner_id' => $noRight->id]);
+        $this->actingAs($noRight);
+
+        Livewire::test(ListProjects::class)->assertTableActionHidden('delete', $mine);
+    }
+
     public function test_a_user_with_delete_project_can_bulk_restore_several_projects(): void
     {
         $status = ProjectStatus::factory()->create();

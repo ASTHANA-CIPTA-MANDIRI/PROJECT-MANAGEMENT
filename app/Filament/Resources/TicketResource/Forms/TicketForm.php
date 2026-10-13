@@ -27,22 +27,46 @@ class TicketForm
      */
     public static function schema(): array
     {
+        // Source order == mobile order (one column). On lg+ a 12-column grid
+        // lays out three rows of cards (7/5, 7/5, full) then labels/relations.
         return [
-            Forms\Components\Card::make()
+            Forms\Components\Grid::make(['default' => 1, 'lg' => 12])
                 ->schema([
-                    Forms\Components\Grid::make()
+                    Forms\Components\Section::make(__('General'))
+                        ->columns(['default' => 1, 'md' => 2])
                         ->schema([
                             self::projectSelect(),
                             self::epicSelect(),
                             self::codeAndName(),
+                        ])
+                        ->columnSpan(['lg' => 7]),
+
+                    Forms\Components\Section::make(__('Assignment'))
+                        ->schema([
                             self::ownerSelect(),
                             self::responsibleSelect(),
-                            self::statusTypePriority(),
-                        ]),
-                    self::content(),
-                    self::labelsSelect(),
-                    self::estimationAndDueDate(),
-                    self::relationsRepeater(),
+                        ])
+                        ->columnSpan(['lg' => 5]),
+
+                    Forms\Components\Section::make(__('Status & classification'))
+                        ->schema([self::statusTypePriority()])
+                        ->columnSpan(['lg' => 7]),
+
+                    Forms\Components\Section::make(__('Schedule'))
+                        ->schema([self::estimationAndDueDate()])
+                        ->columnSpan(['lg' => 5]),
+
+                    Forms\Components\Section::make(__('Ticket content'))
+                        ->schema([self::content()])
+                        ->columnSpan(['lg' => 12]),
+
+                    Forms\Components\Section::make(__('Labels'))
+                        ->schema([self::labelsSelect()])
+                        ->columnSpan(['lg' => 5]),
+
+                    Forms\Components\Section::make(__('Ticket relations'))
+                        ->schema([self::relationsRepeater()])
+                        ->columnSpan(['lg' => 7]),
                 ]),
         ];
     }
@@ -81,7 +105,7 @@ class TicketForm
     {
         return Forms\Components\Grid::make()
             ->columns(12)
-            ->columnSpan(2)
+            ->columnSpan(['md' => 2])
             ->schema([
                 Forms\Components\TextInput::make('code')
                     ->label(__('Ticket code'))
@@ -120,8 +144,8 @@ class TicketForm
     private static function statusTypePriority(): Forms\Components\Grid
     {
         return Forms\Components\Grid::make()
-            ->columns(3)
-            ->columnSpan(2)
+            // Tailwind only sees literal class names: md:grid-cols-3 lg:grid-cols-3
+            ->columns(['default' => 1, 'md' => 3, 'lg' => 3])
             ->schema([
                 Forms\Components\Select::make('status_id')
                     ->label(__('Ticket status'))
@@ -158,8 +182,7 @@ class TicketForm
     {
         return Forms\Components\RichEditor::make('content')
             ->label(__('Ticket content'))
-            ->required()
-            ->columnSpan(2);
+            ->required();
     }
 
     private static function labelsSelect(): Forms\Components\Select
@@ -173,7 +196,7 @@ class TicketForm
             ->relationship('labels', 'name', fn ($query) => $query->visibleTo(auth()->user()))
             ->preload()
             ->searchable()
-            ->columnSpan(2)
+            ->disableLabel()
             // Create a new label inline (name + color) without leaving the form.
             ->createOptionForm([
                 Forms\Components\TextInput::make('name')
@@ -191,23 +214,21 @@ class TicketForm
     private static function estimationAndDueDate(): Forms\Components\Grid
     {
         return Forms\Components\Grid::make()
-            ->columnSpan(2)
-            ->columns(12)
+            ->columns(['default' => 1, 'md' => 2])
             ->schema([
                 Forms\Components\TextInput::make('estimation')
                     ->label(__('Estimation time'))
-                    ->numeric()
-                    ->columnSpan(2),
+                    ->numeric(),
 
                 Forms\Components\DatePicker::make('due_date')
-                    ->label(__('Due date'))
-                    ->columnSpan(2),
+                    ->label(__('Due date')),
             ]);
     }
 
     private static function relationsRepeater(): Forms\Components\Repeater
     {
         return Forms\Components\Repeater::make('relations')
+            ->disableLabel()
             ->itemLabel(function (array $state) {
                 $ticketRelation = TicketRelation::find($state['id'] ?? 0);
                 if ($ticketRelation) {

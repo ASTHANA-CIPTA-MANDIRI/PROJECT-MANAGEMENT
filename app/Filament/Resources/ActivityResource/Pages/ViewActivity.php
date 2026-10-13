@@ -13,6 +13,13 @@ class ViewActivity extends ViewRecord
     protected function getActions(): array
     {
         return [
+            Actions\Action::make('back')
+                ->label(__('Back to activities'))
+                ->icon('heroicon-o-arrow-left')
+                ->color('secondary')
+                ->extraAttributes(['class' => 'rk-back-action'])
+                ->url(ActivityResource::getUrl('index')),
+
             Actions\EditAction::make(),
         ];
     }

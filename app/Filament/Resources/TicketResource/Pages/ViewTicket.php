@@ -19,7 +19,9 @@ use Filament\Notifications\Actions\Action;
 use Filament\Notifications\Notification;
 use Filament\Pages\Actions;
 use Filament\Resources\Pages\ViewRecord;
+use Illuminate\Contracts\View\View;
 use Illuminate\Support\Collection;
+use Illuminate\View\ComponentAttributeBag;
 use Maatwebsite\Excel\Facades\Excel;
 
 class ViewTicket extends ViewRecord implements HasForms
@@ -40,6 +42,22 @@ class ViewTicket extends ViewRecord implements HasForms
     {
         parent::mount($record);
         $this->form->fill();
+    }
+
+    /**
+     * Header keeps only the title + breadcrumbs. The page actions (subscribe,
+     * share, edit, log time, export) are the very same getActions() list, but
+     * are rendered in the action bar of the view body instead (see
+     * tickets/view.blade.php); modals are still handled by the page layout.
+     */
+    protected function getHeader(): ?View
+    {
+        return view('filament::components.header.index', [
+            'attributes' => new ComponentAttributeBag,
+            'heading' => $this->getHeading(),
+            'subheading' => $this->getSubheading(),
+            'actions' => null,
+        ]);
     }
 
     protected function getActions(): array

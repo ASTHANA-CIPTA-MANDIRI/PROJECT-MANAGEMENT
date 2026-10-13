@@ -1,363 +1,401 @@
 @php($record = $this->record)
-<x-filament::page>
+<x-filament::page class="filament-resources-view-record-page filament-resources-tickets">
 
-    <a href="{{ route('filament.pages.kanban/{project}', ['project' => $record->project->id]) }}"
-       class="flex items-center gap-1 text-gray-500 hover:text-gray-700 font-medium text-xs">
-        <x-heroicon-o-arrow-left class="w-4 h-4"/> {{ __('Back to kanban board') }}
-    </a>
+    <div class="rk-td__bar">
+        <a href="{{ route('filament.pages.kanban/{project}', ['project' => $record->project->id]) }}"
+           class="rk-td__back">
+            <x-heroicon-o-arrow-left class="w-4 h-4"/> {{ __('Back to kanban board') }}
+        </a>
+        <x-filament::pages.actions :actions="$this->getCachedActions()"/>
+    </div>
 
-    <div class="w-full flex md:flex-row flex-col gap-5">
+    {{-- Presentation only: every value, relation, action and permission below
+         is the same as before; only the arrangement changed. Styles are scoped
+         to .rk-td in resources/css/filament.scss. --}}
+    <div class="rk-td">
 
-        <x-filament::card class="md:w-2/3 w-full flex flex-col gap-5">
-            <div class="w-full flex flex-col gap-0">
-                <div class="flex items-center gap-2">
-                    <span class="flex items-center gap-1 text-sm text-primary-500 font-medium">
-                        <x-heroicon-o-ticket class="w-4 h-4"/>
+        <div class="rk-td__main">
+
+            <header class="rk-td__header">
+                <div class="flex items-center flex-wrap gap-2">
+                    <span class="rk-td__code">
                         {{ $record->code }}
                     </span>
-                    <span class="text-sm text-gray-400 font-light">|</span>
-                    <span class="flex items-center gap-1 text-sm text-gray-500">
+                    <span class="text-sm text-gray-300">|</span>
+                    <span class="text-sm text-gray-500">
                         {{ $record->project->name }}
                     </span>
                 </div>
-                <span class="text-xl text-gray-700">
+                <h2 class="rk-td__title">
                     {{ $record->name }}
-                </span>
-            </div>
-            <div class="w-full flex items-center gap-2">
-                <div class="px-2 py-1 rounded flex items-center justify-center text-center text-xs text-white"
-                     style="background-color: {{ \App\Support\Colors::safe($record->status->color) }};">
-                    {{ $record->status->name }}
-                </div>
-                <div class="px-2 py-1 rounded flex items-center justify-center text-center text-xs text-white"
-                     style="background-color: {{ \App\Support\Colors::safe($record->priority->color) }};">
-                    {{ $record->priority->name }}
-                </div>
-                <div class="px-2 py-1 rounded flex items-center justify-center text-center text-xs text-white"
-                     style="background-color: {{ \App\Support\Colors::safe($record->type->color) }};">
-                    <x-icon class="h-3 text-white" name="{{ $record->type->icon }}"/>
-                    <span class="ml-2">
-                        {{ $record->type->name }}
-                    </span>
-                </div>
-                @if($record->due_date)
-                    <div @class([
-                            'px-2 py-1 rounded flex items-center gap-1 text-center text-xs text-white',
-                            'bg-danger-500' => $record->isOverdue,
-                            'bg-gray-400' => ! $record->isOverdue,
-                        ])>
-                        <x-heroicon-o-calendar class="w-3 h-3"/>
-                        {{ __('Due') }} {{ $record->due_date->format(__('Y-m-d')) }}
-                        @if($record->isOverdue)
-                            ({{ __('Overdue') }})
-                        @endif
-                    </div>
-                @endif
-            </div>
-            @if($record->labels->count())
-                <div class="w-full flex items-center flex-wrap gap-2">
+                </h2>
+                <div class="flex items-center flex-wrap gap-2">
+                    <x-color-badge pill :color="$record->status->color" :label="$record->status->name"/>
+                    <x-color-badge pill :color="$record->priority->color" :label="$record->priority->name"/>
+                    <x-color-badge pill :color="$record->type->color" :label="$record->type->name"
+                                   :icon="$record->type->icon"/>
                     @foreach($record->labels as $label)
-                        <span class="px-2 py-1 rounded-full text-xs text-white"
-                              style="background-color: {{ \App\Support\Colors::safe($label->color) }};">
-                            {{ $label->name }}
-                        </span>
+                        <x-color-badge pill :color="$label->color" :label="$label->name"/>
                     @endforeach
+                    @if($record->due_date)
+                        <span @class([
+                                'rk-td__due',
+                                'is-overdue' => $record->isOverdue,
+                            ])>
+                            <x-heroicon-o-calendar class="w-3.5 h-3.5"/>
+                            {{ __('Due') }} {{ $record->due_date->format(__('Y-m-d')) }}
+                            @if($record->isOverdue)
+                                ({{ __('Overdue') }})
+                            @endif
+                        </span>
+                    @endif
                 </div>
-            @endif
-            <div class="w-full flex flex-col gap-0 pt-5">
-                <span class="text-gray-500 text-sm font-medium">
+            </header>
+
+            <x-filament::card class="rk-td__card">
+                <h3 class="rk-td__card-title">
+                    <x-heroicon-o-document-text class="w-5 h-5 text-gray-400"/>
                     {{ __('Content') }}
-                </span>
-                <div class="w-full prose">
+                </h3>
+                <div class="w-full prose max-w-none">
                     {!! \App\Support\HtmlSanitizer::clean($record->content) !!}
                 </div>
-            </div>
-        </x-filament::card>
+            </x-filament::card>
 
-        <x-filament::card class="md:w-1/3 w-full flex flex-col">
-            <div class="w-full flex flex-col gap-1" wire:ignore>
-                <span class="text-gray-500 text-sm font-medium">
-                    {{ __('Owner') }}
-                </span>
-                <div class="w-full flex items-center gap-1 text-gray-500">
-                    <x-user-avatar :user="$record->owner"/>
-                    {{ $record->owner->name }}
+            <x-filament::card class="rk-td__card">
+                <div class="rk-tabs">
+                    <button type="button" wire:click="selectTab('comments')"
+                            class="rk-tabs__tab @if($tab === 'comments') is-active @endif">
+                        {{ __('Comments') }}
+                    </button>
+                    <button type="button" wire:click="selectTab('activities')"
+                            class="rk-tabs__tab @if($tab === 'activities') is-active @endif">
+                        {{ __('Activities') }}
+                    </button>
+                    <button type="button" wire:click="selectTab('time')"
+                            class="rk-tabs__tab @if($tab === 'time') is-active @endif">
+                        {{ __('Time logged') }}
+                    </button>
+                    <button type="button" wire:click="selectTab('attachments')"
+                            class="rk-tabs__tab @if($tab === 'attachments') is-active @endif">
+                        {{ __('Attachments') }}
+                    </button>
                 </div>
-            </div>
-
-            <div class="w-full flex flex-col gap-1 pt-3" wire:ignore>
-                <span class="text-gray-500 text-sm font-medium">
-                    {{ __('Responsible') }}
-                </span>
-                <div class="w-full flex items-center gap-1 text-gray-500">
-                    @if($record->responsible)
-                        <x-user-avatar :user="$record->responsible"/>
-                    @endif
-                    {{ $record->responsible?->name ?? '-' }}
-                </div>
-            </div>
-
-            @if($record->project->type === 'scrum')
-                <div class="w-full flex flex-col gap-1 pt-3">
-                    <span class="text-gray-500 text-sm font-medium">
-                        {{ __('Sprint') }}
-                    </span>
-                    <div class="w-full flex flex-col justify-center gap-1 text-gray-500">
-                        @if($record->sprint)
-                            {{ $record->sprint->name }}
-                            <span class="text-xs text-gray-400">
-                                {{ __('Starts at:') }} {{ $record->sprint->starts_at->format(__('Y-m-d')) }} -
-                                {{ __('Ends at:') }} {{ $record->sprint->ends_at->format(__('Y-m-d')) }}
-                            </span>
-                        @else
-                            -
+                @if($tab === 'comments')
+                    <form wire:submit.prevent="submitComment" class="pb-5">
+                        {{ $this->form }}
+                        <button type="submit"
+                                class="rk-td__submit mt-3">
+                            {{ __($selectedCommentId ? 'Edit comment' : 'Add comment') }}
+                        </button>
+                        @if($selectedCommentId)
+                            <button type="button" wire:click="cancelEditComment"
+                                    class="rk-td__submit rk-td__submit--warning mt-3">
+                                {{ __('Cancel') }}
+                            </button>
                         @endif
-                    </div>
-                </div>
-            @else
-                <div class="w-full flex flex-col gap-1 pt-3">
-                    <span class="text-gray-500 text-sm font-medium">
-                        {{ __('Epic') }}
-                    </span>
-                    <div class="w-full flex items-center gap-1 text-gray-500">
-                        @if($record->epic)
-                            {{ $record->epic->name }}
-                        @else
-                            -
-                        @endif
-                    </div>
-                </div>
-            @endif
-
-            <div class="w-full flex flex-col gap-1 pt-3">
-                <span class="text-gray-500 text-sm font-medium">
-                    {{ __('Estimation') }}
-                </span>
-                <div class="w-full flex items-center gap-1 text-gray-500">
-                    @if($record->estimation)
-                        {{ $record->estimationForHumans }}
-                    @else
-                        -
-                    @endif
-                </div>
-            </div>
-
-            <div class="w-full flex flex-col gap-1 pt-3">
-                <span class="text-gray-500 text-sm font-medium">
-                    {{ __('Total time logged') }}
-                </span>
-                @if($record->hours()->count())
-                    @if($record->estimation)
-                        <div class="flex justify-between mb-1">
-                            <span class="text-base font-medium
-                                         text-{{ $record->estimationProgress > 100 ? 'danger' : 'primary' }}-700
-                                         dark:text-white">
-                                {{ $record->totalLoggedHours }}
-                            </span>
-                            <span class="text-sm font-medium
-                                         text-{{ $record->estimationProgress > 100 ? 'danger' : 'primary' }}-700
-                                         dark:text-white">
-                            {{ round($record->estimationProgress) }}%
-                        </span>
-                        </div>
-                        <div class="w-full bg-gray-200 rounded-full h-2.5 dark:bg-gray-700">
-                            <div class="bg-{{ $record->estimationProgress > 100 ? 'danger' : 'primary' }}-600
-                                        h-2.5 rounded-full"
-                                 style="width: {{ $record->estimationProgress > 100 ?
-                                                    100
-                                                    : $record->estimationProgress }}%">
+                    </form>
+                    @foreach($record->comments->sortByDesc('created_at') as $comment)
+                        <div
+                            class="w-full flex gap-3 @if(!$loop->last) pb-5 mb-5 border-b border-gray-100 @endif ticket-comment">
+                            <div class="rk-avatar-lg shrink-0">
+                                <x-user-avatar :user="$comment->user"/>
+                            </div>
+                            <div class="min-w-0 flex-1 flex flex-col gap-2">
+                                <div class="w-full flex justify-between gap-2">
+                                    <span class="flex items-center flex-wrap gap-x-2 text-gray-500 text-sm">
+                                        <span class="font-semibold text-gray-900">
+                                            {{ $comment->user->name }}
+                                        </span>
+                                        <span class="text-xs text-gray-400">
+                                            {{ $comment->created_at->format('Y-m-d g:i A') }}
+                                            ({{ $comment->created_at->diffForHumans() }})
+                                        </span>
+                                    </span>
+                                    @if($this->isAdministrator() || $comment->user_id === auth()->user()->id)
+                                        <div class="actions flex items-center gap-2 shrink-0">
+                                            <button type="button" wire:click="editComment({{ $comment->id }})"
+                                                    class="text-primary-500 text-xs hover:text-primary-600 hover:underline">
+                                                {{ __('Edit') }}
+                                            </button>
+                                            <span class="text-gray-300">|</span>
+                                            <button type="button" wire:click="doDeleteComment({{ $comment->id }})"
+                                                    data-swal-confirm="{{ __('Are you sure you want to delete this comment?') }}" data-swal-severity="danger"
+                                                    class="text-danger-500 text-xs hover:text-danger-600 hover:underline">
+                                                {{ __('Delete') }}
+                                            </button>
+                                        </div>
+                                    @endif
+                                </div>
+                                <div class="w-full prose max-w-none">
+                                    {!! \App\Support\Mentions::highlight(\App\Support\HtmlSanitizer::clean($comment->content), $record->watchers) !!}
+                                </div>
                             </div>
                         </div>
+                    @endforeach
+                @endif
+                @if($tab === 'activities')
+                    <div class="w-full flex flex-col pt-2">
+                        @if($record->activities->count())
+                            @foreach($record->activities->sortByDesc('created_at') as $activity)
+                                <div class="w-full flex flex-col gap-2
+                                     @if(!$loop->last) pb-5 mb-5 border-b border-gray-100 @endif">
+                                    <span class="flex items-center flex-wrap gap-x-2 text-gray-500 text-sm">
+                                        <span class="font-semibold text-gray-900 flex items-center gap-1.5">
+                                            @if($activity->user)
+                                                <x-user-avatar :user="$activity->user"/>
+                                                {{ $activity->user->name }}
+                                            @else
+                                                {{ __('System') }}
+                                            @endif
+                                        </span>
+                                        <span class="text-xs text-gray-400">
+                                            {{ $activity->created_at->format('Y-m-d g:i A') }}
+                                            ({{ $activity->created_at->diffForHumans() }})
+                                        </span>
+                                    </span>
+                                    <div class="w-full flex items-center gap-4 text-sm font-medium">
+                                        <span class="text-gray-400">{{ $activity->oldStatus->name }}</span>
+                                        <x-heroicon-o-arrow-right class="w-4 h-4 text-gray-400"/>
+                                        <span style="color: {{ \App\Support\Colors::safe($activity->newStatus->color) }}">
+                                            {{ $activity->newStatus->name }}
+                                        </span>
+                                    </div>
+                                </div>
+                            @endforeach
+                        @else
+                            <span class="text-gray-400 text-sm font-medium">
+                                {{ __('No activities yet!') }}
+                            </span>
+                        @endif
+                    </div>
+                @endif
+                @if($tab === 'time')
+                    <livewire:timesheet.time-logged :ticket="$record" />
+                @endif
+                @if($tab === 'attachments')
+                    <livewire:ticket.attachments :ticket="$record" />
+                @endif
+            </x-filament::card>
+
+        </div>
+
+        <aside class="rk-td__side">
+
+            <x-filament::card class="rk-td__card rk-td__details">
+                <h3 class="rk-td__card-title">
+                    <x-heroicon-o-clipboard-list class="w-5 h-5 text-gray-400"/>
+                    {{ __('Ticket details') }}
+                </h3>
+
+                <section class="rk-td__group">
+                    <h4 class="rk-td__group-title">
+                        <x-heroicon-o-users class="w-4 h-4"/> {{ __('Assignment') }}
+                    </h4>
+                    <div class="rk-td__person" wire:ignore>
+                        <span class="rk-td__label">{{ __('Owner') }}</span>
+                        <div class="flex items-center gap-2 text-sm text-gray-700">
+                            <x-user-avatar :user="$record->owner"/>
+                            {{ $record->owner->name }}
+                        </div>
+                    </div>
+                    <div class="rk-td__person" wire:ignore>
+                        <span class="rk-td__label">{{ __('Responsible') }}</span>
+                        <div class="flex items-center gap-2 text-sm text-gray-700">
+                            @if($record->responsible)
+                                <x-user-avatar :user="$record->responsible"/>
+                            @endif
+                            {{ $record->responsible?->name ?? '-' }}
+                        </div>
+                    </div>
+                </section>
+
+                <section class="rk-td__group">
+                    <h4 class="rk-td__group-title">
+                        <x-heroicon-o-view-boards class="w-4 h-4"/> {{ __('Work') }}
+                    </h4>
+                    <div class="rk-td__row">
+                        <span class="rk-td__label">{{ __('Status') }}</span>
+                        <span class="rk-td__value">
+                            <x-color-badge pill :color="$record->status->color" :label="$record->status->name"/>
+                        </span>
+                    </div>
+                    <div class="rk-td__row">
+                        <span class="rk-td__label">{{ __('Priority') }}</span>
+                        <span class="rk-td__value">
+                            <x-color-badge pill :color="$record->priority->color" :label="$record->priority->name"/>
+                        </span>
+                    </div>
+                    <div class="rk-td__row">
+                        <span class="rk-td__label">{{ __('Project') }}</span>
+                        <span class="rk-td__value">{{ $record->project->name }}</span>
+                    </div>
+                    <div class="rk-td__row">
+                        <span class="rk-td__label">{{ __('Type') }}</span>
+                        <span class="rk-td__value">
+                            <x-color-badge pill :color="$record->type->color" :label="$record->type->name"
+                                           :icon="$record->type->icon"/>
+                        </span>
+                    </div>
+                    @if($record->project->type === 'scrum')
+                        <div class="rk-td__row">
+                            <span class="rk-td__label">{{ __('Sprint') }}</span>
+                            <span class="rk-td__value">
+                                @if($record->sprint)
+                                    <span class="flex flex-col items-end">
+                                        {{ $record->sprint->name }}
+                                        <span class="text-xs font-normal text-gray-400">
+                                            {{ __('Starts at:') }} {{ $record->sprint->starts_at->format(__('Y-m-d')) }} -
+                                            {{ __('Ends at:') }} {{ $record->sprint->ends_at->format(__('Y-m-d')) }}
+                                        </span>
+                                    </span>
+                                @else
+                                    -
+                                @endif
+                            </span>
+                        </div>
                     @else
-                        <div class="w-full flex items-center gap-1 text-gray-500">
-                            {{ $record->totalLoggedHours }}
+                        <div class="rk-td__row">
+                            <span class="rk-td__label">{{ __('Epic') }}</span>
+                            <span class="rk-td__value">
+                                @if($record->epic)
+                                    {{ $record->epic->name }}
+                                @else
+                                    -
+                                @endif
+                            </span>
                         </div>
                     @endif
-                @else
-                    -
+                </section>
+
+                <section class="rk-td__group">
+                    <h4 class="rk-td__group-title">
+                        <x-heroicon-o-calendar class="w-4 h-4"/> {{ __('Schedule') }}
+                    </h4>
+                    <div class="rk-td__row">
+                        <span class="rk-td__label">{{ __('Due date') }}</span>
+                        <span @class(['rk-td__value', 'text-danger-600' => $record->due_date && $record->isOverdue])>
+                            {{ $record->due_date ? $record->due_date->format(__('Y-m-d')) : '-' }}
+                        </span>
+                    </div>
+                    <div class="rk-td__row">
+                        <span class="rk-td__label">{{ __('Estimation') }}</span>
+                        <span class="rk-td__value">
+                            @if($record->estimation)
+                                {{ $record->estimationForHumans }}
+                            @else
+                                -
+                            @endif
+                        </span>
+                    </div>
+                    @php($hasHours = $record->hours()->count())
+                    <div class="flex flex-col gap-1.5">
+                        <div class="rk-td__row">
+                            <span class="rk-td__label">{{ __('Total time logged') }}</span>
+                            @if($hasHours)
+                                <span @class([
+                                        'rk-td__value',
+                                        'text-danger-600' => $record->estimation && $record->estimationProgress > 100,
+                                    ])>
+                                    {{ $record->totalLoggedHours }}
+                                    @if($record->estimation)
+                                        ({{ round($record->estimationProgress) }}%)
+                                    @endif
+                                </span>
+                            @else
+                                <span class="rk-td__value">-</span>
+                            @endif
+                        </div>
+                        @if($hasHours && $record->estimation)
+                            <div class="w-full bg-gray-100 rounded-full h-2">
+                                <div @class([
+                                        'h-2 rounded-full',
+                                        'bg-danger-600' => $record->estimationProgress > 100,
+                                        'bg-primary-600' => $record->estimationProgress <= 100,
+                                    ])
+                                     style="width: {{ $record->estimationProgress > 100 ?
+                                                        100
+                                                        : $record->estimationProgress }}%">
+                                </div>
+                            </div>
+                        @endif
+                    </div>
+                </section>
+
+                @if($record->labels->count())
+                    <section class="rk-td__group">
+                        <h4 class="rk-td__group-title">
+                            <x-heroicon-o-tag class="w-4 h-4"/> {{ __('Labels') }}
+                        </h4>
+                        <div class="flex items-center flex-wrap gap-2">
+                            @foreach($record->labels as $label)
+                                <x-color-badge pill :color="$label->color" :label="$label->name"/>
+                            @endforeach
+                        </div>
+                    </section>
                 @endif
-            </div>
 
-            <div class="w-full flex flex-col gap-1 pt-3">
-                <span class="text-gray-500 text-sm font-medium">
-                    {{ __('Subscribers') }}
-                </span>
-                <div class="w-full flex items-center gap-1 text-gray-500">
-                    @if($record->subscribers->count())
-                        @foreach($record->subscribers as $subscriber)
-                            <x-user-avatar :user="$subscriber"/>
-                        @endforeach
-                    @else
-                        {{ '-' }}
-                    @endif
-                </div>
-            </div>
-
-            <div class="w-full flex flex-col gap-1 pt-3">
-                <span class="text-gray-500 text-sm font-medium">
-                    {{ __('Creation date') }}
-                </span>
-                <div class="w-full text-gray-500">
-                    {{ $record->created_at->format(__('Y-m-d g:i A')) }}
-                    <span class="text-xs text-gray-400">
-                        ({{ $record->created_at->diffForHumans() }})
-                    </span>
-                </div>
-            </div>
-
-            <div class="w-full flex flex-col gap-1 pt-3">
-                <span class="text-gray-500 text-sm font-medium">
-                    {{ __('Last update') }}
-                </span>
-                <div class="w-full text-gray-500">
-                    {{ $record->updated_at->format(__('Y-m-d g:i A')) }}
-                    <span class="text-xs text-gray-400">
-                        ({{ $record->updated_at->diffForHumans() }})
-                    </span>
-                </div>
-            </div>
+                <section class="rk-td__group">
+                    <h4 class="rk-td__group-title">
+                        <x-heroicon-o-information-circle class="w-4 h-4"/> {{ __('Other') }}
+                    </h4>
+                    <div class="rk-td__row">
+                        <span class="rk-td__label">{{ __('Subscribers') }}</span>
+                        <span class="rk-td__value flex items-center gap-1">
+                            @if($record->subscribers->count())
+                                @foreach($record->subscribers as $subscriber)
+                                    <x-user-avatar :user="$subscriber"/>
+                                @endforeach
+                            @else
+                                {{ '-' }}
+                            @endif
+                        </span>
+                    </div>
+                    <div class="rk-td__row">
+                        <span class="rk-td__label">{{ __('Creation date') }}</span>
+                        <span class="rk-td__value">
+                            {{ $record->created_at->format(__('Y-m-d g:i A')) }}
+                            <span class="block text-xs font-normal text-gray-400">
+                                ({{ $record->created_at->diffForHumans() }})
+                            </span>
+                        </span>
+                    </div>
+                    <div class="rk-td__row">
+                        <span class="rk-td__label">{{ __('Last update') }}</span>
+                        <span class="rk-td__value">
+                            {{ $record->updated_at->format(__('Y-m-d g:i A')) }}
+                            <span class="block text-xs font-normal text-gray-400">
+                                ({{ $record->updated_at->diffForHumans() }})
+                            </span>
+                        </span>
+                    </div>
+                </section>
+            </x-filament::card>
 
             @if($record->relations->count())
-                <div class="w-full flex flex-col gap-1 pt-3">
-                    <span class="text-gray-500 text-sm font-medium">
+                <x-filament::card class="rk-td__card">
+                    <h3 class="rk-td__card-title">
+                        <x-heroicon-o-link class="w-5 h-5 text-gray-400"/>
                         {{ __('Ticket relations') }}
-                    </span>
-                    <div class="w-full text-gray-500">
+                    </h3>
+                    <div class="w-full flex flex-col gap-2 text-gray-500">
                         @foreach($record->relations as $relation)
-                            <div class="w-full flex items-center gap-1 text-xs">
-                                <span class="rounded px-2 py-1 text-white
+                            <div class="w-full flex items-center gap-2 text-xs">
+                                <span class="rounded-full px-2.5 py-1 text-white
                                              bg-{{ config('system.tickets.relations.colors.' . $relation->type) }}-600">
                                     {{ __(config('system.tickets.relations.list.' . $relation->type)) }}
                                 </span>
-                                <a target="_blank" class="font-medium hover:underline"
+                                <a target="_blank" class="text-sm font-medium text-primary-600 hover:underline"
                                    href="{{ route('filament.resources.tickets.share', $relation->relation->code) }}">
                                     {{ $relation->relation->code }}
                                 </a>
                             </div>
                         @endforeach
                     </div>
-                </div>
+                </x-filament::card>
             @endif
-        </x-filament::card>
 
-    </div>
-
-    <div class="w-full flex md:flex-row flex-col gap-5">
-
-        <x-filament::card class="md:w-2/3 w-full flex flex-col">
-            <div class="w-full flex items-center gap-2">
-                <button wire:click="selectTab('comments')"
-                        class="md:text-xl text-sm p-3 border-b-2 border-transparent hover:border-primary-500 flex items-center
-                        gap-1 @if($tab === 'comments') border-primary-500 text-primary-500 @else text-gray-700 @endif">
-                    {{ __('Comments') }}
-                </button>
-                <button wire:click="selectTab('activities')"
-                        class="md:text-xl text-sm p-3 border-b-2 border-transparent hover:border-primary-500
-                        @if($tab === 'activities') border-primary-500 text-primary-500 @else text-gray-700 @endif">
-                    {{ __('Activities') }}
-                </button>
-                <button wire:click="selectTab('time')"
-                        class="md:text-xl text-sm p-3 border-b-2 border-transparent hover:border-primary-500
-                        @if($tab === 'time') border-primary-500 text-primary-500 @else text-gray-700 @endif">
-                    {{ __('Time logged') }}
-                </button>
-                <button wire:click="selectTab('attachments')"
-                        class="md:text-xl text-sm p-3 border-b-2 border-transparent hover:border-primary-500
-                        @if($tab === 'attachments') border-primary-500 text-primary-500 @else text-gray-700 @endif">
-                    {{ __('Attachments') }}
-                </button>
-            </div>
-            @if($tab === 'comments')
-                <form wire:submit.prevent="submitComment" class="pb-5">
-                    {{ $this->form }}
-                    <button type="submit"
-                            class="px-3 py-2 bg-primary-500 hover:bg-primary-600 text-white rounded mt-3">
-                        {{ __($selectedCommentId ? 'Edit comment' : 'Add comment') }}
-                    </button>
-                    @if($selectedCommentId)
-                        <button type="button" wire:click="cancelEditComment"
-                                class="px-3 py-2 bg-warning-500 hover:bg-warning-600 text-white rounded mt-3">
-                            {{ __('Cancel') }}
-                        </button>
-                    @endif
-                </form>
-                @foreach($record->comments->sortByDesc('created_at') as $comment)
-                    <div
-                        class="w-full flex flex-col gap-2 @if(!$loop->last) pb-5 mb-5 border-b border-gray-200 @endif ticket-comment">
-                        <div class="w-full flex justify-between">
-                            <span class="flex items-center gap-1 text-gray-500 text-sm">
-                                <span class="font-medium flex items-center gap-1">
-                                    <x-user-avatar :user="$comment->user"/>
-                                    {{ $comment->user->name }}
-                                </span>
-                                <span class="text-gray-400 px-2">|</span>
-                                {{ $comment->created_at->format('Y-m-d g:i A') }}
-                                ({{ $comment->created_at->diffForHumans() }})
-                            </span>
-                            @if($this->isAdministrator() || $comment->user_id === auth()->user()->id)
-                                <div class="actions flex items-center gap-2">
-                                    <button type="button" wire:click="editComment({{ $comment->id }})"
-                                            class="text-primary-500 text-xs hover:text-primary-600 hover:underline">
-                                        {{ __('Edit') }}
-                                    </button>
-                                    <span class="text-gray-300">|</span>
-                                    <button type="button" wire:click="deleteComment({{ $comment->id }})"
-                                            class="text-danger-500 text-xs hover:text-danger-600 hover:underline">
-                                        {{ __('Delete') }}
-                                    </button>
-                                </div>
-                            @endif
-                        </div>
-                        <div class="w-full prose">
-                            {!! \App\Support\Mentions::highlight(\App\Support\HtmlSanitizer::clean($comment->content), $record->watchers) !!}
-                        </div>
-                    </div>
-                @endforeach
-            @endif
-            @if($tab === 'activities')
-                <div class="w-full flex flex-col pt-5">
-                    @if($record->activities->count())
-                        @foreach($record->activities->sortByDesc('created_at') as $activity)
-                            <div class="w-full flex flex-col gap-2
-                                 @if(!$loop->last) pb-5 mb-5 border-b border-gray-200 @endif">
-                                <span class="flex items-center gap-1 text-gray-500 text-sm">
-                                    <span class="font-medium flex items-center gap-1">
-                                        @if($activity->user)
-                                            <x-user-avatar :user="$activity->user"/>
-                                            {{ $activity->user->name }}
-                                        @else
-                                            {{ __('System') }}
-                                        @endif
-                                    </span>
-                                    <span class="text-gray-400 px-2">|</span>
-                                    {{ $activity->created_at->format('Y-m-d g:i A') }}
-                                    ({{ $activity->created_at->diffForHumans() }})
-                                </span>
-                                <div class="w-full flex items-center gap-10">
-                                    <span class="text-gray-400">{{ $activity->oldStatus->name }}</span>
-                                    <x-heroicon-o-arrow-right class="w-6 h-6"/>
-                                    <span style="color: {{ \App\Support\Colors::safe($activity->newStatus->color) }}">
-                                        {{ $activity->newStatus->name }}
-                                    </span>
-                                </div>
-                            </div>
-                        @endforeach
-                    @else
-                        <span class="text-gray-400 text-sm font-medium">
-                            {{ __('No activities yet!') }}
-                        </span>
-                    @endif
-                </div>
-            @endif
-            @if($tab === 'time')
-                <livewire:timesheet.time-logged :ticket="$record" />
-            @endif
-            @if($tab === 'attachments')
-                <livewire:ticket.attachments :ticket="$record" />
-            @endif
-        </x-filament::card>
-
-        <div class="md:w-1/3 w-full flex flex-col"></div>
+        </aside>
 
     </div>
 

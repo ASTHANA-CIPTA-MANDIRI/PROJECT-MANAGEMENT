@@ -1,7 +1,7 @@
 <x-filament::page>
 
     @if ($plainTextToken)
-        <div class="w-full flex flex-col gap-2 bg-warning-500 border border-warning-600 text-white py-3 px-4 text-sm rounded-lg">
+        <div class="rk-notice rk-notice--success rk-token-notice">
             <span class="font-medium">{{ __('Copy your new token now') }}</span>
             <span class="font-normal">{{ __('It is stored hashed, so this is the only time it can be shown.') }}</span>
             {{-- Read-only input rather than plain text: it selects in one click,
@@ -9,7 +9,7 @@
             <input type="text"
                    readonly
                    onfocus="this.select()"
-                   class="w-full py-1 px-3 rounded-lg text-gray-900 border-warning-600 font-mono text-xs"
+                   class="rk-token-input"
                    value="{{ $plainTextToken }}" />
         </div>
     @endif

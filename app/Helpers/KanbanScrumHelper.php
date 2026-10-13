@@ -12,6 +12,7 @@ use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\HtmlString;
+use Illuminate\Support\Str;
 
 trait KanbanScrumHelper
 {
@@ -222,7 +223,44 @@ trait KanbanScrumHelper
                 'due_date' => $item->due_date,
                 'is_overdue' => $item->isOverdue,
                 'totalLoggedHours' => $item->totalLoggedSeconds ? $item->totalLoggedHours : null,
+                // Card preview, derived from the ticket content already loaded
+                // with the card (no extra query).
+                'cover' => $this->cardCover($item->getAttribute('content')),
+                'excerpt' => $this->cardExcerpt($item->getAttribute('content')),
             ]);
+    }
+
+    /**
+     * First image of the (already sanitized) ticket content, as a plain
+     * http(s) URL for the card cover; null when the content has none.
+     */
+    protected function cardCover(?string $html): ?string
+    {
+        if (! $html || ! preg_match('/<img\b[^>]*\bsrc="([^"]+)"/i', $html, $match)) {
+            return null;
+        }
+
+        $url = html_entity_decode($match[1]);
+
+        return preg_match('#^https?://#i', $url) === 1 ? $url : null;
+    }
+
+    /**
+     * Short plain-text preview of the ticket content. Attachment links (the
+     * image / file chips with their file name and size) are dropped first so
+     * only the written description remains.
+     */
+    protected function cardExcerpt(?string $html): ?string
+    {
+        if (! $html) {
+            return null;
+        }
+
+        $text = trim(preg_replace('/\s+/', ' ', html_entity_decode(strip_tags(
+            preg_replace('#<a\b[^>]*>.*?</a>#is', ' ', $html) ?? $html
+        ))));
+
+        return $text === '' ? null : Str::limit($text, 140);
     }
 
     /**

@@ -13,6 +13,13 @@ class EditLabel extends EditRecord
     protected function getActions(): array
     {
         return [
+            Actions\Action::make('back')
+                ->label(__('Back to labels'))
+                ->icon('heroicon-o-arrow-left')
+                ->color('secondary')
+                ->extraAttributes(['class' => 'rk-back-action'])
+                ->url(LabelResource::getUrl('index')),
+
             Actions\DeleteAction::make(),
         ];
     }

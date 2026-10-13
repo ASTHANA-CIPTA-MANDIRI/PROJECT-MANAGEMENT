@@ -53,6 +53,7 @@ class EpicForm extends Component implements HasForms
                     Select::make('project_id')
                         ->label(__('Project'))
                         ->disabled()
+                        ->helperText(__('The project follows the one selected on the Road Map.'))
                         // Only the user's own projects: Project::all() rendered
                         // every project name in the installation into the page.
                         ->options(fn () => Project::accessibleBy(auth()->user())->pluck('name', 'id')),

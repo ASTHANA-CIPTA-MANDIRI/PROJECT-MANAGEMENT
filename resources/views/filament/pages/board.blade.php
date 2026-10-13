@@ -1,14 +1,26 @@
-<x-filament::page>
+<x-filament::page class="rk-board-pick-page">
 
-    <div class="w-full flex flex-col gap-10 justify-center items-center">
-        <form wire:submit.prevent="search" class="lg:w-[50%] w-full">
-            {{ $this->form }}
-        </form>
+    <div class="rk-pick">
+        <x-filament::card class="rk-pick__card">
+            <div class="rk-pick__intro">
+                <span class="rk-pick__badge">
+                    <x-heroicon-o-view-boards class="h-7 w-7" />
+                </span>
+                <div>
+                    <h2 class="rk-pick__title">{{ __('Choose a project') }}</h2>
+                    <p class="rk-pick__text">
+                        {{ __("In this section you can choose one of your projects to show it's Scrum or Kanban board") }}
+                    </p>
+                </div>
+            </div>
 
-        <div class="w-full flex justify-center items-center text-center">
-            <img src="{{ asset('img/scrum-kanban.png') }}"
-                 class="lg:w-[50%] w-full rounded-2xl shadow border border-gray-300"
-                 alt="Scrum board VS Kanban board"/>
+            <form wire:submit.prevent="search" class="rk-pick__form">
+                {{ $this->form }}
+            </form>
+        </x-filament::card>
+
+        <div class="rk-pick__art">
+            <img src="{{ asset('img/scrum-kanban.png') }}" alt="Scrum board VS Kanban board"/>
         </div>
     </div>
 

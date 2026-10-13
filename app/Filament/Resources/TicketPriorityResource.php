@@ -53,9 +53,10 @@ class TicketPriorityResource extends Resource
     {
         return $form
             ->schema([
-                Forms\Components\Card::make()
+                Forms\Components\Grid::make(['default' => 1, 'lg' => 12])
                     ->schema([
-                        Forms\Components\Grid::make()
+                        Forms\Components\Section::make(__('General'))
+                            ->columns(['default' => 1, 'md' => 2])
                             ->schema([
                                 Forms\Components\TextInput::make('name')
                                     ->label(__('Priority name'))
@@ -66,13 +67,18 @@ class TicketPriorityResource extends Resource
                                     ->label(__('Priority color'))
                                     ->required()
                                     ->regex(Colors::HEX_PATTERN),
+                            ])
+                            ->columnSpan(['lg' => 7]),
 
-                                Forms\Components\Checkbox::make('is_default')
+                        Forms\Components\Section::make(__('Settings'))
+                            ->schema([
+                                Forms\Components\Toggle::make('is_default')
                                     ->label(__('Default priority'))
                                     ->helperText(
                                         __('If checked, this priority will be automatically affected to new tickets')
                                     ),
-                            ]),
+                            ])
+                            ->columnSpan(['lg' => 5]),
                     ]),
             ]);
     }

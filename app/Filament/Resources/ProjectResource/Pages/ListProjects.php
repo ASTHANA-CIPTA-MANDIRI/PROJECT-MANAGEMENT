@@ -16,4 +16,9 @@ class ListProjects extends ListRecords
             Actions\CreateAction::make(),
         ];
     }
+
+    protected function getTableActionsColumnLabel(): ?string
+    {
+        return __('Actions');
+    }
 }

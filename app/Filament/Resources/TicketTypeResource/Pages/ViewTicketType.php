@@ -13,6 +13,13 @@ class ViewTicketType extends ViewRecord
     protected function getActions(): array
     {
         return [
+            Actions\Action::make('back')
+                ->label(__('Back to ticket types'))
+                ->icon('heroicon-o-arrow-left')
+                ->color('secondary')
+                ->extraAttributes(['class' => 'rk-back-action'])
+                ->url(TicketTypeResource::getUrl('index')),
+
             Actions\EditAction::make(),
         ];
     }

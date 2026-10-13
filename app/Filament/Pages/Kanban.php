@@ -46,6 +46,14 @@ class Kanban extends AuthorizedPage implements HasForms
     protected function getActions(): array
     {
         return [
+            Action::make('back')
+                ->button()
+                ->label(__('Back to board'))
+                ->icon('heroicon-o-arrow-left')
+                ->color('secondary')
+                ->extraAttributes(['class' => 'rk-back-action'])
+                ->url(route('filament.pages.board')),
+
             Action::make('refresh')
                 ->button()
                 ->label(__('Refresh'))

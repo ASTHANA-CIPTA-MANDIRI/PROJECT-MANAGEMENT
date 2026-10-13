@@ -3,6 +3,7 @@
 namespace Tests\Feature\Analytics;
 
 use App\Filament\Pages\Analytics;
+use App\Models\Epic;
 use App\Models\Permission;
 use App\Models\Project;
 use App\Models\Role;
@@ -71,8 +72,8 @@ class AnalyticsPageTest extends TestCase
         Livewire::test(Analytics::class)
             ->assertSet('projectId', $project->id)
             ->assertSuccessful()
-            ->assertSee(__('Team velocity'))
-            ->assertSee(__('Sprint burn-down'))
+            ->assertSee(__('Created vs resolved'))
+            ->assertSee(__('Tickets per sprint'))
             ->assertSee(__('Resource utilization'));
     }
 
@@ -270,6 +271,125 @@ class AnalyticsPageTest extends TestCase
 
         Livewire::test(Analytics::class)
             ->assertSuccessful()
-            ->assertSee(__('Not enough data')); // forecast fallback
+            ->assertSee(__('No tickets yet.'));
+    }
+
+    public function test_insights_count_open_done_and_unassigned_work_without_any_weighting(): void
+    {
+        $user = $this->userWithAnalytics();
+        $this->actingAs($user);
+
+        $todo = TicketStatus::factory()->create(['order' => 1, 'is_final' => false]);
+        $done = TicketStatus::factory()->create(['order' => 5, 'is_final' => true]);
+        $project = Project::factory()->create(['owner_id' => $user->id]);
+        $assignee = User::factory()->create();
+
+        Ticket::factory()->create(['project_id' => $project->id, 'status_id' => $todo->id, 'responsible_id' => $assignee->id]);
+        Ticket::factory()->create(['project_id' => $project->id, 'status_id' => $todo->id, 'responsible_id' => null]);
+        Ticket::factory()->create(['project_id' => $project->id, 'status_id' => $done->id, 'responsible_id' => $assignee->id]);
+
+        $insights = Livewire::test(Analytics::class)->instance()->insights();
+
+        $this->assertTrue($insights['has_data']);
+        $this->assertSame(2, collect($insights['priority'])->sum('count'));
+        $this->assertSame(2, collect($insights['type'])->sum('count'));
+
+        $workload = collect($insights['workload'])->keyBy('name');
+        $this->assertSame(1, $workload[$assignee->name]['open']);
+        $this->assertSame(1, $workload[$assignee->name]['done_30d']);
+        $this->assertSame(1, $workload[__('Unassigned')]['open']);
+        $this->assertSame(0, $workload[__('Unassigned')]['done_30d']);
+    }
+
+    public function test_insights_trend_counts_created_and_resolved_per_week(): void
+    {
+        $user = $this->userWithAnalytics();
+        $this->actingAs($user);
+
+        $todo = TicketStatus::factory()->create(['order' => 1, 'is_final' => false]);
+        $done = TicketStatus::factory()->create(['order' => 5, 'is_final' => true]);
+        $project = Project::factory()->create(['owner_id' => $user->id]);
+
+        // Created 10 days ago, finished (no history row -> updated_at) today.
+        $ticket = Ticket::factory()->create(['project_id' => $project->id, 'status_id' => $done->id]);
+        $ticket->forceFill(['created_at' => now()->subDays(10), 'updated_at' => now()])->saveQuietly();
+        Ticket::factory()->create(['project_id' => $project->id, 'status_id' => $todo->id]);
+
+        $insights = Livewire::test(Analytics::class)->instance()->insights();
+
+        $this->assertCount(8, $insights['trend']);
+        $this->assertSame(1, collect($insights['trend'])->sum('resolved'));
+        $this->assertSame(2, collect($insights['trend'])->sum('created'));
+        $this->assertSame(1, $insights['cycle']['count']);
+        $this->assertEquals(10.0, $insights['cycle']['avg_days']);
+        $this->assertEquals(10.0, $insights['cycle']['median_days']);
+    }
+
+    public function test_insights_lists_only_open_tickets_untouched_for_two_weeks_as_stale(): void
+    {
+        $user = $this->userWithAnalytics();
+        $this->actingAs($user);
+
+        $todo = TicketStatus::factory()->create(['order' => 1, 'is_final' => false]);
+        $done = TicketStatus::factory()->create(['order' => 5, 'is_final' => true]);
+        $project = Project::factory()->create(['owner_id' => $user->id]);
+
+        $stale = Ticket::factory()->create(['project_id' => $project->id, 'status_id' => $todo->id]);
+        $stale->forceFill(['updated_at' => now()->subDays(20)])->saveQuietly();
+        $fresh = Ticket::factory()->create(['project_id' => $project->id, 'status_id' => $todo->id]);
+        $oldButDone = Ticket::factory()->create(['project_id' => $project->id, 'status_id' => $done->id]);
+        $oldButDone->forceFill(['updated_at' => now()->subDays(40)])->saveQuietly();
+
+        $rows = Livewire::test(Analytics::class)->instance()->insights()['stale'];
+
+        $this->assertCount(1, $rows);
+        $this->assertSame($stale->id, $rows[0]['id']);
+        $this->assertSame(20, $rows[0]['days']);
+        $this->assertNotContains($fresh->id, array_column($rows, 'id'));
+    }
+
+    public function test_insights_never_include_another_projects_tickets_or_an_unreachable_project(): void
+    {
+        $user = $this->userWithAnalytics();
+        $this->actingAs($user);
+
+        $status = TicketStatus::factory()->create(['order' => 1, 'is_final' => false]);
+        TicketStatus::factory()->create(['order' => 5, 'is_final' => true]);
+        $mine = Project::factory()->create(['owner_id' => $user->id]);
+        $foreign = Project::factory()->create();
+        Ticket::factory()->create(['project_id' => $mine->id, 'status_id' => $status->id]);
+        Ticket::factory()->count(4)->create(['project_id' => $foreign->id, 'status_id' => $status->id]);
+
+        $page = Livewire::test(Analytics::class);
+        $this->assertSame(1, collect($page->instance()->insights()['priority'])->sum('count'));
+
+        // A crafted projectId pointing at a project the user cannot see is dropped.
+        $page->set('projectId', $foreign->id);
+        $this->assertFalse($page->instance()->insights()['has_data']);
+    }
+
+    public function test_insights_report_epic_and_sprint_progress_by_ticket_count(): void
+    {
+        $user = $this->userWithAnalytics();
+        $this->actingAs($user);
+
+        $todo = TicketStatus::factory()->create(['order' => 1, 'is_final' => false]);
+        $done = TicketStatus::factory()->create(['order' => 5, 'is_final' => true]);
+        $project = Project::factory()->create(['owner_id' => $user->id]);
+        $epic = Epic::factory()->create(['project_id' => $project->id]);
+        $sprint = Sprint::factory()->create(['project_id' => $project->id]);
+
+        Ticket::factory()->create(['project_id' => $project->id, 'status_id' => $done->id, 'epic_id' => $epic->id, 'sprint_id' => $sprint->id]);
+        Ticket::factory()->create(['project_id' => $project->id, 'status_id' => $todo->id, 'epic_id' => $epic->id, 'sprint_id' => $sprint->id]);
+
+        $insights = Livewire::test(Analytics::class)->instance()->insights();
+
+        $this->assertSame(2, $insights['epics'][0]['total']);
+        $this->assertSame(1, $insights['epics'][0]['done']);
+        $this->assertEquals(50, $insights['epics'][0]['pct']);
+        $this->assertSame(['total' => 2, 'done' => 1], [
+            'total' => $insights['sprints'][0]['total'],
+            'done' => $insights['sprints'][0]['done'],
+        ]);
     }
 }

@@ -121,6 +121,31 @@ class CustomPagesTest extends TestCase
             ->assertSuccessful();
     }
 
+    public function test_kanban_cards_carry_a_cover_image_and_a_plain_text_excerpt(): void
+    {
+        $project = $this->kanbanProject();
+        $ticket = Ticket::factory()->create([
+            'project_id' => $project->id,
+            'owner_id' => $this->user->id,
+            'content' => '<p>Write the <strong>landing</strong> copy.</p>'
+                .'<a href="https://example.test/a.png"><img src="https://example.test/a.png" alt="a.png" />'
+                .'<span>shot.png</span> <span>51 KB</span></a>',
+        ]);
+        $plain = Ticket::factory()->create([
+            'project_id' => $project->id,
+            'owner_id' => $this->user->id,
+            'content' => '<p>No picture here.</p>',
+        ]);
+
+        $records = Livewire::test(Kanban::class, ['project' => $project])->instance()->getRecords()->keyBy('id');
+
+        $this->assertSame('https://example.test/a.png', $records[$ticket->id]['cover']);
+        // Attachment chips (file name + size) never leak into the excerpt.
+        $this->assertSame('Write the landing copy.', $records[$ticket->id]['excerpt']);
+        $this->assertNull($records[$plain->id]['cover']);
+        $this->assertSame('No picture here.', $records[$plain->id]['excerpt']);
+    }
+
     public function test_the_kanban_board_filters_tickets_by_label(): void
     {
         $project = $this->kanbanProject();
@@ -278,6 +303,23 @@ class CustomPagesTest extends TestCase
 
     // ----------------------------------------------------------------- board
 
+    public function test_the_road_map_reloads_on_a_live_status_change_of_its_project(): void
+    {
+        $project = $this->kanbanProject();
+
+        $page = Livewire::test(RoadMap::class, ['p' => $project->id])->instance();
+        $page->project = $project;
+
+        $listeners = $page->getListeners();
+
+        $this->assertSame(
+            'refreshRoadMap',
+            $listeners["echo-private:project.{$project->id},.ticket.status.changed"]
+        );
+        // The existing dialog listeners are kept.
+        $this->assertSame('closeDialog', $listeners['closeEpicDialog']);
+    }
+
     public function test_the_board_page_renders(): void
     {
         Livewire::test(Board::class)->assertSuccessful();
@@ -311,5 +353,42 @@ class CustomPagesTest extends TestCase
         Livewire::test(Board::class)
             ->set('project', $foreign->id)
             ->assertNoRedirect();
+    }
+
+    /**
+     * SweetAlert2 reads its default (translated) texts from this inline
+     * object, so every panel page must render it with the app locale.
+     */
+    public function test_panel_pages_expose_translated_sweetalert_texts(): void
+    {
+        $this->get(Board::getUrl())
+            ->assertOk()
+            ->assertSee('window.RencanakanAlertTexts', false)
+            ->assertSee('Apakah Anda yakin?', false)
+            ->assertSee('Ya, lanjutkan', false);
+    }
+
+    /**
+     * Destructive buttons in custom Blade views are gated by SweetAlert (the
+     * dialog is UX only - the Livewire handlers keep their own authorization).
+     * A leftover native confirm() would silently bypass the unified dialog.
+     */
+    public function test_destructive_blade_buttons_use_sweetalert_instead_of_native_confirm(): void
+    {
+        foreach ([
+            'filament/pages/organization-settings',
+            'filament/pages/organization-support-view',
+            'livewire/road-map/epic-form',
+            'filament/resources/tickets/view',
+        ] as $view) {
+            $source = file_get_contents(resource_path("views/{$view}.blade.php"));
+
+            $this->assertDoesNotMatchRegularExpression('/(?<![\w.])confirm\(@js|\bif \(confirm\(/', $source, "{$view} still calls native confirm().");
+        }
+
+        $this->assertStringContainsString('data-swal-confirm', file_get_contents(resource_path('views/livewire/road-map/epic-form.blade.php')));
+        $this->assertStringContainsString('data-swal-confirm', file_get_contents(resource_path('views/filament/pages/organization-settings.blade.php')));
+        $this->assertStringContainsString('data-swal-confirm', file_get_contents(resource_path('views/filament/resources/tickets/view.blade.php')));
+        $this->assertStringContainsString('RencanakanAlert.confirm', file_get_contents(resource_path('views/filament/pages/organization-support-view.blade.php')));
     }
 }

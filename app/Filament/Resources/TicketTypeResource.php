@@ -55,9 +55,10 @@ class TicketTypeResource extends Resource
     {
         return $form
             ->schema([
-                Forms\Components\Card::make()
+                Forms\Components\Grid::make(['default' => 1, 'lg' => 12])
                     ->schema([
-                        Forms\Components\Grid::make()
+                        Forms\Components\Section::make(__('General'))
+                            ->columns(['default' => 1, 'md' => 2])
                             ->schema([
                                 Forms\Components\TextInput::make('name')
                                     ->label(__('Type name'))
@@ -72,13 +73,18 @@ class TicketTypeResource extends Resource
                                 IconPicker::make('icon')
                                     ->label(__('Type icon'))
                                     ->required(),
+                            ])
+                            ->columnSpan(['lg' => 7]),
 
-                                Forms\Components\Checkbox::make('is_default')
+                        Forms\Components\Section::make(__('Settings'))
+                            ->schema([
+                                Forms\Components\Toggle::make('is_default')
                                     ->label(__('Default type'))
                                     ->helperText(
                                         __('If checked, this type will be automatically affected to new tickets')
                                     ),
-                            ]),
+                            ])
+                            ->columnSpan(['lg' => 5]),
                     ]),
             ]);
     }

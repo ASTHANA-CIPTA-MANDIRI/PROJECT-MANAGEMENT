@@ -40,7 +40,7 @@ class JiraImportForm
                         self::projectsStep($page),
                         self::ticketsStep($page),
                     ])
-                        ->submitAction(new HtmlString("<button type='submit' class='px-3 py-2 bg-primary-500 hover:bg-primary-600 text-white rounded'>".__('Import').'</button>')),
+                        ->submitAction(new HtmlString("<button type='submit' class='rk-submit'>".__('Import').'</button>')),
                 ]),
         ];
     }
@@ -51,7 +51,7 @@ class JiraImportForm
             ->schema([
                 Placeholder::make('info')
                     ->extraAttributes([
-                        'class' => 'bg-primary-500 rounded-lg border border-primary-600 text-white font-medium text-sm py-3 px-4',
+                        'class' => 'rk-notice rk-notice--info',
                     ])
                     ->disableLabel()
                     ->content(__('Important: Your jira credentials are only used to communicate with jira REST API, and will not be stored in this application')),
@@ -86,7 +86,7 @@ class JiraImportForm
             ->schema([
                 Placeholder::make('hint')
                     ->extraAttributes([
-                        'class' => 'bg-primary-500 rounded-lg border border-primary-600 text-white font-medium text-sm py-3 px-4',
+                        'class' => 'rk-notice rk-notice--info',
                     ])
                     ->disableLabel()
                     ->visible(fn () => ! $page->isLoadingProjects() && $page->getProjects())
@@ -94,7 +94,7 @@ class JiraImportForm
 
                 Placeholder::make('loading')
                     ->extraAttributes([
-                        'class' => 'bg-warning-500 rounded-lg border border-warning-600 text-white font-medium text-sm py-3 px-4',
+                        'class' => 'rk-notice rk-notice--warning',
                     ])
                     ->disableLabel()
                     ->visible(fn () => $page->isLoadingProjects())
@@ -102,7 +102,7 @@ class JiraImportForm
 
                 Placeholder::make('info')
                     ->extraAttributes([
-                        'class' => 'bg-danger-500 rounded-lg border border-danger-600 text-white font-medium text-sm py-3 px-4',
+                        'class' => 'rk-notice rk-notice--danger',
                     ])
                     ->disableLabel()
                     ->visible(fn () => ! $page->isLoadingProjects() && ! $page->getProjects())
@@ -159,7 +159,7 @@ class JiraImportForm
 
                 $fields[] = Placeholder::make('hint')
                     ->extraAttributes([
-                        'class' => 'bg-primary-500 rounded-lg border border-primary-600 text-white font-medium text-sm py-3 px-4',
+                        'class' => 'rk-notice rk-notice--info',
                     ])
                     ->disableLabel()
                     ->visible(fn () => ! $page->isLoadingTickets() && $page->getTickets())
@@ -167,7 +167,7 @@ class JiraImportForm
 
                 $fields[] = Placeholder::make('loading')
                     ->extraAttributes([
-                        'class' => 'bg-warning-500 rounded-lg border border-warning-600 text-white font-medium text-sm py-3 px-4',
+                        'class' => 'rk-notice rk-notice--warning',
                     ])
                     ->disableLabel()
                     ->visible(fn () => $page->isLoadingTickets())
@@ -203,7 +203,7 @@ class JiraImportForm
                     } else {
                         $fields[] = Placeholder::make('info')
                             ->extraAttributes([
-                                'class' => 'bg-warning-500 rounded-lg border border-warning-600 text-white font-medium text-sm py-3 px-4',
+                                'class' => 'rk-notice rk-notice--warning',
                             ])
                             ->disableLabel()
                             ->visible(fn () => ! $page->getProjects())

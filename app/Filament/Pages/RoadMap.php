@@ -38,6 +38,31 @@ class RoadMap extends AuthorizedPage implements HasForms
         'updateEpic',
     ];
 
+    /**
+     * Live updates: when a ticket of the selected project changes status
+     * (broadcast on the project's private channel, same as the boards) the
+     * timeline reloads its data, so progress / finished bars follow.
+     *
+     * @return array<string, string>
+     */
+    public function getListeners(): array
+    {
+        $listeners = $this->listeners;
+
+        if ($this->project) {
+            $listeners["echo-private:project.{$this->project->id},.ticket.status.changed"] = 'refreshRoadMap';
+        }
+
+        return $listeners;
+    }
+
+    public function refreshRoadMap(): void
+    {
+        if ($this->project) {
+            $this->filter();
+        }
+    }
+
     protected static function getNavigationLabel(): string
     {
         return __('Road Map');

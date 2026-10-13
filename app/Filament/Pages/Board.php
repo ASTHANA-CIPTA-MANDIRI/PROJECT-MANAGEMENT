@@ -4,12 +4,9 @@ namespace App\Filament\Pages;
 
 use App\Models\Project;
 use Filament\Facades\Filament;
-use Filament\Forms\Components\Card;
-use Filament\Forms\Components\Grid;
 use Filament\Forms\Components\Select;
 use Filament\Forms\Concerns\InteractsWithForms;
 use Filament\Forms\Contracts\HasForms;
-use Illuminate\Contracts\Support\Htmlable;
 
 /**
  * No page permission: the project picker only ever offers projects the user
@@ -26,11 +23,6 @@ class Board extends AuthorizedPage implements HasForms
     protected static ?string $slug = 'board';
 
     protected static ?int $navigationSort = 4;
-
-    protected function getSubheading(): string|Htmlable|null
-    {
-        return __("In this section you can choose one of your projects to show it's Scrum or Kanban board");
-    }
 
     public function mount(): void
     {
@@ -50,21 +42,14 @@ class Board extends AuthorizedPage implements HasForms
     protected function getFormSchema(): array
     {
         return [
-            Card::make()
-                ->schema([
-                    Grid::make()
-                        ->columns(1)
-                        ->schema([
-                            Select::make('project')
-                                ->label(__('Project'))
-                                ->required()
-                                ->searchable()
-                                ->reactive()
-                                ->afterStateUpdated(fn () => $this->search())
-                                ->helperText(__("Choose a project to show it's board"))
-                                ->options(fn () => Project::accessibleBy(auth()->user())->pluck('name', 'id')->toArray()),
-                        ]),
-                ]),
+            Select::make('project')
+                ->label(__('Project'))
+                ->required()
+                ->searchable()
+                ->reactive()
+                ->afterStateUpdated(fn () => $this->search())
+                ->helperText(__("Choose a project to show it's board"))
+                ->options(fn () => Project::accessibleBy(auth()->user())->pluck('name', 'id')->toArray()),
         ];
     }
 

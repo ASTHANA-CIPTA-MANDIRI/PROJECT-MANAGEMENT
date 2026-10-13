@@ -13,6 +13,13 @@ class ViewProjectStatus extends ViewRecord
     protected function getActions(): array
     {
         return [
+            Actions\Action::make('back')
+                ->label(__('Back to project statuses'))
+                ->icon('heroicon-o-arrow-left')
+                ->color('secondary')
+                ->extraAttributes(['class' => 'rk-back-action'])
+                ->url(ProjectStatusResource::getUrl('index')),
+
             Actions\EditAction::make(),
         ];
     }

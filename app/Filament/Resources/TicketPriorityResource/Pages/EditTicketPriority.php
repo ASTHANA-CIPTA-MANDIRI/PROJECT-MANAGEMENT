@@ -13,6 +13,13 @@ class EditTicketPriority extends EditRecord
     protected function getActions(): array
     {
         return [
+            Actions\Action::make('back')
+                ->label(__('Back to ticket priorities'))
+                ->icon('heroicon-o-arrow-left')
+                ->color('secondary')
+                ->extraAttributes(['class' => 'rk-back-action'])
+                ->url(TicketPriorityResource::getUrl('index')),
+
             Actions\ViewAction::make(),
             Actions\DeleteAction::make(),
         ];

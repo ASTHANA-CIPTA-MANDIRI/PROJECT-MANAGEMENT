@@ -2,7 +2,7 @@
 
 <div class="w-full flex flex-col gap-1">
     <div class="w-full flex items-center gap-2">
-        <span class="bg-danger-500 px-2 py-1 rounded text-white text-sm">{{ $sprint->name }}</span>
+        <span class="rounded-full bg-danger-50 px-3 py-1 text-sm font-medium text-danger-600">{{ $sprint->name }}</span>
         <span class="text-xs text-gray-400">
             {{ __('Started at:') }} {{ $sprint->started_at->format(__('Y-m-d')) }} -
             {{ __('Ends at:') }} {{ $sprint->ends_at->format(__('Y-m-d')) }}

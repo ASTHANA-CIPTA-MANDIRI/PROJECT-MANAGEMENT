@@ -9,7 +9,6 @@ use App\Support\OrganizationContext;
 use App\Support\TrialGate;
 use Filament\Forms\Concerns\InteractsWithForms;
 use Filament\Forms\Contracts\HasForms;
-use Illuminate\Contracts\Support\Htmlable;
 use Illuminate\Support\Str;
 use InvalidArgumentException;
 
@@ -57,11 +56,6 @@ class JiraImport extends AuthorizedPage implements HasForms
     public function mount(): void
     {
         $this->form->fill();
-    }
-
-    protected function getSubheading(): string|Htmlable|null
-    {
-        return __('Use this section to login into your jira account and import tickets to this application');
     }
 
     protected static function getNavigationLabel(): string

@@ -8,6 +8,8 @@ use App\Models\Project;
 use App\Models\Role;
 use App\Models\Ticket;
 use App\Models\TicketHour;
+use App\Models\TicketRelation;
+use App\Models\TicketStatus;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\DB;
@@ -103,6 +105,9 @@ class RoadMapDataTest extends TestCase
      */
     public function test_an_unestimated_ticket_is_not_reported_as_complete(): void
     {
+        // An explicit final status, so the ticket's own (open) status is not
+        // mistaken for the workflow's "highest = done" fallback.
+        TicketStatus::factory()->final()->create(['order' => 99]);
         $project = Project::factory()->create(['owner_id' => $this->user->id]);
         $epic = Epic::factory()->create(['project_id' => $project->id]);
         $ticket = Ticket::factory()->create([
@@ -122,6 +127,9 @@ class RoadMapDataTest extends TestCase
 
     public function test_an_estimated_ticket_reports_its_real_progress(): void
     {
+        // An explicit final status, so the ticket's own (open) status is not
+        // mistaken for the workflow's "highest = done" fallback.
+        TicketStatus::factory()->final()->create(['order' => 99]);
         $project = Project::factory()->create(['owner_id' => $this->user->id]);
         $epic = Epic::factory()->create(['project_id' => $project->id]);
         $ticket = Ticket::factory()->create([
@@ -195,5 +203,52 @@ class RoadMapDataTest extends TestCase
         ]);
 
         $this->actingAs($this->user)->get($this->url($project))->assertSuccessful();
+    }
+
+    public function test_a_finished_ticket_reports_full_progress_and_a_finish_date(): void
+    {
+        $open = TicketStatus::factory()->create(['order' => 1, 'is_final' => false]);
+        $done = TicketStatus::factory()->final()->create(['order' => 5]);
+        $project = Project::factory()->create(['owner_id' => $this->user->id]);
+        $epic = Epic::factory()->create(['project_id' => $project->id]);
+        $ticket = Ticket::factory()->create([
+            'project_id' => $project->id, 'epic_id' => $epic->id, 'owner_id' => $this->user->id,
+            'status_id' => $done->id, 'estimation' => null, 'due_date' => null,
+        ]);
+        $ticket->forceFill(['created_at' => now()->subDays(10), 'updated_at' => now()->subDays(2)])->saveQuietly();
+
+        $row = collect($this->actingAs($this->user)->get($this->url($project))->json())->firstWhere('pName', $ticket->name);
+
+        $this->assertSame(100, $row['pComp']);
+        $this->assertTrue($row['meta']['done']);
+        $this->assertFalse($row['meta']['scheduled']);
+        $this->assertSame(now()->subDays(10)->toDateString(), $row['meta']['start']);
+        // No history row -> the last update is the finish date.
+        $this->assertSame(now()->subDays(2)->toDateString(), $row['meta']['end']);
+        $this->assertNotNull($open->id);
+    }
+
+    public function test_an_open_ticket_bar_runs_to_its_due_date_and_exposes_its_blockers(): void
+    {
+        TicketStatus::factory()->create(['order' => 1, 'is_final' => false]);
+        TicketStatus::factory()->final()->create(['order' => 5]);
+        $project = Project::factory()->create(['owner_id' => $this->user->id]);
+        $epic = Epic::factory()->create(['project_id' => $project->id]);
+        $blocker = Ticket::factory()->create(['project_id' => $project->id, 'epic_id' => $epic->id, 'owner_id' => $this->user->id]);
+        $blocked = Ticket::factory()->create([
+            'project_id' => $project->id, 'epic_id' => $epic->id, 'owner_id' => $this->user->id,
+            'responsible_id' => $this->user->id, 'due_date' => now()->addDays(9),
+        ]);
+        TicketRelation::create(['ticket_id' => $blocked->id, 'type' => 'blocked_by', 'relation_id' => $blocker->id]);
+        TicketRelation::create(['ticket_id' => $blocked->id, 'type' => 'related_to', 'relation_id' => $blocker->id]);
+
+        $row = collect($this->actingAs($this->user)->get($this->url($project))->json())->firstWhere('pName', $blocked->name);
+
+        $this->assertTrue($row['meta']['scheduled']);
+        $this->assertFalse($row['meta']['done']);
+        $this->assertSame(now()->addDays(9)->toDateString(), $row['meta']['end']);
+        // Only "blocked by" links become arrows, not "related to".
+        $this->assertSame([$blocker->id], $row['meta']['blocked_by']);
+        $this->assertNotEmpty($row['meta']['avatar']);
     }
 }

@@ -145,10 +145,14 @@ class ProjectResource extends Resource
                 Tables\Filters\TrashedFilter::make(),
             ])
             ->actions([
-
+                // Row actions as a row of small round icon buttons (tooltip =
+                // label), no dropdown. Each action keeps its own policy gating
+                // (View/Edit/Restore authorize through ProjectPolicy).
                 Tables\Actions\Action::make('favorite')
-                    ->label('')
+                    ->label(__('Favorite'))
                     ->icon('heroicon-o-star')
+                    ->iconButton()
+                    ->tooltip(__('Favorite'))
                     ->color(fn ($record) => auth()->user()->favoriteProjects()
                         ->where('projects.id', $record->id)->count() ? 'success' : 'default')
                     ->action(function ($record) {
@@ -174,36 +178,47 @@ class ProjectResource extends Resource
                         Filament::notify('success', __('Project updated'));
                     }),
 
-                Tables\Actions\ViewAction::make(),
-                Tables\Actions\EditAction::make(),
-                Tables\Actions\RestoreAction::make(),
+                Tables\Actions\ViewAction::make()->iconButton()->tooltip(fn ($action) => $action->getLabel()),
+                Tables\Actions\EditAction::make()->iconButton()->tooltip(fn ($action) => $action->getLabel()),
+                Tables\Actions\RestoreAction::make()->iconButton()->tooltip(fn ($action) => $action->getLabel()),
+                // Same transaction wrapper as EditProject's header DeleteAction:
+                // ProjectObserver cascades tickets/sprints/epics, which must be
+                // atomic with the project's own row. Gated by ProjectPolicy::delete()
+                // (hidden for users without the right); the global SweetAlert
+                // intercepts the confirmation.
+                Tables\Actions\DeleteAction::make()
+                    ->using(fn (Project $record) => DB::transaction(fn () => $record->delete()))
+                    ->requiresConfirmation()
+                    ->iconButton()
+                    ->tooltip(fn ($action) => $action->getLabel()),
+                Tables\Actions\Action::make('exportLogHours')
+                    ->label(__('Export hours'))
+                    ->icon('heroicon-o-document-download')
+                    ->iconButton()
+                    ->tooltip(__('Export hours'))
+                    ->color('secondary')
+                    ->action(fn ($record) => Excel::download(
+                        new ProjectHoursExport($record),
+                        'time_'.Str::slug($record->name).'.csv',
+                        \Maatwebsite\Excel\Excel::CSV,
+                        ['Content-Type' => 'text/csv']
+                    )),
 
-                Tables\Actions\ActionGroup::make([
-                    Tables\Actions\Action::make('exportLogHours')
-                        ->label(__('Export hours'))
-                        ->icon('heroicon-o-document-download')
-                        ->color('secondary')
-                        ->action(fn ($record) => Excel::download(
-                            new ProjectHoursExport($record),
-                            'time_'.Str::slug($record->name).'.csv',
-                            \Maatwebsite\Excel\Excel::CSV,
-                            ['Content-Type' => 'text/csv']
-                        )),
-
-                    Tables\Actions\Action::make('kanban')
-                        ->label(
-                            fn ($record) => ($record->type === 'scrum' ? __('Scrum board') : __('Kanban board'))
-                        )
-                        ->icon('heroicon-o-view-boards')
-                        ->color('secondary')
-                        ->url(function ($record) {
-                            if ($record->type === 'scrum') {
-                                return route('filament.pages.scrum/{project}', ['project' => $record->id]);
-                            } else {
-                                return route('filament.pages.kanban/{project}', ['project' => $record->id]);
-                            }
-                        }),
-                ])->color('secondary'),
+                Tables\Actions\Action::make('kanban')
+                    ->label(
+                        fn ($record) => ($record->type === 'scrum' ? __('Scrum board') : __('Kanban board'))
+                    )
+                    ->icon('heroicon-o-view-boards')
+                    ->iconButton()
+                    ->tooltip(fn ($record) => $record->type === 'scrum' ? __('Scrum board') : __('Kanban board'))
+                    ->color('secondary')
+                    ->url(function ($record) {
+                        if ($record->type === 'scrum') {
+                            return route('filament.pages.scrum/{project}', ['project' => $record->id]);
+                        } else {
+                            return route('filament.pages.kanban/{project}', ['project' => $record->id]);
+                        }
+                    }),
             ])
             ->bulkActions([
                 // The shared DeleteBulkAction default (AppServiceProvider) does

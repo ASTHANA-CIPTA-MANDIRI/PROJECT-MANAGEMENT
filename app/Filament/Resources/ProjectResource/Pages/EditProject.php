@@ -15,6 +15,13 @@ class EditProject extends EditRecord
     protected function getActions(): array
     {
         return [
+            Actions\Action::make('back')
+                ->label(__('Back to projects'))
+                ->icon('heroicon-o-arrow-left')
+                ->color('secondary')
+                ->extraAttributes(['class' => 'rk-back-action'])
+                ->url(ProjectResource::getUrl('index')),
+
             Actions\Action::make('kanban')
                 ->label(
                     fn () => ($this->record->type === 'scrum' ? __('Scrum board') : __('Kanban board'))

@@ -13,6 +13,13 @@ class ViewTicketStatus extends ViewRecord
     protected function getActions(): array
     {
         return [
+            Actions\Action::make('back')
+                ->label(__('Back to ticket statuses'))
+                ->icon('heroicon-o-arrow-left')
+                ->color('secondary')
+                ->extraAttributes(['class' => 'rk-back-action'])
+                ->url(TicketStatusResource::getUrl('index')),
+
             Actions\EditAction::make(),
         ];
     }

@@ -1,4 +1,4 @@
-<x-filament::page>
+<x-filament::page class="rk-board-page">
 
     @if($project->currentSprint)
 
@@ -9,13 +9,13 @@
             $recordsByStatus = $this->getRecords()->groupBy('status');
         @endphp
 
+        <div class="rk-board-card">
         <div class="mx-auto w-full" wire:ignore>
-            <details class="w-full bg-white open:bg-gray-200 duration-300">
-                <summary
-                    class="relative w-full bg-inherit px-5 py-3 text-base cursor-pointer text-gray-500">
+            <details class="rk-board-filter">
+                <summary class="rk-board-filter__btn">
                     {{ __('Filters') }}
                 </summary>
-                <div class="bg-white px-5 py-3">
+                <div class="rk-board-filter__body">
                     <form>
                         {{ $this->form }}
                     </form>
@@ -29,6 +29,7 @@
                 @include('partials.kanban.status', ['records' => $recordsByStatus->get($status['id'], collect())])
             @endforeach
 
+        </div>
         </div>
 
         @push('scripts')
@@ -46,8 +47,18 @@
                             pull: true,
                             put: true
                         },
-                        handle: '.handle',
-                        animation: 100,
+                        // The whole card is the drag surface (not just a corner
+                        // button). Only ticket cards drag (not the "create"
+                        // link); a short delay on touch keeps scrolling usable,
+                        // and a small tolerance keeps plain clicks (open ticket) working.
+                        draggable: '.kanban-record',
+                        delay: 120,
+                        delayOnTouchOnly: true,
+                        touchStartThreshold: 5,
+                        fallbackTolerance: 4,
+                        ghostClass: 'kanban-ghost',
+                        chosenClass: 'kanban-chosen',
+                        animation: 150,
                         onEnd: function (evt) {
                             Livewire.emit('recordUpdated',
                                 +evt.clone.dataset.id, // id
@@ -61,8 +72,8 @@
             </script>
         @endpush
     @else
-        <div class="w-full flex flex-col">
-            <span class="text-gray-500 text-lg font-medium">
+        <div class="rk-board-card">
+            <span class="text-lg font-semibold text-gray-900">
                 {{ __('No active sprint for this project!') }}
             </span>
             @if(auth()->user()->can('update', $project))
@@ -70,7 +81,7 @@
                     {{ __("Click the below button to manage project's sprints") }}
                 </span>
                 <a href="{{ route('filament.resources.projects.view', $project) }}"
-                   class="px-3 py-2 bg-primary-500 hover:bg-primary-600 text-white rounded mt-3 w-fit">
+                   class="rk-board-link mt-3">
                     {{ __('Manage sprints') }}
                 </a>
             @else

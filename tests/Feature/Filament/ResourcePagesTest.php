@@ -9,6 +9,7 @@ use App\Models\Project;
 use App\Models\ProjectStatus;
 use App\Models\Role;
 use App\Models\Ticket;
+use App\Models\TicketComment;
 use App\Models\TicketPriority;
 use App\Models\TicketStatus;
 use App\Models\TicketType;
@@ -127,6 +128,192 @@ class ResourcePagesTest extends TestCase
             ->assertSuccessful();
     }
 
+    /**
+     * The status cards count through TicketResource::getEloquentQuery() (the
+     * table's own access-scoped base query), so a ticket the user cannot see
+     * is never counted, and a card click filters through the table filter.
+     */
+    public function test_the_ticket_status_cards_only_count_visible_tickets_and_filter_the_table(): void
+    {
+        $todo = TicketStatus::factory()->create(['name' => 'Todo', 'project_id' => null]);
+        $done = TicketStatus::factory()->create(['name' => 'Done', 'project_id' => null]);
+        $stranger = User::factory()->create();
+
+        $mine = Project::factory()->create(['owner_id' => $this->admin->id]);
+        $visibleTodoA = Ticket::factory()->create(['project_id' => $mine->id, 'status_id' => $todo->id, 'owner_id' => $this->admin->id]);
+        $visibleTodoB = Ticket::factory()->create(['project_id' => $mine->id, 'status_id' => $todo->id, 'owner_id' => $this->admin->id]);
+        $visibleDone = Ticket::factory()->create(['project_id' => $mine->id, 'status_id' => $done->id, 'owner_id' => $this->admin->id]);
+
+        // A project of another Organization: invisible to the admin (the
+        // Organization axis), so it must not leak into any count.
+        $foreign = Project::factory()->create([
+            'owner_id' => $stranger->id,
+            'organization_id' => Organization::factory()->create()->id,
+        ]);
+        foreach (range(1, 4) as $unused) {
+            Ticket::factory()->create([
+                'project_id' => $foreign->id, 'status_id' => $todo->id,
+                'owner_id' => $stranger->id, 'responsible_id' => $stranger->id,
+            ]);
+        }
+
+        $component = Livewire::test(\App\Filament\Resources\TicketResource\Pages\ListTickets::class)
+            ->assertSeeHtml('<span class="rk-stat-cards__value">3</span>')   // Total
+            ->assertSeeHtml('<span class="rk-stat-cards__value">2</span>')   // Todo
+            ->assertSeeHtml('<span class="rk-stat-cards__value">1</span>')   // Done
+            ->assertDontSeeHtml('<span class="rk-stat-cards__value">7</span>');
+
+        $component->call('applyStatusCard', 'done')
+            ->assertSet('tableFilters.status_id.values', [(string) $done->id])
+            ->assertCanSeeTableRecords([$visibleDone])
+            ->assertCanNotSeeTableRecords([$visibleTodoA, $visibleTodoB]);
+
+        // Clicking the active card clears the filter again.
+        $component->call('applyStatusCard', 'done')
+            ->assertSet('tableFilters.status_id.values', [])
+            ->assertCanSeeTableRecords([$visibleTodoA, $visibleTodoB, $visibleDone]);
+
+        // An unknown / client-forged key never produces a filter.
+        $component->call('applyStatusCard', 'does-not-exist')
+            ->assertSet('tableFilters.status_id.values', []);
+    }
+
+    /**
+     * The filter tabs narrow the table's own access-scoped query and their
+     * counts come from that same base query, so a ticket of another
+     * Organization is never counted or listed; tabs combine with the status
+     * cards, and an unknown tab key falls back to "all".
+     */
+    public function test_the_ticket_tabs_are_scoped_filter_the_table_and_combine_with_cards(): void
+    {
+        $open = TicketStatus::factory()->create(['name' => 'Todo', 'project_id' => null, 'is_final' => false]);
+        $done = TicketStatus::factory()->create(['name' => 'Done', 'project_id' => null, 'is_final' => true]);
+        $other = User::factory()->create();
+        $mine = Project::factory()->create(['owner_id' => $this->admin->id]);
+
+        $assigned = Ticket::factory()->create(['project_id' => $mine->id, 'status_id' => $open->id, 'owner_id' => $other->id, 'responsible_id' => $this->admin->id, 'due_date' => now()->addDays(5)]);
+        $unassigned = Ticket::factory()->create(['project_id' => $mine->id, 'status_id' => $open->id, 'owner_id' => $this->admin->id, 'responsible_id' => null, 'due_date' => now()->subDays(2)]);
+        $lateButDone = Ticket::factory()->create(['project_id' => $mine->id, 'status_id' => $done->id, 'owner_id' => $this->admin->id, 'responsible_id' => $other->id, 'due_date' => now()->subDays(9)]);
+
+        // Another Organization's project: invisible, must never be counted.
+        $foreign = Project::factory()->create([
+            'owner_id' => $other->id,
+            'organization_id' => Organization::factory()->create()->id,
+        ]);
+        Ticket::factory()->count(3)->create([
+            'project_id' => $foreign->id, 'status_id' => $open->id, 'owner_id' => $other->id,
+            'responsible_id' => null, 'due_date' => now()->subDays(4),
+        ]);
+
+        $component = Livewire::test(\App\Filament\Resources\TicketResource\Pages\ListTickets::class)
+            ->assertSeeHtml('Semua')
+            ->assertSeeHtml('<span class="rk-tabs__count">(3)</span>')      // all: only the 3 visible
+            ->assertDontSeeHtml('(6)');
+
+        $component->call('selectTab', 'mine')
+            ->assertCanSeeTableRecords([$assigned])
+            ->assertCanNotSeeTableRecords([$unassigned, $lateButDone]);
+
+        $component->call('selectTab', 'unassigned')
+            ->assertCanSeeTableRecords([$unassigned])
+            ->assertCanNotSeeTableRecords([$assigned, $lateButDone]);
+
+        // Overdue = due before today AND not a final status.
+        $component->call('selectTab', 'overdue')
+            ->assertCanSeeTableRecords([$unassigned])
+            ->assertCanNotSeeTableRecords([$assigned, $lateButDone]);
+
+        $component->call('selectTab', 'byMe')
+            ->assertCanSeeTableRecords([$unassigned, $lateButDone])
+            ->assertCanNotSeeTableRecords([$assigned]);
+
+        // Tab + status card: "Done" within "assigned by me".
+        $component->call('applyStatusCard', 'done')
+            ->assertCanSeeTableRecords([$lateButDone])
+            ->assertCanNotSeeTableRecords([$unassigned]);
+
+        $component->call('applyStatusCard', 'done')
+            ->call('selectTab', 'nonsense')
+            ->assertSet('activeTab', 'all')
+            ->assertCanSeeTableRecords([$assigned, $unassigned, $lateButDone]);
+    }
+
+    /**
+     * The sub-line under a ticket title shows the type as a small pill built
+     * from the TicketType record (name + validated colour), never from raw
+     * strings, followed by the project name.
+     */
+    public function test_the_ticket_name_cell_shows_the_type_as_a_safe_colour_pill(): void
+    {
+        $type = \App\Models\TicketType::factory()->create(['name' => 'Bug', 'color' => '#ef4444', 'icon' => 'heroicon-o-x']);
+        $badType = \App\Models\TicketType::factory()->create(['name' => 'Odd', 'color' => 'red;"><script>alert(1)</script>', 'icon' => 'heroicon-o-does-not-exist']);
+        $mine = Project::factory()->create(['owner_id' => $this->admin->id, 'name' => 'Alpha - Site']);
+        $ok = Ticket::factory()->create(['project_id' => $mine->id, 'owner_id' => $this->admin->id, 'type_id' => $type->id]);
+        $odd = Ticket::factory()->create(['project_id' => $mine->id, 'owner_id' => $this->admin->id, 'type_id' => $badType->id]);
+
+        Livewire::test(\App\Filament\Resources\TicketResource\Pages\ListTickets::class)
+            ->assertSuccessful()
+            ->assertSeeHtml('<span class="color-pill-label">Bug</span>')
+            ->assertSeeHtml('background-color: #ef444426')
+            ->assertSeeHtml('<span class="rk-cell-sub-project">Alpha - Site</span>')
+            ->assertDontSeeHtml('<script>alert(1)</script>')
+            ->assertSeeHtml('<span class="color-pill-label">Odd</span>')
+            ->assertCanSeeTableRecords([$ok, $odd]);
+    }
+
+    /**
+     * Cards, percentages and tab counts always come from the live scoped
+     * query: after creating, re-statusing, assigning, deleting and restoring
+     * tickets (and with zero tickets) a re-render shows the new numbers.
+     */
+    public function test_the_ticket_cards_percentages_and_tabs_follow_the_data(): void
+    {
+        $todo = TicketStatus::factory()->create(['name' => 'Todo', 'project_id' => null, 'order' => 1]);
+        $done = TicketStatus::factory()->create(['name' => 'Done', 'project_id' => null, 'order' => 2, 'is_final' => true]);
+        $mine = Project::factory()->create(['owner_id' => $this->admin->id]);
+
+        $page = Livewire::test(\App\Filament\Resources\TicketResource\Pages\ListTickets::class)
+            ->assertSeeHtml('<span class="rk-stat-cards__value">0</span>')
+            ->assertSeeHtml('<span class="rk-stat-cards__percent">0%</span>')   // total 0: no division error
+            ->assertSeeHtml('<span class="rk-tabs__count">(0)</span>');
+
+        $a = Ticket::factory()->create(['project_id' => $mine->id, 'status_id' => $todo->id, 'owner_id' => $this->admin->id]);
+        $b = Ticket::factory()->create(['project_id' => $mine->id, 'status_id' => $todo->id, 'owner_id' => $this->admin->id]);
+        $c = Ticket::factory()->create(['project_id' => $mine->id, 'status_id' => $todo->id, 'owner_id' => $this->admin->id]);
+        $d = Ticket::factory()->create(['project_id' => $mine->id, 'status_id' => $done->id, 'owner_id' => $this->admin->id]);
+
+        // 4 total: Todo 3 = 75%, Done 1 = 25%.
+        $page->call('$refresh')
+            ->assertSeeHtml('<span class="rk-stat-cards__value">4</span>')
+            ->assertSeeHtml('<span class="rk-stat-cards__percent">75%</span>')
+            ->assertSeeHtml('<span class="rk-stat-cards__percent">25%</span>');
+
+        // Re-status + assign: Todo 2 / Done 2, "Tugas Saya" becomes 1.
+        $c->update(['status_id' => $done->id, 'responsible_id' => $this->admin->id]);
+        $page->call('$refresh')
+            ->assertSeeHtml('<span class="rk-stat-cards__percent">50%</span>')
+            ->assertSeeHtml('<span class="rk-tabs__count">(1)</span>');
+
+        // Soft delete one: total 3 (Todo 1 = 33%, Done 2 = 67%); restore: back to 4 (2 / 2 = 50%).
+        $a->delete();
+        $page->call('$refresh')
+            ->assertSeeHtml('<span class="rk-stat-cards__value">3</span>')
+            ->assertSeeHtml('<span class="rk-stat-cards__percent">33%</span>')
+            ->assertSeeHtml('<span class="rk-stat-cards__percent">67%</span>');
+
+        $a->restore();
+        $page->call('$refresh')
+            ->assertSeeHtml('<span class="rk-stat-cards__value">4</span>')
+            ->assertDontSeeHtml('<span class="rk-stat-cards__percent">33%</span>')
+            ->assertSeeHtml('<span class="rk-stat-cards__percent">50%</span>');
+    }
+
+    public function test_the_ticket_list_polls_so_counts_follow_outside_changes(): void
+    {
+        Livewire::test(\App\Filament\Resources\TicketResource\Pages\ListTickets::class)
+            ->assertSeeHtml('wire:poll.15s');
+    }
+
     public function test_the_ticket_create_page_renders(): void
     {
         Livewire::test(\App\Filament\Resources\TicketResource\Pages\CreateTicket::class)
@@ -151,6 +338,48 @@ class ResourcePagesTest extends TestCase
             \App\Filament\Resources\TicketResource\Pages\ViewTicket::class,
             ['record' => $ticket->getRouteKey()]
         )->assertSuccessful();
+    }
+
+    public function test_the_ticket_view_page_keeps_actions_out_of_the_header(): void
+    {
+        $ticket = Ticket::factory()->create(['owner_id' => $this->admin->id]);
+
+        $html = Livewire::test(
+            \App\Filament\Resources\TicketResource\Pages\ViewTicket::class,
+            ['record' => $ticket->getRouteKey()]
+        )->payload['effects']['html'];
+
+        preg_match('#<header[^>]*filament-header.*?</header>#s', $html, $header);
+
+        $this->assertNotEmpty($header);
+        $this->assertStringNotContainsString('filament-page-actions', $header[0]);
+        $this->assertStringContainsString('rk-td__back', $html);
+        $this->assertMatchesRegularExpression('#rk-td__bar.*filament-page-actions#s', $html);
+    }
+
+    public function test_the_ticket_view_page_renders_attachments_in_content_and_comments(): void
+    {
+        $image = '<a href="https://example.test/a.png"><img src="https://example.test/a.png" width="946" height="348" alt="a.png" />'
+            .'<span>shot-image.png</span> <span>51.01 KB</span></a>';
+        $file = '<a href="https://example.test/doc.pdf"><span>requirement-doc.pdf</span> <span>1.2 MB</span></a>';
+
+        $ticket = Ticket::factory()->create(['owner_id' => $this->admin->id, 'content' => '<p>Body</p>'.$image.$file]);
+        TicketComment::create([
+            'user_id' => $this->admin->id,
+            'ticket_id' => $ticket->id,
+            'content' => '<p>Look</p>'.$image.$file,
+        ]);
+
+        $html = Livewire::test(
+            \App\Filament\Resources\TicketResource\Pages\ViewTicket::class,
+            ['record' => $ticket->getRouteKey()]
+        )->payload['effects']['html'];
+
+        // Markup is untouched (captions are hidden by CSS, not stripped), so
+        // the image canvas and the file chip selectors keep matching.
+        $this->assertSame(2, substr_count($html, '<img src="https://example.test/a.png"'));
+        $this->assertSame(2, substr_count($html, '<span>requirement-doc.pdf</span>'));
+        $this->assertStringContainsString('class="w-full prose max-w-none"', $html);
     }
 
     // ------------------------------------------------------------------ Users
