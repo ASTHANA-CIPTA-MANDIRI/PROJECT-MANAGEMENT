@@ -1,4 +1,5 @@
 <?php
+
 return [
 
     /*
@@ -19,12 +20,12 @@ return [
         'heroicons',
         'fontawesome',
     ],
-//     example:
-//     'sets' => 'heroicons',
-//     'sets' => [
-//        'heroicons',
-//        'fontawesome-solid',
-//    ],
+    //     example:
+    //     'sets' => 'heroicons',
+    //     'sets' => [
+    //        'heroicons',
+    //        'fontawesome-solid',
+    //    ],
 
     /*
     |--------------------------------------------------------------------------
@@ -39,12 +40,12 @@ return [
     |
     */
     'columns' => 3,
-//     example:
-//    'columns' => [
-//        'default' => 1,
-//        'lg' => 3,
-//        '2xl' => 5,
-//    ],
+    //     example:
+    //    'columns' => [
+    //        'default' => 1,
+    //        'lg' => 3,
+    //        '2xl' => 5,
+    //    ],
 
     /*
     |--------------------------------------------------------------------------

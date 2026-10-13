@@ -1,6 +1,6 @@
 <x-filament-breezy::auth-card action="authenticate">
 
-    <div class="w-full flex justify-center">
+    <div class="w-full flex justify-center lg:hidden">
         <x-filament::brand />
     </div>
 
@@ -8,31 +8,29 @@
         {{ __('filament::login.heading') }}
     </h2>
 
-    @if(config('system.login_form.is_enabled'))
-    <div>
-        @if(config("filament-breezy.enable_registration"))
-        <p class="mt-2 text-sm text-center">
-            {{ __('filament-breezy::default.or') }}
-            <a class="text-primary-600" href="{{route(config('filament-breezy.route_group_prefix').'register')}}">
-                {{ strtolower(__('filament-breezy::default.registration.heading')) }}
-            </a>
-        </p>
-        @endif
-    </div>
+    @if(config('filament-socialite.enabled'))
+    <x-filament-socialite::buttons />
+    @endif
 
+    @if(config('system.login_form.is_enabled'))
     {{ $this->form }}
+
+    <div class="text-right -mt-2">
+        <a class="text-sm text-primary-600 hover:text-primary-700" href="{{route(config('filament-breezy.route_group_prefix').'password.request')}}">{{ __('filament-breezy::default.login.forgot_password_link') }}</a>
+    </div>
 
     <x-filament::button type="submit" class="w-full">
         {{ __('filament::login.buttons.submit.label') }}
     </x-filament::button>
 
-    <div class="text-center">
-        <a class="text-primary-600 hover:text-primary-700" href="{{route(config('filament-breezy.route_group_prefix').'password.request')}}">{{ __('filament-breezy::default.login.forgot_password_link') }}</a>
-    </div>
+    @if(config("filament-breezy.enable_registration"))
+    <p class="text-sm text-center">
+        {{ __('filament-breezy::default.or') }}
+        <a class="text-primary-600" href="{{route(config('filament-breezy.route_group_prefix').'register')}}">
+            {{ strtolower(__('filament-breezy::default.registration.heading')) }}
+        </a>
+    </p>
     @endif
-
-    @if(config('filament-socialite.enabled'))
-    <x-filament-socialite::buttons />
     @endif
 
     <div class="text-center mt-4">
@@ -91,14 +89,14 @@
                     if (!wrap || wrap.querySelector('.pw-reveal-btn')) return;
 
                     wrap.style.position = 'relative';
-                    input.style.paddingRight = '2.5rem';
+                    input.style.paddingRight = '2.75rem';
 
                     var btn = document.createElement('button');
                     btn.type = 'button';
                     btn.className = 'pw-reveal-btn';
                     btn.setAttribute('aria-label', 'Show password');
                     btn.innerHTML = EYE;
-                    btn.style.cssText = 'position:absolute;top:50%;right:.6rem;transform:translateY(-50%);background:none;border:0;padding:0;cursor:pointer;color:#6b7280;display:flex;';
+                    btn.style.cssText = 'position:absolute;top:50%;right:1.1rem;transform:translateY(-50%);background:none;border:0;outline:none;box-shadow:none;padding:0;cursor:pointer;color:#6b7280;display:flex;';
                     btn.addEventListener('click', function () {
                         var show = input.getAttribute('type') === 'password';
                         input.setAttribute('type', show ? 'text' : 'password');

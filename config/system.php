@@ -231,6 +231,34 @@ return [
 
     ],
 
+    // Chat (Inbox) attachments. Files live on the private disk and are removed
+    // automatically after attachment_days (0 keeps them forever).
+    'chat' => [
+        'attachment_days' => (int) env('CHAT_ATTACHMENT_DAYS', 30),
+        'max_image_kb' => 5120,
+        'max_file_kb' => 10240,
+        // Images are shrunk to fit this box (px) before they are stored.
+        'image_max_side' => 1600,
+        // Reject images above this many pixels (width x height) before decoding them.
+        'image_max_pixels' => 40_000_000,
+        // Same whitelist as ticket attachments minus archives (no html/svg/zip).
+        'accepted_mime_types' => [
+            'image/jpeg',
+            'image/png',
+            'image/gif',
+            'image/webp',
+            'application/pdf',
+            'application/msword',
+            'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+            'application/vnd.ms-excel',
+            'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+            'application/vnd.ms-powerpoint',
+            'application/vnd.openxmlformats-officedocument.presentationml.presentation',
+            'text/plain',
+            'text/csv',
+        ],
+    ],
+
     // System constants
     'max_file_size' => 10240,
 

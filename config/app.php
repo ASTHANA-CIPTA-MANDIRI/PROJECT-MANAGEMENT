@@ -28,6 +28,17 @@ return [
     'name' => env('APP_NAME', 'Laravel'),
 
     /*
+    | Days to keep profile feed posts before `model:prune` removes them (with
+    | their comments and likes). 0 / unset keeps them forever.
+    */
+    /*
+    | Days to keep direct messages before `model:prune` removes them. 0 / unset keeps them forever.
+    */
+    'chat_retention_days' => (int) env('CHAT_RETENTION_DAYS', 0),
+
+    'profile_post_retention_days' => (int) env('PROFILE_POST_RETENTION_DAYS', 0),
+
+    /*
     |--------------------------------------------------------------------------
     | Application Environment
     |--------------------------------------------------------------------------
@@ -91,6 +102,9 @@ return [
     */
 
     'timezone' => 'UTC',
+
+    // Only for user-facing wall-clock text (e.g. the dashboard greeting); stored times stay UTC.
+    'display_timezone' => env('APP_DISPLAY_TIMEZONE', 'Asia/Jakarta'),
 
     /*
     |--------------------------------------------------------------------------

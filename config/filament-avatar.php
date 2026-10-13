@@ -57,7 +57,7 @@ return [
             'url' => 'https://www.gravatar.com/avatar/',
 
             // User's field used to generate avatar
-            'name_field' => 'email'
+            'name_field' => 'email',
         ],
     ],
 

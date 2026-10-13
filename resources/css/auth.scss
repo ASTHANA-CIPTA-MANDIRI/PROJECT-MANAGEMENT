@@ -1,0 +1,23 @@
+// Login/register/2FA visual refinements only (Plus Jakarta Sans, field spec,
+// pill-shaped buttons). Scoped to .filament-login-page so none of this touches
+// forms or buttons anywhere else in the admin panel. Pure styling — no markup,
+// no Livewire bindings, no PHP touched.
+.filament-login-page {
+    font-family: 'Plus Jakarta Sans', ui-sans-serif, system-ui, sans-serif;
+
+    input:not([type='checkbox']):not([type='radio']) {
+        font-family: 'Plus Jakarta Sans', ui-sans-serif, system-ui, sans-serif;
+        font-size: 14px;
+        line-height: 20.125px;
+        color: #111c2d;
+        background-color: #ffffff;
+        padding: 12px 14px;
+        border-radius: 9999px;
+    }
+
+    .filament-button {
+        border-radius: 9999px;
+        padding-top: 0.65rem;
+        padding-bottom: 0.65rem;
+    }
+}

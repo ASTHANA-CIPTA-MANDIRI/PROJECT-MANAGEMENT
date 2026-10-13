@@ -1,49 +1,57 @@
+// Kanban / Scrum board (Spike "Kanban app" look): every status is a soft
+// pastel rounded card tinted with its own colour (--c, set on the column in
+// partials/kanban/status.blade.php), holding white rounded ticket cards.
+// Presentation only: the drag handle, data-* attributes and ids that
+// Sortable/Livewire use are untouched.
 .kanban-container {
-    @apply w-full flex gap-2 overflow-x-auto;
+    @apply w-full flex items-start gap-4 overflow-x-auto pb-2;
 
     .kanban-statuses {
-        @apply w-full flex flex-col gap-2;
+        @apply flex flex-1 flex-col gap-3 rounded-3xl p-4;
 
-        min-width: 250px;
+        --c: #3b82d6;
+        min-width: 240px;
+        background: color-mix(in srgb, var(--c) 12%, white);
 
         .status-header {
-            @apply w-full flex gap-1 items-center bg-white p-3 mb-3 text-xs font-medium text-gray-400 uppercase rounded-t border-b-4;
+            @apply flex w-full items-center justify-between gap-2 px-1 pt-1;
+
+            .status-title {
+                @apply text-lg font-semibold tracking-tight text-gray-900;
+            }
+
+            .status-count {
+                @apply rounded-full bg-white/70 px-2.5 py-0.5 text-xs font-medium text-gray-500;
+            }
         }
 
         .status-container {
-            @apply relative w-full flex flex-col gap-2 bg-white p-2 rounded overflow-y-auto overflow-x-hidden border-b-4;
+            @apply relative flex w-full flex-col gap-3 overflow-y-auto overflow-x-hidden;
 
-            height: calc(100vh);
+            min-height: 6rem;
+            max-height: calc(100vh - 17rem);
 
             .create-record {
-                @apply flex items-center gap-1 mt-auto text-xs text-gray-500 p-3 bg-transparent hover:text-gray-600 hover:bg-gray-100 rounded;
+                @apply mt-1 flex items-center justify-center gap-1.5 rounded-full border border-dashed bg-transparent p-2.5 text-sm text-gray-500 transition hover:bg-white/60 hover:text-gray-700;
+
+                border-color: color-mix(in srgb, var(--c) 45%, white);
             }
 
             .kanban-record {
-                @apply w-full flex flex-col gap-4 rounded bg-gray-50 border border-gray-200 p-3 hover:shadow hover:bg-gray-100 relative;
-
-                .handle {
-                    @apply absolute top-0 right-0 text-gray-500 opacity-0 hover:cursor-pointer bg-gray-100 hover:bg-gray-200 rounded-bl p-2 transition;
-                }
-
-                &:hover {
-                    .handle {
-                        @apply opacity-100;
-                    }
-                }
+                @apply relative flex w-full cursor-grab select-none flex-col gap-3 rounded-2xl border-0 bg-white p-4 shadow-sm transition hover:shadow-md active:cursor-grabbing;
 
                 .record-info {
-                    @apply w-full flex flex-col gap-0;
+                    @apply flex w-full flex-col gap-1 pr-6;
 
                     .record-subtitle {
                         @apply text-xs text-gray-400;
                     }
 
                     .record-title {
-                        @apply text-base text-gray-600 hover:cursor-pointer;
+                        @apply flex flex-col gap-0.5 text-base font-semibold leading-snug text-gray-900 hover:cursor-pointer;
 
                         .code {
-                            @apply text-xs font-medium text-gray-400;
+                            @apply text-xs font-medium text-primary-600;
                         }
 
                         &:hover {
@@ -54,20 +62,63 @@
                     }
                 }
 
-                .record-footer {
-                    @apply w-full flex justify-between items-center;
+                // Cover image: runs edge to edge under the title, like the reference.
+                .record-cover {
+                    @apply -mx-4 block overflow-hidden;
 
-                    .record-type-code {
-                        @apply flex items-center gap-2;
-                    }
-
-                    .avatar {
-                        @apply w-6 h-6 rounded-full bg-gray-200 bg-cover bg-center;
+                    img {
+                        @apply block max-h-56 w-full object-cover;
                     }
                 }
 
+                .record-excerpt {
+                    @apply text-sm leading-relaxed text-gray-600;
+                }
+
+                .record-tags {
+                    @apply flex flex-wrap gap-1.5;
+                }
+
+                .record-footer {
+                    @apply flex w-full items-center justify-between gap-2;
+
+                    .record-meta {
+                        @apply flex min-w-0 flex-wrap items-center gap-x-4 gap-y-1;
+                    }
+
+                    .record-due-date {
+                        @apply inline-flex items-center gap-2 text-sm text-gray-700;
+
+                        &.is-overdue {
+                            @apply font-medium text-danger-600;
+                        }
+                    }
+
+                    .record-epic,
+                    .avatar {
+                        @apply shrink-0;
+                    }
+                }
+
+                .record-epic {
+                    @apply rounded-full bg-purple-100 px-2.5 py-1 text-xs font-semibold text-purple-700;
+                }
+
+                // Same soft pills as the ticket pages (x-color-badge pill).
+                .color-pill {
+                    @apply inline-flex max-w-full items-center gap-1.5 whitespace-nowrap rounded-full px-2.5 py-1 text-xs font-semibold;
+                }
+
+                .color-pill-icon {
+                    @apply h-3.5 w-3.5 shrink-0;
+                }
+
+                .color-pill-label {
+                    @apply truncate;
+                }
+
                 .record-relations {
-                    @apply w-full flex flex-col gap-1;
+                    @apply flex w-full flex-col gap-1;
 
                     & > div {
                         @apply flex items-center gap-1 text-sm text-gray-600;
@@ -79,9 +130,18 @@
                 }
 
                 .record-logged-hours {
-                    @apply flex items-center gap-1 text-gray-500 text-xs;
+                    @apply flex items-center gap-1 text-xs text-gray-500;
                 }
             }
         }
     }
+}
+
+// SortableJS states while a card is being dragged.
+.kanban-ghost {
+    @apply opacity-40;
+}
+
+.kanban-chosen {
+    @apply shadow-xl ring-2 ring-primary-300;
 }

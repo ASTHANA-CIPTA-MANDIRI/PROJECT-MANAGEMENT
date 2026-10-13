@@ -23,7 +23,7 @@
         </div>
     </div>
 
-    <div class="w-full flex justify-center">
+    <div class="w-full flex justify-center lg:hidden">
         <x-filament::brand />
     </div>
 
@@ -38,6 +38,10 @@
             </a>
         </p>
     </div>
+
+    @if(config('filament-socialite.enabled'))
+    <x-filament-socialite::buttons />
+    @endif
 
     {{ $this->form }}
 
@@ -57,10 +61,6 @@
             {{ __('filament-breezy::default.registration.submit.label') }}
         </span>
     </x-filament::button>
-
-    @if(config('filament-socialite.enabled'))
-    <x-filament-socialite::buttons />
-    @endif
 
     <div class="text-center mt-4">
         <span class="text-sm text-gray-500">Rencanakan by Ethes Digital</span>

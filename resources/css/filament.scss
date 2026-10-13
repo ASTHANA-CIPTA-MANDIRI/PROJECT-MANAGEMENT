@@ -5,9 +5,100 @@
 // keeps the tooltips working even if that vendor import ever goes away.
 @import 'tippy.js/dist/tippy.css';
 
+// SweetAlert2 default theme (confirm dialogs + toasts, see resources/js/filament.js).
+@import 'sweetalert2/dist/sweetalert2.css';
+
 @import './kanban';
 @import './dialogs';
 @import './loading.io';
+@import './auth';
+
+// Shared button shape (Spike / MUI "contained" with the soft palette): fully
+// rounded pill, flat, 40px high, 18px icon 8px from the label, white text on a
+// muted fill. Colour is set per use with the $rk-btn-* variables.
+$rk-btn-primary: #3b82d6;
+$rk-btn-secondary: #6f767e;
+$rk-btn-error: #ee9a82;
+$rk-btn-warning: #f0c37f;
+$rk-btn-success: #72cc90;
+
+// Empty-state illustration (folder + magnifier). Inline so no extra file ships.
+$rk-empty-art: url("data:image/svg+xml,%3Csvg%20xmlns=%22http://www.w3.org/2000/svg%22%20viewBox=%220%200%20360%20260%22%3E%3Cellipse%20cx=%22180%22%20cy=%22241%22%20rx=%22110%22%20ry=%229%22%20fill=%22%23ececec%22/%3E%3Crect%20x=%22130%22%20y=%2240%22%20width=%2298%22%20height=%2296%22%20rx=%224%22%20fill=%22%23f1f1f1%22/%3E%3Cpath%20d=%22M122%2084h92q5%200%209%204l7%207h46q8%200%208%208l-7%20120q-1%208-9%208H124q-8%200-9-8l-8-125q0-14%2015-14z%22%20fill=%22%23e6a93b%22/%3E%3Cpath%20d=%22M108%2096q0-6%206-6h152q6%200%206%206l-9%20127q-1%209-9%209H125q-9%200-10-9z%22%20fill=%22%23f5bb42%22/%3E%3Cpath%20d=%22M114%20220h151l-1%203q-1%209-9%209H125q-9%200-10-9z%22%20fill=%22%23eaa93a%22/%3E%3Cellipse%20cx=%22160%22%20cy=%22152%22%20rx=%224.8%22%20ry=%227.5%22%20fill=%22%232e3a4f%22/%3E%3Cellipse%20cx=%22199%22%20cy=%22152%22%20rx=%224.8%22%20ry=%227.5%22%20fill=%22%232e3a4f%22/%3E%3Cpath%20d=%22M159%20196q20.500-22%2041%200%22%20fill=%22none%22%20stroke=%22%232e3a4f%22%20stroke-width=%223.2%22%20stroke-linecap=%22round%22/%3E%3Ccircle%20cx=%22198%22%20cy=%2266%22%20r=%2247%22%20fill=%22%23ffffff%22%20fill-opacity=%22.72%22%20stroke=%22%233f5476%22%20stroke-width=%2210%22/%3E%3Cpath%20d=%22M232%20101l30%2031%22%20stroke=%22%233f5476%22%20stroke-width=%2213%22%20stroke-linecap=%22round%22/%3E%3Ctext%20x=%22198%22%20y=%2292%22%20text-anchor=%22middle%22%20font-family=%22Arial,Helvetica,sans-serif%22%20font-weight=%22800%22%20font-size=%2266%22%20fill=%22%23f08a7a%22%3E%3F%3C/text%3E%3C/svg%3E");
+
+@mixin rk-btn {
+    @apply inline-flex h-10 items-center justify-center gap-2 rounded-full border-0 px-5 text-sm font-normal shadow-none transition;
+
+    svg {
+        @apply h-[18px] w-[18px] shrink-0;
+    }
+
+    &:hover:not(:disabled) {
+        filter: brightness(0.94);
+    }
+}
+
+@mixin rk-btn-color($bg) {
+    background-color: $bg;
+    @apply text-white;
+}
+
+// Rich text editor + upload dropzone look (Spike "Add Product"): shared by the
+// Project forms and the ticket detail (comment editor, attachments).
+@mixin rk-form-rich-and-upload {
+    // Rich text: rounded box, soft blue toolbar with plain icon buttons.
+    .filament-forms-rich-editor-component {
+        > :not([hidden]) ~ :not([hidden]) {
+            margin-top: 0 !important;
+        }
+
+        trix-toolbar {
+            @apply rounded-t-3xl border border-b-0 border-gray-200 bg-primary-50/60 px-3 py-2;
+
+            // Filament's own rows are `overflow-x-auto` + nowrap: let them wrap
+            // instead of clipping/scrolling (undo/redo were cut off).
+            > div:first-child,
+            > div:first-child > div {
+                flex-wrap: wrap !important;
+                overflow: visible !important;
+                row-gap: 0.25rem;
+            }
+
+            .trix-button-group {
+                @apply m-0 gap-0.5 border-0 pr-2;
+
+                &:not(:last-child) {
+                    @apply border-r border-gray-200;
+                }
+            }
+
+            .trix-button,
+            button {
+                @apply rounded-lg border-0 bg-transparent shadow-none hover:bg-white;
+            }
+        }
+
+        trix-editor {
+            @apply rounded-b-3xl rounded-t-none border border-gray-200 bg-white px-5 py-4 shadow-none;
+        }
+    }
+
+    // Upload dropzone: dashed blue border, very light blue fill, blue text.
+    .filepond--root {
+        @apply mb-0;
+    }
+
+    .filepond--panel-root {
+        @apply rounded-3xl border-2 border-dashed border-primary-300 bg-primary-50;
+    }
+
+    .filepond--drop-label {
+        @apply text-primary-600;
+
+        label {
+            @apply cursor-pointer text-sm font-medium;
+        }
+    }
+}
 
 .filament-header-heading {
     display: block;
@@ -47,4 +138,6519 @@
 
 label:has(.sprint-checkboxes) > span {
     width: 100%;
+}
+
+// --- Dashboard-only restyle (Spike Dashboard 2 visual language) ---
+// Everything below is scoped under `.filament-dashboard-page`, the wrapper
+// class the packaged dashboard view already emits
+// (vendor/filament/filament/resources/views/pages/dashboard.blade.php).
+// This file is the single stylesheet for the whole Filament panel, so these
+// selectors deliberately target only that page's descendants - the same
+// `.filament-tables-container` / `.filament-card-heading` / etc. classes are
+// reused by every Resource table and widget elsewhere, and must keep their
+// current look there.
+.filament-dashboard-page {
+
+    // Bento-style card headings: bold, slightly tighter than the default.
+    .filament-card-heading,
+    .filament-tables-header-heading {
+        @apply text-base font-bold text-gray-800;
+    }
+
+    // Chart widget card (doughnut/bar): bigger rounded-2xl radius + softer
+    // shadow + a bit more breathing room than Filament's default p-2.
+    .filament-widgets-chart-widget > div {
+        @apply rounded-2xl p-4 shadow-sm;
+    }
+
+    // Table widgets (Latest tickets/projects/comments/activities): same
+    // rounded-2xl/shadow language, border traded for a shadow-only edge.
+    .filament-tables-container {
+        @apply rounded-2xl border-0 shadow-sm;
+    }
+
+    // Favorite project cards: subtle lift on hover instead of a hard
+    // shadow-lg jump, matching Spike's gentler hover feedback.
+    .filament-stats-overview-widget-card {
+        @apply transition-shadow duration-150 hover:shadow-md;
+    }
+
+    // Status/priority swatches read as legend-style dots instead of squares.
+    .filament-tables-color-column {
+        @apply rounded-full;
+    }
+}
+
+// Dashboard page background: light gray so the white cards stand out.
+.filament-dashboard-page {
+    @apply bg-gray-50 rounded-2xl p-2;
+
+    .filament-stats-overview-widget-card {
+        @apply rounded-2xl shadow-sm border-0;
+    }
+}
+
+// Sidebar restyle (panel-wide, CSS only): floating white card with rounded
+// corners and pill-shaped active item. Navigation logic is untouched.
+.filament-app-layout {
+    @apply bg-gray-50;
+
+    min-height: 100vh;
+}
+
+// The panel body (bg-gray-100 by default) showed as a darker band below short
+// pages: paint it the same as the layout so the whole screen is one colour.
+body.filament-body:has(.filament-app-layout) {
+    @apply bg-gray-50;
+}
+
+@media (min-width: 1024px) {
+    .filament-sidebar {
+        top: 1rem;
+        bottom: 1rem;
+        left: 1rem;
+        height: calc(100vh - 2rem);
+        @apply rounded-2xl border-0 shadow-sm;
+    }
+}
+
+.filament-sidebar {
+    .filament-sidebar-header {
+        @apply border-b-0;
+    }
+
+    .filament-sidebar-group > button {
+        @apply uppercase text-xs font-semibold tracking-wide text-gray-400;
+    }
+
+    .filament-sidebar-item {
+        @apply rounded-xl;
+
+        > a {
+            @apply rounded-xl;
+        }
+    }
+
+    // The active fill is drawn by the link itself (see the Spike block below).
+    .filament-sidebar-item-active {
+        @apply rounded-xl bg-transparent;
+    }
+}
+
+// Top navigation restyle (panel-wide, CSS only): floating white rounded bar
+// with a soft shadow instead of a full-width bar with a bottom border.
+.filament-main-topbar {
+    @apply mt-4 w-auto rounded-2xl border-b-0 shadow-sm mx-4 md:mx-6 lg:mx-8;
+    top: 1rem;
+}
+
+// Responsive tweaks: tighter gutters on small screens, and keep the floating
+// topbar/dashboard padding from eating horizontal space on phones.
+@media (max-width: 639px) {
+    .filament-main-topbar {
+        @apply mx-2 mt-2;
+        top: 0.5rem;
+    }
+
+    .filament-dashboard-page {
+        @apply p-0 bg-transparent;
+    }
+}
+
+// Profile card pinned to the bottom of the sidebar (rendered by the
+// `sidebar.end` hook): avatar + name/role, click opens Profile / Logout.
+.filament-sidebar {
+    .filament-sidebar-nav {
+        @apply flex flex-col;
+    }
+
+    .sidebar-profile-card {
+        @apply sticky bottom-0 mx-4 mt-auto rounded-2xl;
+        background-color: #e8f3fa;
+    }
+
+    .sidebar-profile-expanded {
+        @apply flex items-center justify-between gap-2 p-3;
+    }
+
+    .sidebar-profile-collapsed {
+        @apply relative hidden justify-center p-1;
+    }
+
+    .sidebar-profile-link {
+        @apply flex min-w-0 flex-1 items-center gap-3;
+    }
+
+    .sidebar-profile-trigger {
+        @apply flex rounded-full;
+    }
+
+    .sidebar-profile-avatar {
+        @apply h-10 w-10 shrink-0 rounded-full object-cover;
+    }
+
+    .sidebar-profile-text {
+        @apply flex min-w-0 flex-col leading-tight;
+    }
+
+    .sidebar-profile-name {
+        @apply truncate font-semibold text-gray-800;
+    }
+
+    .sidebar-profile-role {
+        @apply truncate text-sm text-gray-500;
+    }
+
+    .sidebar-profile-logout {
+        @apply shrink-0 rounded-full p-2 text-primary-600 hover:bg-primary-100;
+    }
+
+    // Icon-only popup so it never overflows the narrow collapsed rail.
+    .sidebar-profile-menu {
+        @apply absolute bottom-full left-1/2 z-10 mb-2 flex -translate-x-1/2 flex-col gap-1 rounded-2xl bg-white p-1 shadow-lg ring-1 ring-gray-100;
+    }
+
+    .sidebar-profile-menu-item {
+        @apply flex h-10 w-10 items-center justify-center rounded-xl text-gray-700 hover:bg-gray-100;
+    }
+
+    @media (min-width: 1024px) {
+        &:not(.filament-sidebar-open) {
+            .sidebar-profile-card {
+                @apply mx-2 bg-transparent;
+            }
+
+            .sidebar-profile-expanded {
+                @apply hidden;
+            }
+
+            .sidebar-profile-collapsed {
+                @apply flex;
+            }
+
+            .organization-switcher {
+                @apply px-0 pb-2;
+
+                > :not(.organization-switcher-mini) {
+                    @apply hidden;
+                }
+
+                .organization-switcher-mini {
+                    @apply flex;
+                }
+            }
+        }
+    }
+}
+
+.topbar-profile-text {
+    @apply hidden flex-col items-end leading-tight sm:flex;
+
+    .topbar-profile-name {
+        @apply text-sm font-semibold text-gray-800;
+    }
+
+    .topbar-profile-role {
+        @apply text-xs text-gray-500;
+    }
+}
+
+// Keep a visible gap between the floating sidebar and the main canvas.
+@media (min-width: 1024px) {
+    .filament-main {
+        padding-left: calc(var(--collapsed-sidebar-width) + 1rem) !important;
+    }
+
+    .filament-main.filament-main-sidebar-open {
+        padding-left: calc(var(--sidebar-width) + 1rem) !important;
+    }
+}
+
+// Header polish: hamburger lives in the topbar (left) like the reference,
+// the sidebar header only carries the brand, and no divider line under it.
+@media (min-width: 1024px) {
+    .filament-main-topbar .filament-sidebar-open-button {
+        display: flex !important;
+    }
+
+    .filament-sidebar .filament-sidebar-collapse-button {
+        display: none !important;
+    }
+}
+
+.filament-sidebar .filament-sidebar-header {
+    border-bottom-width: 0 !important;
+    justify-content: flex-start;
+}
+
+.filament-main-topbar {
+    // breathing room between bell, name/role and avatar
+    .topbar-profile-text {
+        margin-left: 1.5rem;
+    }
+
+    .filament-notifications-database-button,
+    [wire\:id] > button {
+        margin-left: 0.25rem;
+    }
+}
+
+// Organization switcher (sidebar): a soft card with the organization's initial,
+// name and your role; with several organizations it opens a small rounded popup
+// right under the card (absolute, same width: the sidebar's slide transform would
+// throw a fixed popup off).
+.filament-sidebar .organization-switcher {
+    @apply px-4 pb-3;
+
+    .rk-os {
+        @apply relative flex flex-col gap-1.5;
+    }
+
+    .rk-os__label {
+        @apply px-1 text-xs font-semibold uppercase tracking-wide text-gray-400;
+    }
+
+    .rk-os__card {
+        @apply flex w-full items-center gap-3 rounded-2xl bg-gray-50 p-2 pr-3 text-left;
+
+        &--button {
+            @apply transition duration-150;
+
+            &:hover {
+                @apply bg-gray-100;
+            }
+
+            &:focus,
+            &:focus-visible {
+                @apply outline-none ring-0;
+            }
+
+            &.is-open {
+                @apply bg-white;
+
+                box-shadow: 0 0 0 1px #cfe0f6, 0 4px 14px rgba(15, 23, 42, 0.06);
+            }
+        }
+    }
+
+    .rk-os__tile {
+        @apply flex h-9 w-9 shrink-0 items-center justify-center rounded-xl text-sm font-semibold;
+
+        background: #e7f0fb;
+        color: $rk-btn-primary;
+
+        &--green {
+            background: #e3f5ea;
+            color: #3fae6a;
+        }
+
+        &--yellow {
+            background: #fdf3de;
+            color: #d9a441;
+        }
+
+        &--red {
+            background: #fcebe6;
+            color: #e0785c;
+        }
+    }
+
+    .rk-os__text {
+        @apply flex min-w-0 flex-1 flex-col leading-tight;
+
+        b {
+            @apply truncate text-sm font-semibold text-gray-800;
+        }
+
+        small {
+            @apply truncate text-xs text-gray-500;
+        }
+    }
+
+    .rk-os__chevron {
+        @apply h-4 w-4 shrink-0 text-gray-400 transition-transform duration-200;
+    }
+
+    .rk-os__list {
+        @apply absolute left-0 right-0 z-[70] max-h-72 origin-top overflow-y-auto rounded-2xl bg-white p-1.5;
+
+        top: calc(100% + 0.5rem);
+        box-shadow: 0 12px 32px rgba(15, 23, 42, 0.14), 0 0 0 1px rgba(15, 23, 42, 0.04);
+    }
+
+    .rk-os__item {
+        @apply flex w-full items-center gap-3 rounded-xl p-2 pr-3 text-left transition-colors duration-150 hover:bg-gray-50;
+
+        &.is-selected {
+            background: #eaf1fb;
+        }
+    }
+
+    .rk-os__check {
+        @apply h-4 w-4 shrink-0;
+
+        color: $rk-btn-primary;
+    }
+}
+
+// The sidebar's own hamburger (collapsed state) duplicates the topbar one,
+// and Filament's gradient line under the sidebar header is dropped.
+@media (min-width: 1024px) {
+    .filament-sidebar .filament-sidebar-close-button {
+        display: none !important;
+    }
+}
+
+.filament-sidebar .filament-sidebar-header::before {
+    display: none !important;
+}
+
+// Collapsed-rail stand-in for the organization switcher: current org initial.
+.filament-sidebar .organization-switcher-mini {
+    @apply mx-auto hidden h-10 w-10 items-center justify-center rounded-xl bg-gray-100 text-gray-600 hover:bg-gray-200;
+}
+
+// Compact, summary-style dashboard cards (bento layout: narrow / wide / narrow).
+.filament-dashboard-page {
+    .filament-widgets-container {
+        @apply gap-4 lg:gap-6;
+    }
+
+    // Empty states: illustration + short text (artwork defined once below).
+    .filament-tables-empty-state {
+        @apply space-y-2 py-6;
+
+        .filament-tables-empty-state-heading {
+            @apply text-base font-semibold;
+        }
+
+        > div:first-child {
+            width: 11rem;
+            height: 8rem;
+        }
+    }
+
+    // Table widgets: lighter header, tighter rows so more fits in each card.
+    .filament-tables-header-container {
+        @apply px-2 pt-2;
+    }
+
+    .filament-tables-header-heading {
+        @apply text-lg;
+    }
+
+    .filament-tables-table th,
+    .filament-tables-table td {
+        @apply text-sm;
+    }
+
+    .filament-tables-header-cell {
+        @apply text-xs font-semibold uppercase tracking-wide text-gray-500;
+    }
+}
+
+// Equal-height cards per grid row: the Livewire root (.filament-widget) is
+// already stretched by the grid, so the card inside it must fill it. Chart
+// canvases are centered vertically when the card is taller than the chart.
+.filament-dashboard-page {
+    .filament-widgets-container {
+        @apply items-stretch;
+    }
+
+    .filament-widget,
+    .filament-widgets-chart-widget,
+    .filament-widgets-table-widget {
+        @apply h-full;
+    }
+
+    .filament-widgets-chart-widget > div {
+        @apply flex h-full flex-col bg-white p-5;
+
+        > div:last-child {
+            @apply my-auto;
+        }
+    }
+
+    .filament-tables-container {
+        @apply h-full bg-white;
+    }
+
+    .filament-tables-header-container {
+        @apply px-4 pt-4 pb-2;
+    }
+
+    .filament-tables-table th,
+    .filament-tables-table td {
+        @apply py-2;
+    }
+}
+
+// Top row of the dashboard (FavoriteProjects widget): welcome card + KPI cards
+// + favorite project cards. The Filament stats grid only knows 1-4 columns, so
+// the layout is redefined here: 1 column on phones, 2 from sm, 12 from lg
+// (welcome = 6, KPI = 2 each, favorite project = 3).
+.filament-dashboard-page .filament-stats-overview-widget .filament-stats {
+    @apply grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-12 lg:gap-6;
+
+    > .welcome-card {
+        @apply sm:col-span-2 lg:col-span-6;
+    }
+
+    > .welcome-card--wide {
+        @apply lg:col-span-12;
+    }
+
+    > .kpi-card {
+        @apply lg:col-span-2;
+    }
+
+    > .fav-project-card {
+        @apply lg:col-span-3;
+    }
+}
+
+.filament-dashboard-page {
+    // Welcome card: soft gradient with two decorative translucent circles.
+    .welcome-card {
+        @apply relative overflow-hidden rounded-2xl border-0 bg-gradient-to-br from-primary-50 to-white p-6 shadow-sm;
+
+        // The empty label row of the generic stats card is not used here.
+        > div > div:first-child {
+            @apply hidden;
+        }
+
+        > div > div.text-3xl {
+            @apply text-base;
+        }
+
+        &::before,
+        &::after {
+            content: '';
+            @apply pointer-events-none absolute rounded-full bg-primary-500;
+        }
+
+        &::before {
+            @apply -right-10 -top-12 h-40 w-40 opacity-10;
+        }
+
+        &::after {
+            @apply -bottom-14 right-24 h-32 w-32 opacity-5;
+        }
+    }
+
+    .welcome-card__body {
+        @apply relative z-10 flex flex-col items-start gap-4 sm:flex-row sm:items-center sm:gap-6;
+    }
+
+    .welcome-card__avatar {
+        @apply h-14 w-14 flex-shrink-0 rounded-full object-cover ring-4 ring-primary-200 sm:h-20 sm:w-20;
+    }
+
+    .welcome-card__title {
+        @apply text-xl font-bold leading-tight text-gray-900 sm:text-2xl;
+        overflow-wrap: anywhere;
+    }
+
+    .welcome-card__summary {
+        @apply mt-1 text-sm text-gray-600;
+    }
+
+    .welcome-card__button {
+        @include rk-btn;
+        @apply mt-3;
+        @include rk-btn-color($rk-btn-primary);
+    }
+
+    // Headline KPI cards: solid blue, icon in a translucent circle top-left,
+    // big white number, small label, and a tinted corner blob per card.
+    .kpi-card {
+        @apply relative overflow-hidden rounded-2xl border-0 bg-primary-600 pt-20 text-white shadow-sm;
+
+        * {
+            @apply text-white;
+        }
+
+        > div {
+            @apply flex flex-col;
+
+            > div.text-3xl {
+                @apply order-1 text-4xl font-bold leading-none;
+            }
+
+            > div:first-child {
+                @apply order-2 mt-2;
+
+                span {
+                    @apply text-sm font-medium opacity-90;
+                }
+            }
+        }
+
+        // The icon leaves the label row and becomes the circle badge.
+        svg {
+            @apply absolute left-6 top-5 box-border h-11 w-11 rounded-full bg-white/20 p-2.5;
+        }
+
+        &::before,
+        &::after {
+            content: '';
+            @apply pointer-events-none absolute rounded-full;
+        }
+
+        &::before {
+            @apply -right-8 -top-8 h-28 w-28 opacity-40;
+        }
+
+        &::after {
+            @apply -bottom-10 right-6 h-20 w-20 opacity-25;
+        }
+
+        &.kpi-card-1::before { @apply bg-primary-400; }
+        &.kpi-card-1::after { @apply bg-primary-300; }
+        &.kpi-card-2::before { @apply bg-cyan-300; }
+        &.kpi-card-2::after { @apply bg-primary-400; }
+        &.kpi-card-3::before { @apply bg-emerald-300; }
+        &.kpi-card-3::after { @apply bg-primary-300; }
+    }
+}
+
+// Fluid dashboard rows: widgets a user may not see (permissions) are simply
+// absent, so instead of leaving a hole in a fixed 12-col grid the remaining
+// cards in that row stretch to fill it.
+@media (min-width: 1024px) {
+    .filament-dashboard-page .filament-widgets-container {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 1.5rem;
+
+        > .filament-widget {
+            min-width: 0;
+            grid-column: auto;
+        }
+
+        > [class~='lg:col-span-3'] { flex: 3 1 calc(25% - 1.5rem); }
+        > [class~='lg:col-span-4'] { flex: 4 1 calc(33.333% - 1.5rem); }
+        > [class~='lg:col-span-6'] { flex: 6 1 calc(50% - 1.5rem); }
+        > [class~='lg:col-span-8'] { flex: 8 1 calc(66.666% - 1.5rem); }
+        > [class~='lg:col-span-12'] { flex: 12 1 100%; }
+    }
+}
+
+// Sidebar, closer to the reference: roomier floating card, bigger icons and
+// type, light-gray active pill, and a larger profile card at the bottom.
+// Reference width: a 270px sidebar (Filament's default is 20rem / 320px).
+// `html:root` outranks the `:root` rule Filament prints in the layout.
+html:root {
+    --sidebar-width: 16.875rem;
+}
+
+@media (min-width: 1024px) {
+    .filament-sidebar {
+        top: 1.25rem;
+        bottom: 1.25rem;
+        left: 1.25rem;
+        height: calc(100vh - 2.5rem);
+    }
+
+    .filament-main {
+        padding-left: calc(var(--collapsed-sidebar-width) + 2rem) !important;
+    }
+
+    .filament-main.filament-main-sidebar-open {
+        padding-left: calc(var(--sidebar-width) + 2rem) !important;
+    }
+
+    .filament-main-topbar {
+        top: 1.25rem;
+        margin-top: 1.25rem;
+    }
+}
+
+.filament-sidebar {
+    .filament-sidebar-header {
+        @apply h-20 px-2;
+
+        .filament-brand,
+        a {
+            @apply text-2xl font-bold text-gray-900;
+        }
+    }
+
+    .filament-sidebar-nav {
+        @apply py-2;
+
+        > ul {
+            @apply px-4;
+        }
+    }
+
+    .filament-sidebar-group {
+        @apply mt-6;
+
+        > button {
+            @apply mb-2 px-2;
+        }
+    }
+
+    .filament-sidebar-item {
+        @apply mb-1 overflow-visible;
+
+        > a {
+            @apply justify-start gap-4 rounded-xl px-4 py-3 text-base font-normal text-gray-700;
+
+            svg {
+                @apply h-6 w-6;
+            }
+        }
+    }
+
+    // Active + hover (Spike): soft sky fill, flush with the card's left edge
+    // and fully rounded on the right; the icon turns blue.
+    .filament-sidebar-item > a {
+        @apply -ml-1 mr-4 rounded-l-none rounded-r-full pl-8 pr-5 transition-colors;
+    }
+
+    .filament-sidebar-item > a:hover,
+    .filament-sidebar-item-active > a {
+        background-color: #e8f3fa;
+        @apply text-gray-900;
+
+        svg {
+            color: $rk-btn-primary;
+        }
+    }
+
+    .filament-sidebar-item-active > a {
+        @apply font-medium;
+    }
+
+    .sidebar-profile-card {
+        @apply mx-4 mb-4;
+    }
+
+    .sidebar-profile-expanded {
+        @apply gap-2 p-3;
+    }
+
+    .sidebar-profile-avatar {
+        @apply h-11 w-11;
+    }
+
+    .sidebar-profile-name {
+        @apply text-base;
+    }
+
+    .sidebar-profile-role {
+        @apply text-sm;
+    }
+
+    .sidebar-profile-logout svg {
+        @apply h-6 w-6;
+    }
+}
+
+@media (min-width: 1024px) {
+    .filament-sidebar:not(.filament-sidebar-open) {
+        .filament-sidebar-item > a {
+            @apply mx-0 justify-center rounded-xl px-0;
+        }
+    }
+}
+
+// Details panel injected by resources/js/filament.js under the pie charts.
+.filament-dashboard-page {
+    .pie-detail-panel {
+        @apply mt-3 rounded-lg border border-gray-200 px-3 py-2 text-sm;
+
+        &.is-active {
+            @apply bg-gray-50;
+        }
+
+        .pie-detail-hint {
+            @apply text-center text-xs text-gray-500;
+        }
+
+        .pie-detail-title {
+            @apply mb-1 flex items-center gap-2;
+        }
+
+        .pie-detail-dot {
+            @apply inline-block h-2.5 w-2.5 shrink-0 rounded-full;
+        }
+
+        .pie-detail-row {
+            @apply flex items-center justify-between gap-2 text-gray-600;
+        }
+
+        .pie-detail-value {
+            @apply font-semibold text-gray-900;
+        }
+    }
+
+    .filament-widgets-chart-widget canvas {
+        @apply mx-auto;
+    }
+}
+
+.dark .filament-dashboard-page .pie-detail-panel {
+    @apply border-gray-700;
+
+    &.is-active {
+        @apply bg-gray-800;
+    }
+
+    .pie-detail-hint,
+    .pie-detail-row {
+        @apply text-gray-400;
+    }
+
+    .pie-detail-value {
+        @apply text-gray-100;
+    }
+}
+
+// Table widgets must fit their card without sideways scrolling: the body's
+// whitespace-nowrap is lifted per column with ->wrap() in the widget, here the
+// container stops scrolling and cells get tighter horizontal padding.
+.filament-dashboard-page .filament-widgets-table-widget {
+    .filament-tables-table-container {
+        @apply overflow-x-hidden;
+    }
+
+    .filament-tables-table {
+        @apply table-auto;
+    }
+
+    .filament-tables-text-column {
+        @apply px-2 py-2 break-words;
+    }
+
+    .filament-tables-header-cell > button,
+    .filament-tables-header-cell > span,
+    .filament-tables-header-cell {
+        @apply px-2;
+    }
+
+    // Status / priority pill: soft tint of the record color (set inline),
+    // bold text, never wraps so the pill itself is never cut off.
+    .color-pill {
+        @apply inline-flex max-w-full items-center gap-1.5 whitespace-nowrap rounded-full px-2.5 py-0.5 text-xs font-bold;
+    }
+
+    .color-pill-icon {
+        @apply h-3.5 w-3.5 shrink-0;
+    }
+
+    .color-pill-label {
+        @apply truncate;
+    }
+}
+
+// Dashboard table widgets share the Projects list table's visual language
+// (rounded white card, light column headers, airy rows with a thin divider,
+// soft blue hover). Presentation only: no markup, query or column change;
+// the Projects table block further below stays the reference.
+.filament-dashboard-page .filament-widgets-table-widget {
+    .filament-tables-container {
+        @apply overflow-hidden rounded-3xl border-0 bg-white shadow-sm;
+    }
+
+    // Filament already pads the header block; only add top/bottom space so the
+    // title lines up with the table's left edge.
+    .filament-tables-header-container {
+        @apply px-0 pt-5 pb-3;
+    }
+
+    .filament-tables-header-heading,
+    .filament-tables-header-container h2 {
+        @apply text-base font-semibold tracking-tight text-gray-900;
+    }
+
+    .filament-tables-table-container {
+        @apply mx-5 mb-4 rounded-2xl border border-gray-200;
+    }
+
+    .filament-tables-table {
+        thead tr {
+            @apply bg-white;
+        }
+
+        th {
+            @apply border-b border-gray-200 bg-white py-3 text-xs font-medium normal-case tracking-normal text-gray-500;
+        }
+
+        th button,
+        th span {
+            @apply text-xs font-medium normal-case tracking-normal text-gray-500;
+        }
+
+        tbody tr {
+            @apply border-b border-gray-100 last:border-b-0 hover:bg-slate-50;
+        }
+
+        td {
+            @apply py-1 text-sm text-gray-600;
+        }
+    }
+
+    .filament-tables-pagination-container {
+        @apply px-5 py-3 text-sm text-gray-500;
+    }
+
+    .filament-tables-empty-state {
+        @apply py-8;
+    }
+
+    // Phones: let the table scroll sideways inside its own rounded box rather
+    // than clipping columns (the page body itself never scrolls).
+    @media (max-width: 639px) {
+        .filament-tables-table-container {
+            @apply overflow-x-auto;
+        }
+    }
+
+    // Round avatars (user / project) as in the Projects table.
+    .filament-tables-image-column img,
+    .filament-tables-image-column > div {
+        @apply rounded-full;
+    }
+}
+
+// SweetAlert2: only SweetAlert's own theme variables are overridden, to match
+// the blue/white panel (primary = blue-600, danger = rose-600). The panel has
+// no dark mode, so the default light theme is used as-is.
+:root {
+    --swal2-border-radius: 1rem;
+    --swal2-confirm-button-background-color: #2563eb;
+    --swal2-confirm-button-border-radius: 0.75rem;
+    --swal2-cancel-button-background-color: #f3f4f6;
+    --swal2-cancel-button-color: #374151;
+    --swal2-cancel-button-border-radius: 0.75rem;
+    --swal2-color: #374151;
+}
+
+.swal2-popup.rk-swal-danger {
+    --swal2-confirm-button-background-color: #e11d48;
+}
+
+// SweetAlert2 buttons: its own styles use :where() (zero specificity), so
+// Tailwind's `button` reset made the confirm button transparent. Styled here
+// with the shared pill buttons: soft blue confirm, soft red for danger, outline
+// cancel.
+.swal2-popup:not(.swal2-toast) {
+    @apply rounded-3xl;
+
+    .swal2-actions {
+        @apply gap-2;
+    }
+
+    .swal2-styled {
+        @include rk-btn;
+        @apply m-0 px-6;
+
+        &.swal2-confirm {
+            @include rk-btn-color($rk-btn-primary);
+        }
+
+        &.swal2-cancel {
+            @apply bg-white text-gray-600;
+            border: 1px solid #d1d5db;
+            filter: none;
+
+            &:hover:not(:disabled) {
+                @apply bg-gray-50;
+            }
+        }
+
+        &.swal2-deny {
+            @include rk-btn-color($rk-btn-error);
+        }
+
+        &:focus {
+            box-shadow: none;
+        }
+    }
+
+    &.rk-swal-danger .swal2-confirm {
+        @include rk-btn-color($rk-btn-error);
+    }
+}
+
+.swal2-popup.swal2-toast {
+    --swal2-border-radius: 0.75rem;
+}
+
+// Filament notifications already shown as a SweetAlert toast.
+.filament-notifications-notification.rk-swal-handled {
+    display: none !important;
+}
+
+// Page header card (all panel pages, incl. the dashboard): title on the left,
+// "Home • Group • Page" breadcrumb (mirrored by resources/js/filament.js) and
+// the header actions on the right, all inside one fully-rounded white pill.
+// Scoped to the page's own header (`.filament-page > div > .filament-header`)
+// so table/modal/widget headers are untouched.
+.filament-page > div > .filament-header {
+    @apply flex flex-wrap items-center justify-between gap-x-6 gap-y-3 rounded-full bg-white px-6 py-4 shadow-sm sm:space-x-0;
+
+    .filament-header-heading {
+        @apply text-xl font-bold tracking-tight text-gray-900 sm:text-2xl;
+    }
+
+    // Filament's own space-x/space-y margins would double up with `gap`.
+    > * {
+        margin: 0;
+    }
+
+    // Title block takes the free space so breadcrumb/actions sit to its right.
+    // `auto` basis (not 0) so the block wraps onto its own line instead of
+    // being squeezed under the breadcrumb when the row gets too narrow.
+    > div:first-child {
+        @apply min-w-0 flex-[1_1_auto];
+    }
+
+    > .filament-page-actions,
+    > .filament-header-actions {
+        @apply shrink-0;
+    }
+}
+
+.rk-header-breadcrumb {
+    @apply min-w-0 text-sm text-gray-500;
+
+    ol {
+        @apply flex flex-wrap items-center;
+    }
+
+    li {
+        @apply flex items-center;
+
+        // small round dot separator between items, as in the reference
+        + li::before {
+            content: '';
+            @apply mx-3 inline-block h-1.5 w-1.5 rounded-full bg-gray-400;
+        }
+    }
+
+    a {
+        @apply text-gray-700 transition hover:text-primary-600;
+    }
+
+    span[aria-current='page'] {
+        @apply text-gray-500;
+    }
+}
+
+// The card now carries the breadcrumb: hide the topbar copy but keep its
+// flex-1 box so search / bell / profile stay pinned to the right.
+body.rk-header-crumbs .filament-main-topbar .filament-breadcrumbs ul {
+    display: none;
+}
+
+// Mobile (< 640px, Tailwind `sm`): stack title / breadcrumb / actions
+// vertically in a large-radius card instead of one cramped pill row (which
+// made the title overlap the breadcrumb). Tablet (>= 640px) and desktop keep
+// the pill layout unchanged.
+@media (max-width: 639px) {
+    .filament-page > div > .filament-header {
+        @apply flex-col items-stretch gap-y-2 rounded-3xl px-5 py-4;
+
+        > div:first-child {
+            @apply flex-none;
+        }
+
+        .filament-header-heading {
+            @apply break-words;
+        }
+
+        > .filament-page-actions,
+        > .filament-header-actions {
+            @apply w-full shrink;
+            justify-content: flex-start;
+            flex-wrap: wrap;
+            padding-top: 0.25rem;
+        }
+    }
+
+    .rk-header-breadcrumb {
+        @apply text-xs;
+
+        li + li::before {
+            @apply mx-2;
+        }
+    }
+}
+
+// --- Projects list table (Spike "product table" visual language) ----------
+// Scoped to the Project list page only (list page class + resource slug);
+// other resource tables are untouched until the style is rolled out to them.
+// Presentation only: no markup, query or permission change.
+:is(.filament-resources-list-records-page:is(.filament-resources-projects, .filament-resources-tickets, .filament-resources-activities, .filament-resources-ticket-statuses, .filament-resources-ticket-types, .filament-resources-ticket-priorities, .filament-resources-project-statuses, .filament-resources-labels, .filament-resources-ticket-hours, .filament-resources-users, .filament-resources-roles, .filament-resources-permissions), .rk-path-api-tokens, .rk-path-organization, .rk-path-platform-organizations) {
+    // Big rounded white card holding toolbar + table.
+    .filament-tables-container {
+        @apply overflow-hidden rounded-3xl border-0 bg-white shadow-sm;
+    }
+
+    .filament-tables-header-container {
+        @apply px-5 pt-5 pb-3;
+    }
+
+    // Search pill on the left (icon inside), filter / column icons on the right.
+    .filament-tables-header-toolbar {
+        @apply h-auto gap-3 p-0;
+    }
+
+    .filament-tables-search-container {
+        @apply order-first justify-start;
+
+        label {
+            @apply w-full max-w-xs;
+        }
+
+        input {
+            @apply h-10 rounded-full border-gray-200 bg-white pl-10 text-sm shadow-none focus:border-primary-500 focus:ring-primary-500;
+        }
+    }
+
+    // Rounded bordered table with light column headers.
+    .filament-tables-table-container {
+        @apply mx-5 mb-2 overflow-x-auto rounded-2xl border border-gray-200;
+    }
+
+    .filament-tables-table {
+        thead tr {
+            @apply bg-white;
+        }
+
+        th {
+            @apply border-b border-gray-200 bg-white py-3 text-xs font-medium normal-case tracking-normal text-gray-500;
+        }
+
+        th button,
+        th span {
+            @apply text-xs font-medium normal-case tracking-normal text-gray-500;
+        }
+
+        // Roomy rows with a thin divider; the last row has none.
+        tbody tr {
+            @apply border-b border-gray-100 last:border-b-0 hover:bg-slate-50;
+        }
+
+        td {
+            @apply py-4 text-sm text-gray-600;
+        }
+
+        tbody tr:has(input[type='checkbox']:checked) {
+            @apply bg-primary-50;
+        }
+    }
+
+    // Rounded-square checkboxes.
+    input[type='checkbox'] {
+        @apply h-4 w-4 rounded-md border-gray-300;
+    }
+
+    // Project cover becomes a round avatar; the name reads as the bold title.
+    .filament-table-cell-cover > div > div,
+    .filament-table-cell-cover .filament-tables-text-column > div > div {
+        @apply h-10 w-10 rounded-full;
+    }
+
+    .filament-table-cell-name {
+        @apply font-semibold text-gray-900;
+
+        * {
+            @apply font-semibold text-gray-900;
+        }
+    }
+
+    // Status: coloured dot + text instead of a coloured square.
+    .filament-tables-color-column {
+        @apply h-2.5 w-2.5 rounded-full;
+    }
+
+    // "N selected" bar: soft blue, rounded, inside the card.
+    .filament-tables-selection-indicator {
+        @apply mx-5 mb-2 rounded-2xl border-0 bg-primary-50 px-4 py-3 text-primary-700;
+    }
+
+    // Pagination bottom-right: "Rows per page", range, arrows.
+    // The real pager (numbered links, native per-page select) stays in the
+    // DOM, hidden, because resources/js/filament.js mirrors it as `.rk-pager`
+    // and proxies clicks / the select's `change` to it.
+    .filament-tables-pagination-container {
+        @apply flex justify-end px-5 py-3 text-sm text-gray-500;
+    }
+
+    .filament-tables-pagination {
+        display: none !important;
+    }
+
+    .rk-pager {
+        @apply flex flex-wrap items-center justify-end gap-x-4 gap-y-2 text-xs text-gray-500;
+
+        &__value {
+            @apply inline-flex items-center gap-1 rounded-md px-1 py-0.5 text-sm font-medium text-gray-800 hover:bg-gray-100;
+
+            svg {
+                @apply h-4 w-4 text-gray-500 transition;
+            }
+
+            &.is-open svg {
+                @apply rotate-180;
+            }
+        }
+
+        &__range {
+            @apply whitespace-nowrap text-sm text-gray-600;
+        }
+
+        &__arrow {
+            @apply inline-flex h-8 w-8 items-center justify-center rounded-full text-gray-900 hover:bg-gray-100;
+
+            svg {
+                @apply h-5 w-5;
+            }
+
+            &:disabled {
+                @apply cursor-default text-gray-300 hover:bg-transparent;
+            }
+
+            + .rk-pager__arrow {
+                @apply -ml-3;
+            }
+        }
+
+        &__popup {
+            @apply fixed z-50 m-0 min-w-[4.5rem] list-none overflow-hidden rounded-3xl bg-white p-1.5 text-sm shadow-xl ring-1 ring-black/5;
+
+            li {
+                @apply cursor-pointer rounded-full px-4 py-1.5 text-gray-700 hover:bg-primary-50;
+
+                &.is-selected {
+                    @apply bg-primary-50 font-medium text-primary-700;
+                }
+            }
+        }
+    }
+
+    // Create button: the header action is mirrored next to the filter icon.
+    .filament-header-actions,
+    .filament-page-actions {
+        display: none !important;
+    }
+
+    .rk-create-btn {
+        @include rk-btn;
+        @apply shrink-0;
+        @include rk-btn-color($rk-btn-primary);
+
+        @media (max-width: 639px) {
+            @apply w-10 justify-center px-0;
+
+            span {
+                @apply sr-only;
+            }
+        }
+    }
+
+    // Row actions: every row shows only a round "three dots" button. The real
+    // Filament row actions stay in the DOM (Livewire call, Policy, visibility
+    // and confirmation unchanged) but are hidden; resources/js/filament.js
+    // mirrors them as an icon row in `.rk-row-actions-bar` above the table
+    // when a row's dots are clicked, and each mirror just `.click()`s the
+    // original. The dots are a pseudo-element of the (otherwise empty)
+    // container, so a Livewire morph can never drop them.
+    .filament-tables-actions-container {
+        @apply relative inline-flex h-8 w-8 cursor-pointer select-none items-center justify-center rounded-full text-gray-500 transition hover:bg-gray-100;
+
+        > * {
+            display: none !important;
+        }
+
+        &::before {
+            content: '\22EE';
+            @apply text-xl font-bold leading-none;
+        }
+    }
+
+    tbody tr.rk-row-active {
+        @apply bg-primary-50;
+
+        .filament-tables-actions-container {
+            @apply bg-primary-100 text-primary-700;
+        }
+
+        td.filament-tables-actions-cell {
+            @apply bg-primary-50;
+        }
+    }
+
+    // Icon bar for the active row, above the table, aligned to the right
+    // like the "N selected" bar. Wraps on narrow screens (never overflows).
+    .rk-row-actions-bar {
+        @apply mx-5 mb-2 flex flex-wrap items-center justify-between gap-x-3 gap-y-2 rounded-2xl bg-primary-50 px-4 py-2 text-sm text-primary-700;
+
+        &__title {
+            @apply min-w-0 flex-1 truncate font-medium;
+        }
+
+        &__icons {
+            @apply flex flex-wrap items-center justify-end gap-1;
+        }
+
+        button {
+            @apply inline-flex h-9 w-9 items-center justify-center rounded-full text-gray-600 transition hover:bg-white hover:text-primary-700;
+
+            svg {
+                @apply h-5 w-5;
+            }
+
+            &.is-success {
+                @apply text-success-600;
+            }
+
+            &.is-danger {
+                @apply text-danger-600 hover:bg-danger-50 hover:text-danger-700;
+            }
+
+            &.rk-row-actions-bar__close {
+                @apply text-gray-400;
+            }
+        }
+    }
+
+    // The real bulk-action dropdown stays in the DOM (its items are clicked by
+    // the JS mirrors) but is not shown: the icons live in the selection bar.
+    .filament-tables-bulk-actions {
+        display: none !important;
+    }
+
+    .filament-tables-selection-indicator {
+        .rk-selection-actions {
+            @apply ml-auto flex flex-wrap items-center justify-end gap-1;
+
+            button {
+                @apply inline-flex h-9 w-9 items-center justify-center rounded-full text-gray-600 transition hover:bg-white;
+
+                svg {
+                    @apply h-5 w-5;
+                }
+
+                &.is-danger {
+                    @apply text-danger-600 hover:bg-danger-50;
+                }
+            }
+        }
+    }
+
+    // Search pill flush left of the card, filter icon flush right, one row.
+    // Filament renders [reorder/bulk div][search + filters div] with
+    // justify-between and a right-aligned search; reorder it with `order`.
+    .filament-tables-header-toolbar {
+        @apply flex-wrap gap-y-2;
+
+        > div:first-child {
+            @apply order-last;
+        }
+
+        > div:not(:first-child) {
+            @apply order-first max-w-none flex-1;
+        }
+    }
+
+    .filament-tables-search-container {
+        @apply m-0 flex-1 justify-start;
+    }
+
+    // Pinned actions column (the dots cell; the real last <td> is Filament's
+    // hidden loading cell) so it stays reachable when the table scrolls.
+    .filament-tables-table {
+        th:last-child,
+        td.filament-tables-actions-cell {
+            @apply sticky right-0 z-[1] bg-white;
+            box-shadow: -6px 0 6px -6px rgba(15, 23, 42, 0.12);
+        }
+
+        tbody tr:hover td.filament-tables-actions-cell {
+            @apply bg-slate-50;
+        }
+    }
+
+    // Cover thumbnail: the real markup is td > wrapper > a > div > div > span > div.
+    .filament-table-cell-cover span > div {
+        @apply h-10 w-10 rounded-full;
+    }
+
+    // Mobile: compact the table. The card scrolls horizontally on its own
+    // (`overflow-x-auto` above), so the page body never does; the icon-button
+    // actions column stays pinned to the right edge while the rest scrolls.
+    @media (max-width: 639px) {
+        .filament-tables-header-container {
+            @apply px-3 pt-3 pb-2;
+        }
+
+        // Search pill and filter icon share one row.
+        .filament-tables-header-toolbar {
+            @apply flex-nowrap gap-2;
+        }
+
+        .filament-tables-search-container {
+            @apply min-w-0 flex-1;
+
+            label {
+                @apply max-w-none;
+            }
+        }
+
+        .filament-tables-table-container {
+            @apply mx-3;
+            -webkit-overflow-scrolling: touch;
+        }
+
+        .filament-tables-table {
+            th,
+            td {
+                @apply text-xs;
+            }
+
+            td {
+                @apply py-2;
+            }
+
+            // Tighter cell padding (Filament pads the inner wrapper).
+            .filament-tables-column-wrapper,
+            .filament-tables-text-column {
+                @apply px-2;
+            }
+
+            th {
+                @apply px-2 py-2;
+            }
+
+            // Name stays readable: wraps instead of truncating.
+            .filament-table-cell-name,
+            .filament-table-cell-name * {
+                @apply whitespace-normal break-words;
+            }
+
+            .filament-table-cell-name {
+                min-width: 9rem;
+            }
+        }
+
+        .rk-row-actions-bar {
+            @apply mx-3 px-3;
+
+            &__icons {
+                @apply w-full justify-start;
+            }
+        }
+
+        // Smaller round avatar.
+        .filament-table-cell-cover span > div {
+            @apply h-8 w-8;
+        }
+
+        // Pagination: stays right-aligned, wraps if needed.
+        .filament-tables-pagination-container {
+            @apply px-3 py-3;
+        }
+    }
+}
+
+// --- Project create / edit form (Spike "Add Product" visual language) -----
+// Presentation only: scoped to the Project resource's create + edit pages,
+// no markup, field, validation or permission change. One big rounded white
+// card, pill inputs/selects, soft rounded rich-text editor, dashed-blue upload
+// dropzone and pill action buttons. The header actions on the edit page keep
+// the page-header card styling above.
+:is(:is(.filament-resources-create-record-page, .filament-resources-edit-record-page):is(.filament-resources-projects, .filament-resources-tickets, .filament-resources-activities, .filament-resources-ticket-statuses, .filament-resources-ticket-types, .filament-resources-ticket-priorities, .filament-resources-project-statuses, .filament-resources-labels, .filament-resources-ticket-hours, .filament-resources-users, .filament-resources-roles, .filament-resources-permissions), .filament-resources-view-record-page:is(.filament-resources-projects, .filament-resources-activities, .filament-resources-ticket-statuses, .filament-resources-ticket-types, .filament-resources-ticket-priorities, .filament-resources-project-statuses, .filament-resources-labels, .filament-resources-ticket-hours, .filament-resources-users, .filament-resources-roles, .filament-resources-permissions)),
+:is(.rk-board-page, .rk-board-pick-page, .rk-roadmap-page, .rk-path-manage-general-settings, .rk-path-jira-import, .rk-path-my-profile, .rk-path-organization, .rk-path-create-organization, .rk-path-timesheet-export, .rk-path-api-tokens) {
+    .filament-forms-card-component,
+    .filament-forms-section-component {
+        @apply rounded-[28px] border-0 bg-white shadow-sm;
+    }
+
+    .filament-forms-card-component {
+        @apply p-5 sm:p-8;
+    }
+
+    // Category cards (General / Thumbnail / Ownership & status / Project
+    // type): big semi-bold title inside the card, content padded below it.
+    // Equal-height cards per row: the grid cell stretches, the card fills it.
+    .grid > div > .filament-forms-section-component {
+        @apply h-full;
+    }
+
+    .filament-forms-section-header-wrapper {
+        @apply min-h-0 rounded-none bg-transparent px-5 pb-0 pt-3;
+
+        h3 {
+            @apply text-lg font-bold tracking-tight text-gray-900;
+        }
+    }
+
+    .filament-forms-section-component > div:not(.filament-forms-section-header-wrapper) {
+        @apply border-0;
+
+        .filament-forms-section-content {
+            @apply p-4 pt-2 sm:px-5;
+        }
+    }
+
+    // The Description card title names the editor; keep the label for
+    // screen readers and give the editor a compact minimum height.
+    .filament-forms-field-wrapper:has(trix-editor) .filament-forms-field-wrapper-label {
+        @apply sr-only;
+    }
+
+    trix-editor {
+        min-height: 4.5rem;
+    }
+
+    // Tighter vertical rhythm between the card rows (and below them).
+    .filament-forms-component-container > .grid,
+    form > .filament-forms-component-container {
+        @apply gap-4;
+    }
+
+    .filament-form-actions {
+        @apply mt-4;
+    }
+
+
+    // The card title already names the dropzone: keep its label for screen
+    // readers only.
+    .filament-forms-field-wrapper:has(.filepond--root) .filament-forms-field-wrapper-label {
+        @apply sr-only;
+    }
+
+    // Thumbnail: centred small helper text under the dropzone.
+    .filament-forms-spatie-media-library-file-upload-component .filament-forms-field-wrapper-helper-text,
+    .filament-forms-file-upload-component .filament-forms-field-wrapper-helper-text {
+        @apply text-center;
+    }
+
+    .filepond--root {
+        --rk-drop-height: 6.5rem;
+    }
+
+    .filepond--drop-label {
+        min-height: var(--rk-drop-height) !important;
+    }
+
+    // Bold small labels (the red required asterisk stays, just softer).
+    .filament-forms-field-wrapper-label {
+        @apply text-sm font-semibold text-gray-800;
+
+        .text-danger-700 {
+            @apply text-danger-500;
+        }
+    }
+
+    .filament-forms-field-wrapper-helper-text {
+        @apply text-xs text-gray-500;
+    }
+
+    // Pill text inputs (the rich editor and file input are styled below).
+    .filament-forms-text-input-component input,
+    input.filament-forms-input:not([type='checkbox']):not([type='radio']):not([type='file']) {
+        @apply h-[46px] rounded-full border-gray-200 px-5 text-sm shadow-none focus:border-primary-500 focus:ring-primary-500;
+    }
+
+    // Date picker trigger button: same pill as the text inputs.
+    .filament-forms-date-time-picker-component button[class*='cursor-default'] {
+        @apply h-[46px] rounded-full border-gray-200 px-5 text-sm shadow-none focus:border-primary-500 focus:ring-primary-500;
+    }
+
+    // Select (Choices.js): Filament wraps it in a bordered div.filament-forms-input;
+    // drop that frame so only the pill `.choices__inner` is drawn.
+    div.filament-forms-input {
+        @apply border-0 bg-transparent p-0 shadow-none;
+    }
+
+    // Dropdown (MUI Autocomplete details, pill shape kept): light grey outline
+    // that darkens on hover and turns primary on focus, faded placeholder,
+    // rounded popup with a grey hover row and a primary-tinted selected row.
+    .choices__inner {
+        @apply min-h-[46px] rounded-full border-gray-200 bg-white px-5 py-2 text-sm shadow-none transition-colors hover:border-gray-400;
+    }
+
+    .choices.is-open .choices__inner,
+    .choices.is-focused .choices__inner {
+        @apply border-primary-500 ring-1 ring-primary-500;
+    }
+
+    .choices.is-disabled .choices__inner {
+        @apply border-gray-200 bg-gray-50 hover:border-gray-200;
+    }
+
+    .choices__placeholder,
+    input::placeholder {
+        @apply text-gray-500;
+        opacity: 0.8;
+    }
+
+    .choices__list--dropdown,
+    .choices__list[aria-expanded] {
+        @apply z-30 mt-2 overflow-hidden rounded-3xl border-0 bg-white p-1.5 shadow-xl ring-1 ring-black/5;
+
+        .choices__item {
+            @apply rounded-full px-4 py-2 text-sm text-gray-700;
+        }
+
+        .choices__item--selectable.is-highlighted,
+        .choices__item--selectable:hover {
+            @apply bg-gray-100 text-gray-900;
+        }
+
+        .choices__item--selectable.is-selected {
+            @apply bg-primary-50 font-medium text-primary-700;
+        }
+    }
+
+    // Switch (MUI): pill track with a round thumb. Off = grey track + white
+    // thumb; on = primary thumb over a 50% primary track; disabled is faded.
+    .filament-forms-toggle-component {
+        background-color: #c4c9d0;
+
+        > span:first-child {
+            background-color: #fff;
+        }
+
+        &[aria-checked='true'] {
+            background-color: color-mix(in srgb, $rk-btn-primary 50%, white);
+
+            > span:first-child {
+                background-color: $rk-btn-primary;
+            }
+        }
+
+        &:disabled {
+            @apply opacity-50;
+        }
+    }
+
+    @include rk-form-rich-and-upload;
+
+    // Icon picker (Guava): the selected/placeholder item is a fixed 64px tall
+    // preview box; make it a normal one-line field.
+    .choices__list--single .choices__item > div {
+        @apply items-start justify-start;
+    }
+
+    .choices__list--single .choices__item [class*='!h-16'] {
+        height: auto !important;
+        padding: 0 !important;
+        flex-direction: row;
+        align-items: center;
+        justify-content: flex-start;
+        text-align: left;
+        gap: 0.5rem;
+
+        svg {
+            @apply h-5 w-5;
+        }
+    }
+
+    // Inline "+" (create option) buttons: soft blue round chip.
+    .filament-forms-select-component .filament-icon-button,
+    .filament-forms-field-wrapper button[wire\:click*='createOption'] {
+        @apply rounded-full bg-primary-50 text-primary-600 hover:bg-primary-100;
+    }
+
+    // Bottom buttons: solid blue pill + soft outline pills.
+    // Soft pill buttons (see the rk-btn mixin): primary submit, outlined rest.
+    .filament-form-actions .filament-button {
+        @include rk-btn;
+        @include rk-btn-color($rk-btn-primary);
+        @apply px-6 focus:ring-0 focus:ring-offset-0;
+    }
+
+    .filament-form-actions .filament-button:not([type='submit']) {
+        @apply border border-gray-300 bg-white text-gray-600;
+        filter: none;
+
+        &:hover:not(:disabled) {
+            @apply bg-gray-50;
+        }
+    }
+
+    // Phones: the schema uses fixed 3/12-column grids with column spans; stack
+    // every grid in the card into one full-width column so fields never squeeze.
+    @media (max-width: 767px) {
+        .filament-forms-section-component .grid {
+            grid-template-columns: minmax(0, 1fr) !important;
+
+            > * {
+                grid-column: 1 / -1 !important;
+            }
+        }
+    }
+}
+
+// --- Notifications: bell slide-over restyled as a popover -----------------
+// Filament 2 renders database notifications as a full-height slide-over modal
+// (.filament-modal inside the topbar). Pure CSS here: the window becomes a
+// rounded white popover pinned under the bell, the dark backdrop turns
+// transparent (still the click-away layer), and every Filament control (mark
+// as read, clear, per-item delete, links) is left in place and functional.
+.filament-main-topbar {
+    // Above page content that uses z-10 (welcome card, dropdowns) so the bell
+    // popover (a fixed child of the topbar) is never covered; still below the
+    // sidebar (z-20).
+    z-index: 15;
+}
+
+.filament-main-topbar .filament-modal {
+    > .fixed {
+        overflow: visible;
+    }
+
+    .filament-modal-close-overlay {
+        @apply bg-transparent;
+    }
+
+    // Window container: fixed under the topbar, aligned to the right edge.
+    .fixed > .relative {
+        position: fixed;
+        top: 6rem;
+        right: 1.5rem;
+        width: 24rem;
+        max-width: calc(100vw - 1.5rem);
+        padding: 0;
+
+        @media (max-width: 639px) {
+            top: 5.5rem;
+            right: 0.75rem;
+            left: 0.75rem;
+            width: auto;
+            max-width: none;
+        }
+    }
+
+    .filament-modal-window {
+        @apply h-auto max-w-none overflow-y-auto rounded-3xl bg-white py-0 shadow-2xl ring-1 ring-black/5;
+        max-height: calc(100vh - 8rem);
+        transform: none !important;
+    }
+
+    // Closing = click outside / Escape (Filament behaviour); drop the X.
+    .filament-modal-window > button {
+        display: none;
+    }
+
+    .filament-modal-header {
+        @apply px-6 pb-3 pt-5;
+
+        h2 {
+            @apply flex items-center justify-between text-lg font-semibold tracking-tight text-gray-900;
+
+            // "N" unread count -> blue "N baru" pill on the right.
+            > span:last-child:not(:first-child) {
+                @apply static ml-0 h-auto rounded-full bg-primary-600 px-3 py-1 text-xs font-medium leading-none text-white;
+
+                &::after {
+                    content: var(--rk-new-label, ' baru');
+                    margin-left: 0.25rem;
+                }
+            }
+        }
+
+        // Mark all read / clear: small outline pills.
+        [class~='mt-2'] {
+            @apply flex flex-wrap items-center gap-2;
+
+            > span {
+                display: none;
+            }
+
+            .filament-link {
+                @apply rounded-full border border-primary-200 px-3 py-1 text-xs font-medium text-primary-600 hover:bg-primary-50 hover:no-underline;
+            }
+        }
+    }
+
+    .filament-hr {
+        display: none;
+    }
+
+    .filament-modal-content {
+        @apply space-y-0 p-0;
+
+        > [class~='space-y-4'] {
+            @apply space-y-0 p-0;
+
+            > .mt-\[calc\(-1rem-1px\)\] {
+                margin-top: 0;
+            }
+        }
+    }
+
+    // One row per notification: thin divider, roomy padding, soft hover.
+    .filament-modal-content [class~='-mx-6'] {
+        @apply mx-0 border-0 border-b border-gray-100 last:border-b-0;
+
+        > div {
+            @apply mb-0 px-5 py-4 transition hover:bg-slate-50;
+
+            &[class~='bg-primary-50'] {
+                @apply bg-primary-50/60 hover:bg-primary-50;
+            }
+        }
+    }
+
+    .filament-notifications-notification {
+        @apply items-start gap-4;
+    }
+
+    // Icon in a soft tinted circle (tint derived from the icon's own colour).
+    .filament-notifications-icon {
+        @apply h-12 w-12 shrink-0 rounded-full p-3;
+        box-sizing: border-box;
+        background: color-mix(in srgb, currentColor 14%, white);
+    }
+
+    .filament-notifications-notification > .grid {
+        @apply min-w-0 break-words;
+    }
+
+    .filament-notifications-title {
+        @apply h-auto items-start text-sm font-semibold text-gray-900;
+    }
+
+    // Unread rows carry a small blue dot before the title.
+    .filament-modal-content [class~='bg-primary-50'] .filament-notifications-title::before {
+        content: '';
+        @apply mr-2 mt-1.5 inline-block h-2 w-2 shrink-0 rounded-full bg-primary-500;
+    }
+
+    .filament-notifications-body {
+        @apply order-2 mt-0.5 text-sm text-gray-500;
+    }
+
+    .filament-notifications-date {
+        @apply order-3 mt-1 text-xs text-gray-400;
+    }
+
+    .filament-notifications-actions {
+        @apply order-4 mt-3;
+    }
+
+    .filament-notifications-close-button {
+        @apply shrink-0 text-gray-300 hover:text-gray-500;
+    }
+}
+
+// --- Tickets list: clickable status cards + filter tabs --------------------
+// Rendered by ListTickets::getTableHeader() inside the table card (one
+// canvas). --c is the status colour; tints are derived with color-mix.
+.rk-stat-cards {
+    @apply mb-4 gap-3 lg:gap-4;
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+
+    --c: #2563eb;
+
+    @media (min-width: 1024px) {
+        grid-template-columns: repeat(5, minmax(0, 1fr));
+    }
+
+    &__card {
+        @apply flex items-center gap-3 rounded-2xl border border-gray-200 bg-white p-4 text-left shadow-sm transition hover:border-gray-300;
+
+        &.is-active {
+            border-color: var(--c);
+            box-shadow: 0 0 0 1px var(--c), 0 1px 2px rgba(15, 23, 42, 0.06);
+        }
+    }
+
+    &__icon {
+        @apply flex h-11 w-11 shrink-0 items-center justify-center rounded-full;
+        background: color-mix(in srgb, var(--c) 14%, white);
+        color: var(--c);
+    }
+
+    &__text {
+        @apply flex min-w-0 flex-col items-start;
+    }
+
+    &__label {
+        @apply max-w-full truncate text-sm font-medium text-gray-500;
+    }
+
+    &__row {
+        @apply flex items-baseline gap-2;
+    }
+
+    &__value {
+        @apply text-2xl font-bold leading-tight tracking-tight text-gray-900;
+    }
+
+    &__percent {
+        @apply text-xs font-medium text-gray-400;
+    }
+}
+
+// Filter tabs: underline row, active tab in the accent colour.
+.rk-tabs {
+    @apply mb-3 flex items-center gap-6 overflow-x-auto border-b border-gray-200;
+
+    &__tab {
+        @apply -mb-px shrink-0 whitespace-nowrap border-b-2 border-transparent px-1 pb-3 pt-1 text-sm font-medium text-gray-500 transition hover:text-gray-700;
+
+        &.is-active {
+            @apply border-primary-600 text-primary-600;
+        }
+    }
+
+    &__count {
+        @apply ml-0.5 text-gray-400;
+
+        &.is-danger {
+            @apply font-semibold text-danger-600;
+        }
+    }
+}
+
+// Tickets list: cell content (title + grey summary, avatar + name).
+// Sizes follow the Projects table (14px main text, 13px summary/secondary,
+// 36px avatars, 12px pills). EVERY column is shown at every width: when they
+// exceed the card the table scrolls inside its own box (the page never does,
+// Actions stays pinned on the right). Task name and Owner get extra room.
+
+.filament-resources-list-records-page.filament-resources-tickets {
+    // Title: semi-bold 14px, up to two lines before the ellipsis.
+    .rk-cell-title {
+        @apply text-sm font-semibold text-gray-900;
+        display: -webkit-box;
+        -webkit-box-orient: vertical;
+        -webkit-line-clamp: 2;
+        overflow: hidden;
+        white-space: normal;
+        word-break: break-word;
+    }
+
+    // Beats the generic `.filament-table-cell-name *` bold rule above.
+    .filament-table-cell-name .rk-cell-sub,
+    .rk-cell-sub {
+        @apply mt-1 flex min-w-0 items-center gap-1.5 text-[13px] text-gray-500;
+        font-weight: 400 !important;
+    }
+
+    .rk-cell-sub-project {
+        @apply min-w-0 truncate;
+    }
+
+    // Small type pill inside the sub-line (name/colour/icon from the data).
+    .rk-cell-sub .color-pill {
+        @apply shrink-0 gap-1 px-2 py-0 text-[11px] leading-5;
+    }
+
+    .rk-cell-sub .color-pill-icon {
+        @apply h-3 w-3;
+    }
+
+    .rk-cell-muted {
+        @apply text-gray-400;
+    }
+
+    // Project: first word(s) bold above, the rest of the name small and grey.
+    .rk-proj-main {
+        @apply block text-[13px] font-semibold text-gray-900;
+    }
+
+    .rk-proj-sub {
+        @apply block max-w-[11rem] truncate text-xs text-gray-500;
+    }
+
+    // Row actions render as a horizontal "..." (the Projects table keeps the
+    // vertical dots). Only the glyph changes; the icon bar behaviour is the same.
+    .filament-tables-actions-container::before {
+        content: '\22EF';
+    }
+
+    // ID: soft blue pill.
+    .rk-id-pill {
+        @apply inline-block whitespace-nowrap rounded-full bg-primary-50 px-3 py-1 text-xs font-semibold text-primary-700;
+    }
+
+    // Labels wrap onto a second line instead of widening the table.
+    td[class*='filament-table-cell-labels'] {
+        min-width: 11rem;
+        max-width: 13rem;
+        white-space: normal;
+    }
+
+    .rk-label-more {
+        @apply ml-0.5 text-xs font-medium text-gray-400;
+    }
+
+    // Due date: calendar icon + date, small relative line below.
+    .rk-due {
+        @apply flex flex-col items-start gap-0.5;
+    }
+
+    .rk-due-date {
+        @apply inline-flex items-center gap-1.5 whitespace-nowrap text-gray-700;
+    }
+
+    .rk-due-icon {
+        @apply h-4 w-4 text-gray-400;
+    }
+
+    .rk-due-rel {
+        @apply text-xs text-gray-400;
+
+        &.is-done {
+            @apply font-medium text-success-600;
+        }
+
+        &.is-soon {
+            @apply font-medium text-danger-500;
+        }
+
+        &.is-overdue {
+            @apply font-bold text-danger-600;
+        }
+    }
+
+    td.filament-table-cell-name {
+        min-width: 18rem;
+        width: 18rem;
+    }
+
+    td.filament-table-cell-name .rk-cell-title,
+    td.filament-table-cell-name .rk-cell-sub {
+        max-width: 18rem;
+    }
+
+    td[class*='filament-table-cell-owner'] {
+        min-width: 9rem;
+    }
+
+    td[class*='filament-table-cell-project'] {
+        min-width: 9.5rem;
+        white-space: nowrap;
+    }
+
+    // Person cells: 36px avatar + 13px bold name, one line.
+    .rk-cell-person {
+        @apply flex items-center gap-2.5;
+    }
+
+    // Full name, not cut short (Owner column has min-width 13rem).
+    .rk-cell-person .rk-cell-title {
+        @apply max-w-[11rem] truncate text-[13px];
+        display: block;
+    }
+
+    .rk-cell-avatar {
+        @apply h-9 w-9 shrink-0 rounded-full bg-gray-200 object-cover;
+    }
+
+    .rk-label-pill {
+        @apply mr-1 inline-block max-w-[9rem] truncate rounded-full px-3 py-1 align-middle text-xs font-semibold;
+    }
+
+    // Soft status / priority / type pills.
+    .color-pill {
+        @apply inline-flex max-w-full items-center gap-1.5 whitespace-nowrap rounded-full px-3 py-1 text-xs font-semibold;
+    }
+
+    .color-pill-icon {
+        @apply h-4 w-4;
+    }
+
+    // Evenly tall, airy rows; header text lines up with the cell text.
+    .filament-tables-table {
+        td {
+            @apply py-0;
+        }
+
+        tbody tr {
+            height: 5.25rem;
+        }
+
+        td,
+        th {
+            @apply align-middle;
+        }
+
+        .filament-tables-text-column {
+            @apply px-3 py-2;
+        }
+
+        // Secondary columns: 13px text (name/project keep 14px).
+        td:not(.filament-table-cell-name):not([class*='filament-table-cell-project']) .filament-tables-text-column {
+            @apply text-[13px];
+        }
+
+        .filament-tables-header-cell > button,
+        .filament-tables-header-cell > span,
+        .filament-tables-header-cell {
+            @apply px-3 text-[13px];
+        }
+
+        td.filament-tables-actions-cell {
+            @apply px-3;
+        }
+    }
+
+    // Status cards live inside the table card (one canvas).
+    .filament-tables-header-container .rk-stat-cards {
+        @apply mb-4;
+    }
+
+    @media (max-width: 639px) {
+        td.filament-table-cell-name {
+            min-width: 18rem;
+            width: 18rem;
+        }
+
+        td.filament-table-cell-name .rk-cell-title,
+        td.filament-table-cell-name .rk-cell-sub {
+            max-width: 18rem;
+        }
+    }
+}
+
+// --- Ticket detail page (Spike "task detail" visual language) -------------
+// Scoped to the ticket View page (page class + resource slug) so no other
+// page is affected. Presentation only: arrangement/styling of what
+// tickets/view.blade.php already renders. Main column (header, content,
+// tabs) + details sidebar; stacks on tablet/mobile.
+.filament-resources-view-record-page.filament-resources-tickets {
+    .rk-td {
+        display: grid;
+        align-items: start;
+        gap: 1.25rem;
+        grid-template-columns: minmax(0, 1fr);
+
+        @media (min-width: 1024px) {
+            grid-template-columns: minmax(0, 1fr) 22rem;
+        }
+    }
+
+    .rk-td__main,
+    .rk-td__side {
+        @apply flex min-w-0 flex-col gap-5;
+    }
+
+    .rk-td__header {
+        @apply flex flex-col gap-3 px-1;
+    }
+
+    .rk-td__code {
+        @apply rounded-full bg-primary-50 px-2.5 py-0.5 text-sm font-medium text-primary-600;
+    }
+
+    .rk-td__title {
+        @apply text-2xl font-bold leading-tight tracking-tight text-gray-900 md:text-3xl;
+        word-break: break-word;
+    }
+
+    .rk-td__due {
+        @apply inline-flex items-center gap-1 rounded-full bg-gray-100 px-2.5 py-1 text-xs font-medium text-gray-600;
+
+        &.is-overdue {
+            @apply bg-danger-50 text-danger-600;
+        }
+    }
+
+    // Action bar under the header: back button left, page actions right.
+    .rk-td__bar {
+        @apply flex flex-wrap items-center justify-between gap-3;
+
+        .filament-page-actions {
+            @apply gap-2;
+        }
+    }
+
+    // Back = outlined pill, page actions = contained pills in the soft palette.
+    .rk-td__back {
+        @include rk-btn;
+        @apply border border-gray-300 bg-white text-gray-700 hover:bg-gray-50;
+    }
+
+    .rk-td__bar .filament-page-actions .filament-button {
+        @include rk-btn;
+        @apply focus:ring-0 focus:ring-offset-0;
+
+        &.bg-primary-600 {
+            @include rk-btn-color($rk-btn-primary);
+        }
+
+        &.bg-success-600 {
+            @include rk-btn-color($rk-btn-success);
+        }
+
+        &.bg-danger-600 {
+            @include rk-btn-color($rk-btn-error);
+        }
+
+        &.bg-warning-600 {
+            @include rk-btn-color($rk-btn-warning);
+        }
+
+        // Secondary (Share): slate instead of white/grey outline.
+        &[class~='bg-white'] {
+            @include rk-btn-color($rk-btn-secondary);
+        }
+    }
+
+    .rk-td__submit {
+        @include rk-btn;
+        @include rk-btn-color($rk-btn-primary);
+
+        &:disabled {
+            @apply bg-gray-300;
+        }
+
+        &--warning {
+            @include rk-btn-color($rk-btn-warning);
+        }
+    }
+
+    // Images attached inside the content / comments: one rounded canvas each,
+    // filename + size caption hidden.
+    .prose a:has(> img) {
+        @apply my-3 block overflow-hidden rounded-2xl border border-gray-200 bg-gray-50 p-3 no-underline;
+
+        > img {
+            @apply m-0 block h-auto max-w-full rounded-xl;
+        }
+
+        > img ~ span {
+            @apply hidden;
+        }
+    }
+
+    // Non-image attachments (name + size spans, no <img>): a compact file chip.
+    .prose a:has(> span):not(:has(> img)) {
+        @apply my-1 inline-flex max-w-full items-center gap-2 rounded-2xl border border-gray-200 bg-gray-50 px-4 py-2.5 text-sm no-underline transition hover:bg-gray-100;
+
+        &::before {
+            @apply h-5 w-5 shrink-0 bg-gray-400;
+            content: '';
+            -webkit-mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 24 24' stroke='black' stroke-width='1.8'%3E%3Cpath stroke-linecap='round' stroke-linejoin='round' d='M15.172 7l-6.586 6.586a2 2 0 102.828 2.828l6.414-6.586a4 4 0 00-5.656-5.656l-6.415 6.585a6 6 0 108.486 8.486L20.5 13'/%3E%3C/svg%3E") center / contain no-repeat;
+            mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 24 24' stroke='black' stroke-width='1.8'%3E%3Cpath stroke-linecap='round' stroke-linejoin='round' d='M15.172 7l-6.586 6.586a2 2 0 102.828 2.828l6.414-6.586a4 4 0 00-5.656-5.656l-6.415 6.585a6 6 0 108.486 8.486L20.5 13'/%3E%3C/svg%3E") center / contain no-repeat;
+        }
+
+        > span:first-child {
+            @apply min-w-0 truncate font-medium text-gray-800;
+        }
+
+        > span + span {
+            @apply shrink-0 text-xs text-gray-400;
+        }
+    }
+
+    // Status / priority / type / label pills (x-color-badge pill).
+    .color-pill {
+        @apply inline-flex max-w-full items-center gap-1.5 whitespace-nowrap rounded-full px-2.5 py-1 text-xs font-semibold;
+    }
+
+    .color-pill-icon {
+        @apply h-3.5 w-3.5 shrink-0;
+    }
+
+    .color-pill-label {
+        @apply truncate;
+    }
+
+    // Bento cards: big radius, no hard border, soft shadow.
+    .rk-td__card {
+        @apply rounded-3xl border-0 bg-white p-6 shadow-sm;
+    }
+
+    .rk-td__card-title {
+        @apply mb-4 flex items-center gap-2 text-base font-semibold text-gray-900;
+    }
+
+    .rk-td__details .rk-td__card-title {
+        @apply mb-2;
+    }
+
+    // Sidebar groups separated by a hairline.
+    .rk-td__group {
+        @apply flex flex-col gap-3 border-t border-gray-100 py-4;
+
+        &:first-of-type {
+            @apply border-t-0;
+        }
+
+        &:last-child {
+            @apply pb-0;
+        }
+    }
+
+    .rk-td__group-title {
+        @apply flex items-center gap-2 text-sm font-semibold text-gray-900;
+    }
+
+    .rk-td__row {
+        @apply flex items-start justify-between gap-4;
+    }
+
+    .rk-td__person {
+        @apply flex flex-col gap-1;
+    }
+
+    .rk-td__label {
+        @apply text-[13px] text-gray-500;
+    }
+
+    .rk-td__value {
+        @apply min-w-0 text-right text-sm font-medium text-gray-700;
+        word-break: break-word;
+    }
+
+    // Slightly larger avatars next to comment authors (component is 24px).
+    .rk-avatar-lg > div > img {
+        @apply h-9 w-9;
+    }
+
+    // Comment editor + attachment dropzone share the Project form look.
+    @include rk-form-rich-and-upload;
+
+    .filament-forms-field-wrapper-label {
+        @apply text-sm font-semibold text-gray-800;
+    }
+
+    .filament-forms-field-wrapper-helper-text {
+        @apply text-xs text-gray-500;
+    }
+
+    // Tabs sit flush at the top of their card.
+    .rk-td__card > .rk-tabs {
+        @apply mb-5;
+    }
+}
+
+// --- Project view + edit header (Spike) ---------------------------------
+// Title + breadcrumb stay in the white pill; the page actions (the same
+// getActions() list, now with a Back button) drop to their own row below it:
+// Back on the left, the rest on the right, all in the soft pill button style.
+// Pure layout: a grid whose first row is painted by a ::before pill.
+.filament-page:is(.filament-resources-create-record-page, .filament-resources-edit-record-page):is(.filament-resources-projects, .filament-resources-tickets, .filament-resources-activities, .filament-resources-ticket-statuses, .filament-resources-ticket-types, .filament-resources-ticket-priorities, .filament-resources-project-statuses, .filament-resources-labels, .filament-resources-ticket-hours, .filament-resources-users, .filament-resources-roles, .filament-resources-permissions),
+.filament-page.filament-resources-view-record-page:is(.filament-resources-projects, .filament-resources-activities, .filament-resources-ticket-statuses, .filament-resources-ticket-types, .filament-resources-ticket-priorities, .filament-resources-project-statuses, .filament-resources-labels, .filament-resources-ticket-hours, .filament-resources-users, .filament-resources-roles, .filament-resources-permissions),
+.filament-page.rk-board-page {
+    > div > .filament-header {
+        @apply items-center gap-x-6 gap-y-4 rounded-none bg-transparent p-0 shadow-none;
+        position: relative;
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) auto;
+
+        &::before {
+            content: '';
+            grid-row: 1;
+            grid-column: 1 / -1;
+            align-self: stretch;
+            @apply rounded-full bg-white shadow-sm;
+        }
+
+        > div:first-child {
+            grid-row: 1;
+            grid-column: 1;
+            @apply px-6 py-4;
+        }
+
+        > .rk-header-breadcrumb {
+            grid-row: 1;
+            grid-column: 2;
+            @apply pr-6;
+        }
+
+        > .filament-page-actions {
+            grid-row: 2;
+            grid-column: 1 / -1;
+            @apply w-full justify-end gap-2;
+
+            .filament-button {
+                @include rk-btn;
+                @apply focus:ring-0 focus:ring-offset-0;
+
+                &.bg-primary-600 {
+                    @include rk-btn-color($rk-btn-primary);
+                }
+
+                &.bg-success-600 {
+                    @include rk-btn-color($rk-btn-success);
+                }
+
+                &.bg-danger-600 {
+                    @include rk-btn-color($rk-btn-error);
+                }
+
+                &.bg-warning-600 {
+                    @include rk-btn-color($rk-btn-warning);
+                }
+
+                // Secondary (Kanban board / View): slate pill.
+                &[class~='bg-white'] {
+                    @include rk-btn-color($rk-btn-secondary);
+                }
+
+                // Back: outlined pill pinned to the left.
+                &.rk-back-action {
+                    @apply mr-auto border border-gray-300 bg-white text-gray-700;
+                    filter: none;
+
+                    &:hover {
+                        @apply bg-gray-50;
+                    }
+                }
+            }
+        }
+    }
+
+    @media (max-width: 639px) {
+        > div > .filament-header {
+            grid-template-columns: minmax(0, 1fr);
+
+            &::before {
+                grid-row: 1 / 3;
+            }
+
+            > div:first-child {
+                @apply pb-0;
+            }
+
+            > .rk-header-breadcrumb {
+                grid-row: 2;
+                grid-column: 1;
+                @apply px-6 pb-4;
+            }
+
+            > .filament-page-actions {
+                grid-row: 3;
+                @apply flex-wrap justify-start;
+            }
+        }
+    }
+}
+
+// --- Kanban / Scrum board card ------------------------------------------
+// One big rounded white card holds the filter button and the pastel columns
+// (column/ticket visuals live in kanban.scss). The Filters <details> keeps
+// working: only the summary is restyled as a soft pill button.
+.rk-board-page {
+    .rk-board-card {
+        @apply flex flex-col gap-5 rounded-3xl bg-white p-5 shadow-sm sm:p-6;
+    }
+
+    .rk-board-filter {
+        @apply w-full;
+    }
+
+    .rk-board-filter__btn {
+        @include rk-btn;
+        @include rk-btn-color($rk-btn-primary);
+        @apply ml-auto cursor-pointer list-none;
+
+        &::-webkit-details-marker {
+            display: none;
+        }
+    }
+
+    .rk-board-filter__body {
+        @apply mt-4 rounded-2xl bg-gray-50 p-4;
+    }
+
+    // "Manage sprints" link of the empty (no active sprint) state.
+    .rk-board-link {
+        @include rk-btn;
+        @include rk-btn-color($rk-btn-primary);
+        @apply w-fit;
+    }
+
+    // Filter selects: same pill as the form inputs.
+    .rk-board-filter__body select {
+        @apply h-[46px] rounded-full border-gray-200 px-5 text-sm shadow-none focus:border-primary-500 focus:ring-primary-500;
+    }
+
+    // Filter form buttons (BoardFilterForm): primary pill + outlined pill.
+    .rk-filter-btn {
+        @include rk-btn;
+        @include rk-btn-color($rk-btn-primary);
+
+        &:disabled {
+            @apply opacity-60;
+        }
+
+        &--ghost {
+            @apply border border-gray-300 bg-white text-gray-600;
+            filter: none;
+        }
+    }
+
+    .rk-filter-actions {
+        @apply flex flex-wrap items-center justify-start gap-2 md:justify-end;
+    }
+
+    // Soft pills inside the cards need the page-scoped .color-pill sizes too.
+    .filament-forms-field-wrapper-label {
+        @apply text-sm font-semibold text-gray-800;
+    }
+}
+
+// --- Analytics page (Spike look) -----------------------------------------
+// Scoped to the Analytics page. Filter bar in a rounded card, soft stat
+// cards (reusing .rk-stat-cards from the tickets list), rounded chart/table
+// cards. Presentation only: same data, same Livewire bindings.
+.rk-analytics-page {
+    .rk-an-filters {
+        @apply flex flex-wrap items-end gap-4 rounded-3xl bg-white p-5 shadow-sm;
+    }
+
+    .rk-an-field {
+        @apply flex min-w-[16rem] flex-col gap-1.5;
+
+        span {
+            @apply text-sm font-semibold text-gray-800;
+        }
+
+        select {
+            @apply h-[46px] w-full rounded-full border-gray-200 pl-5 pr-10 text-sm shadow-none hover:border-gray-400 focus:border-primary-500 focus:ring-primary-500;
+        }
+    }
+
+    .rk-stat-cards {
+        @apply mb-0;
+        grid-template-columns: minmax(0, 1fr);
+
+        @media (min-width: 640px) {
+            grid-template-columns: repeat(2, minmax(0, 1fr));
+        }
+
+        @media (min-width: 1024px) {
+            grid-template-columns: repeat(4, minmax(0, 1fr));
+        }
+    }
+
+    .rk-stat-cards__card {
+        @apply rounded-3xl border-0 p-5 shadow-sm;
+    }
+
+    .rk-stat-cards__icon {
+        @apply h-12 w-12;
+    }
+
+    .rk-an-value {
+        @apply text-xl;
+    }
+
+    .rk-an-note {
+        @apply flex items-center gap-2 rounded-2xl bg-warning-50 px-4 py-3 text-sm text-warning-700;
+    }
+
+    .rk-an-card {
+        @apply rounded-3xl border-0 p-6 shadow-sm;
+    }
+
+    .rk-an-title {
+        @apply text-lg font-bold tracking-tight text-gray-900;
+    }
+
+    .rk-an-sub {
+        @apply mb-4 text-sm text-gray-500;
+    }
+
+    .rk-an-legend {
+        @apply mt-3 flex flex-wrap items-center gap-4 text-xs text-gray-500;
+
+        span {
+            @apply inline-flex items-center gap-1.5;
+        }
+
+        i {
+            @apply inline-block h-2.5 w-2.5 rounded-full;
+        }
+    }
+
+    .rk-an-total {
+        @apply ml-auto font-medium text-gray-600;
+    }
+
+    .rk-an-table {
+        @apply overflow-x-auto rounded-2xl border border-gray-200;
+
+        table {
+            @apply w-full text-sm;
+        }
+
+        th {
+            @apply border-b border-gray-200 bg-white px-4 py-3 text-left text-xs font-medium text-gray-500;
+        }
+
+        td {
+            @apply border-b border-gray-100 px-4 py-3 text-gray-700;
+        }
+
+        tr:last-child td {
+            @apply border-b-0;
+        }
+
+        tbody tr:hover {
+            @apply bg-slate-50;
+        }
+    }
+
+    .rk-an-bar {
+        @apply h-2 flex-1 overflow-hidden rounded-full bg-gray-100;
+
+        > div {
+            @apply h-2 rounded-full;
+            background-color: $rk-btn-primary;
+        }
+    }
+
+    .rk-an-empty {
+        @apply rounded-2xl bg-gray-50 px-4 py-6 text-center text-sm text-gray-500;
+    }
+
+    .rk-an-bento {
+        display: grid;
+        gap: 1rem;
+        grid-template-columns: minmax(0, 1fr);
+
+        gap: 1.25rem;
+
+        @media (min-width: 1024px) {
+            grid-template-columns: repeat(12, minmax(0, 1fr));
+
+            .rk-span-3 { grid-column: span 3; }
+            .rk-span-4 { grid-column: span 4; }
+            .rk-span-5 { grid-column: span 5; }
+            .rk-span-7 { grid-column: span 7; }
+            .rk-span-8 { grid-column: span 8; }
+            .rk-span-12 { grid-column: span 12; }
+        }
+    }
+
+    // Gradient hero card with abstract translucent circles.
+    .rk-an-hero {
+        @apply relative overflow-hidden border-0 text-white;
+        background: linear-gradient(135deg, #3b82d6 0%, #6aa7ea 100%);
+
+        &::before,
+        &::after {
+            content: '';
+            @apply pointer-events-none absolute rounded-full bg-white/10;
+        }
+
+        &::before {
+            @apply -right-10 -top-10 h-44 w-44;
+        }
+
+        &::after {
+            @apply -bottom-12 -left-8 h-40 w-40;
+        }
+
+        > * {
+            @apply relative z-10;
+        }
+
+        .rk-an-title {
+            @apply text-white;
+        }
+
+        .rk-an-sub {
+            @apply text-white/80;
+        }
+    }
+
+    .rk-an-hero__big {
+        @apply mb-3 flex items-baseline gap-2;
+
+        b {
+            @apply text-6xl font-bold leading-none tracking-tight;
+        }
+
+        span {
+            @apply text-sm text-white/90;
+        }
+    }
+
+    .rk-an-hero__chips {
+        @apply mb-4 flex flex-wrap gap-2;
+
+        span {
+            @apply rounded-full bg-white/20 px-3 py-1 text-xs text-white;
+        }
+
+        b {
+            @apply font-bold;
+        }
+    }
+
+    .rk-an-hero__row {
+        @apply flex items-center justify-between border-t border-white/20 py-2 text-sm text-white/90;
+    }
+
+    .rk-an-hero__empty {
+        @apply rounded-2xl bg-white/20 px-4 py-6 text-center text-sm text-white;
+    }
+
+    // Workload: coloured initial + two-part bar (open solid, finished faded).
+    .rk-an-person {
+        @apply mb-4 flex items-center gap-3 last:mb-0;
+    }
+
+    .rk-an-person__avatar {
+        @apply flex h-10 w-10 shrink-0 items-center justify-center rounded-full text-sm font-bold text-white;
+    }
+
+    .rk-an-person__body {
+        @apply flex min-w-0 flex-1 flex-col gap-1.5;
+    }
+
+    .rk-an-stack {
+        @apply flex h-2.5 w-full overflow-hidden rounded-full bg-gray-100;
+
+        > div {
+            @apply h-full;
+        }
+    }
+
+    // Segmented single bar + key list (priority).
+    .rk-an-segbar {
+        @apply mb-4 flex h-5 w-full overflow-hidden rounded-full bg-gray-100;
+
+        > div {
+            @apply h-full;
+        }
+
+        > div + div {
+            @apply border-l-2 border-white;
+        }
+    }
+
+    .rk-an-keylist {
+        @apply flex flex-col gap-2;
+
+        li {
+            @apply flex items-center gap-2 text-sm text-gray-700;
+
+            i {
+                @apply inline-block h-2.5 w-2.5 shrink-0 rounded-full;
+            }
+
+            span {
+                @apply min-w-0 flex-1 truncate;
+            }
+
+            b {
+                @apply font-semibold text-gray-900;
+            }
+
+            em {
+                @apply w-10 text-right text-xs not-italic text-gray-400;
+            }
+        }
+    }
+
+    .rk-an-donut--center {
+        @apply mb-4 justify-center;
+    }
+
+    // Epic rings.
+    .rk-an-rings {
+        @apply grid grid-cols-2 gap-3;
+    }
+
+    .rk-an-ring {
+        @apply flex flex-col items-center gap-1 text-center;
+
+        svg {
+            @apply h-16 w-16;
+        }
+
+        span {
+            @apply text-xs font-medium text-gray-600;
+            display: -webkit-box;
+            -webkit-box-orient: vertical;
+            -webkit-line-clamp: 2;
+            overflow: hidden;
+        }
+    }
+
+    // Per-sprint columns: total (faded) with the finished share filled in.
+    .rk-an-columns {
+        @apply flex items-end gap-4 overflow-x-auto pb-1;
+    }
+
+    .rk-an-column {
+        @apply flex min-w-[3.5rem] flex-1 flex-col items-center gap-1;
+
+        b {
+            @apply text-sm font-semibold text-gray-900;
+        }
+
+        span {
+            @apply text-xs text-gray-500;
+        }
+    }
+
+    .rk-an-column__bar {
+        @apply flex h-36 w-full items-end justify-center;
+    }
+
+    .rk-an-column__total {
+        @apply flex w-full max-w-[3.5rem] flex-col justify-end overflow-hidden rounded-2xl;
+        background: #c8dcf6;
+    }
+
+    .rk-an-column__done {
+        @apply w-full rounded-2xl;
+        background: #3b82d6;
+    }
+
+    // Chart.js canvases (see window.rkCharts in resources/js/filament.js).
+    .rk-an-chart {
+        @apply relative h-72 w-full;
+
+        &--donut {
+            @apply h-64;
+        }
+    }
+
+    // Entrance animations for the pure-CSS bars, rings and columns.
+    @keyframes rk-grow-x {
+        from { transform: scaleX(0); }
+    }
+
+    @keyframes rk-grow-y {
+        from { transform: scaleY(0); }
+    }
+
+    @keyframes rk-ring {
+        from { stroke-dasharray: 0 100; }
+    }
+
+    .rk-an-bar > div,
+    .rk-an-stack > div,
+    .rk-an-segbar > div {
+        transform-origin: left center;
+        animation: rk-grow-x 0.9s cubic-bezier(0.22, 1, 0.36, 1) both;
+    }
+
+    .rk-an-column__total {
+        transform-origin: bottom center;
+        animation: rk-grow-y 0.9s cubic-bezier(0.22, 1, 0.36, 1) both;
+    }
+
+    .rk-an-ring circle:nth-child(2) {
+        animation: rk-ring 1.1s cubic-bezier(0.22, 1, 0.36, 1) both;
+    }
+
+    // Custom dropdown (same look as the form dropdowns: pill trigger, rounded
+    // popup, grey hover row, primary-tinted selected row).
+    .rk-dd {
+        @apply relative;
+
+        &__btn {
+            @apply flex h-[46px] w-full items-center justify-between gap-3 rounded-full border border-gray-200 bg-white pl-5 pr-4 text-left text-sm text-gray-800 transition-colors hover:border-gray-400 focus:border-primary-500 focus:outline-none focus:ring-1 focus:ring-primary-500;
+        }
+
+        &__label {
+            @apply min-w-0 flex-1 truncate;
+        }
+
+        &__chevron {
+            @apply h-4 w-4 shrink-0 text-gray-500 transition-transform;
+        }
+
+        &__list {
+            @apply absolute left-0 top-full z-30 mt-2 max-h-72 w-full min-w-[14rem] overflow-y-auto rounded-3xl bg-white p-1.5 shadow-xl ring-1 ring-black/5;
+        }
+
+        &__item {
+            @apply block w-full rounded-full px-4 py-2 text-left text-sm text-gray-700 hover:bg-gray-100 hover:text-gray-900;
+
+            &.is-selected {
+                @apply bg-primary-50 font-medium text-primary-700;
+            }
+        }
+
+        &__empty {
+            @apply px-4 py-2 text-sm text-gray-500;
+        }
+    }
+
+    // Chart legends use small rounded squares (MUI charts), legend on top for lines.
+    .rk-an-legend i,
+    .rk-an-keylist li i {
+        @apply rounded-[3px];
+    }
+
+    .rk-an-legend--top {
+        @apply mb-2 mt-0 justify-center;
+    }
+
+    .rk-an-stackcol {
+        @apply flex flex-col gap-5;
+
+        > .rk-an-card {
+            @apply flex-1;
+        }
+    }
+
+    // Chart on the left, big numbers on the right.
+    .rk-an-split {
+        @apply flex flex-col gap-4 lg:flex-row lg:items-center;
+
+        .rk-an-chart {
+            @apply min-w-0 flex-1;
+        }
+    }
+
+    .rk-an-sidestats {
+        @apply flex shrink-0 flex-row flex-wrap gap-4 lg:w-44 lg:flex-col lg:gap-5;
+
+        li {
+            @apply flex items-center gap-3;
+
+            b {
+                @apply block text-xl font-bold leading-tight tracking-tight text-gray-900;
+            }
+
+            span {
+                @apply text-sm text-gray-500;
+            }
+        }
+    }
+
+    .rk-an-sidestats__icon {
+        @apply flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-primary-50 text-primary-600;
+    }
+
+    // Doughnut left, ring-marker key list right.
+    .rk-an-donutcard {
+        @apply flex flex-col items-center gap-4 sm:flex-row sm:justify-around;
+
+        .rk-an-chart {
+            @apply w-full max-w-[16rem] shrink-0;
+        }
+    }
+
+    .rk-an-bigkeys {
+        @apply flex flex-col gap-4;
+
+        li {
+            @apply flex items-center gap-3;
+
+            i {
+                @apply inline-block h-4 w-4 shrink-0 rounded-full border-2;
+            }
+
+            b {
+                @apply block text-xl font-bold leading-tight text-gray-900;
+            }
+
+            span {
+                @apply text-sm text-gray-500;
+            }
+        }
+    }
+
+    .rk-an-muted {
+        @apply text-xs text-gray-500;
+    }
+
+    // Donut + legend.
+    .rk-an-donut {
+        @apply flex flex-wrap items-center gap-6;
+
+        svg {
+            @apply h-44 w-44 shrink-0;
+        }
+
+        ul {
+            @apply flex min-w-[10rem] flex-1 flex-col gap-2;
+        }
+
+        li {
+            @apply flex items-center gap-2 text-sm text-gray-700;
+
+            i {
+                @apply inline-block h-2.5 w-2.5 shrink-0 rounded-full;
+            }
+
+            span {
+                @apply min-w-0 flex-1 truncate;
+            }
+
+            b {
+                @apply font-semibold text-gray-900;
+            }
+        }
+    }
+
+    // Label + bar rows (workload, epic progress).
+    .rk-an-row {
+        @apply mb-4 flex flex-col gap-1.5 last:mb-0;
+    }
+
+    .rk-an-row__head {
+        @apply flex items-center justify-between gap-3 text-sm font-medium text-gray-800;
+    }
+
+    // Overdue list.
+    .rk-an-overdue {
+        @apply flex flex-wrap items-center gap-x-3 gap-y-1 border-b border-gray-100 py-3 text-sm last:border-b-0 hover:bg-slate-50;
+
+        &__code {
+            @apply text-xs font-medium text-primary-600;
+        }
+
+        &__name {
+            @apply min-w-0 flex-1 truncate font-medium text-gray-900;
+        }
+    }
+
+    .rk-an-late {
+        @apply rounded-full bg-danger-50 px-2.5 py-0.5 text-xs font-semibold text-danger-600;
+    }
+}
+
+// --- Board picker (Papan Kerja) -------------------------------------------
+// Stacked: the selector card on top (intro left, dropdown right on desktop),
+// the Scrum-vs-Kanban illustration card below.
+.rk-board-pick-page {
+    .rk-pick {
+        @apply flex flex-col gap-5;
+    }
+
+    // Filament's card wraps its slot in two inner divs; the row layout lives on the inner one.
+    .rk-pick__card {
+        @apply rounded-3xl border-0 p-6 shadow-sm sm:p-8;
+
+        > div > div {
+            @apply flex w-full flex-col gap-5 p-0 lg:flex-row lg:items-center lg:justify-between;
+
+            > * {
+                margin: 0;
+            }
+        }
+    }
+
+    .rk-pick__intro {
+        @apply flex items-center gap-4;
+    }
+
+    .rk-pick__form {
+        @apply w-full lg:max-w-md;
+    }
+
+    .rk-pick__badge {
+        @apply flex h-14 w-14 shrink-0 items-center justify-center rounded-full bg-primary-50 text-primary-600;
+    }
+
+    .rk-pick__title {
+        @apply text-2xl font-bold tracking-tight text-gray-900;
+    }
+
+    .rk-pick__text {
+        @apply mt-1 text-sm text-gray-500;
+    }
+
+    .rk-pick__art {
+        @apply flex items-center justify-center rounded-3xl bg-white p-4 shadow-sm sm:p-6;
+
+        img {
+            @apply w-full max-w-4xl rounded-2xl;
+        }
+    }
+}
+
+// --- Road Map (Gantt) -------------------------------------------------------
+// Page chrome (selector, round search button, soft pill actions), a clean
+// rounded Gantt (public/css/jsgantt.css stays untouched; these rules override
+// it) and the shared create/edit modal look. Presentation only.
+.rk-roadmap-page {
+    .rk-rm-card {
+        @apply rounded-3xl border-0 p-6 shadow-sm;
+    }
+
+    .rk-rm-search {
+        @include rk-btn;
+        @include rk-btn-color($rk-btn-primary);
+        @apply h-[46px] w-[46px] shrink-0 px-0;
+    }
+
+    .rk-rm-btn {
+        @include rk-btn;
+        @include rk-btn-color($rk-btn-primary);
+
+        &--success {
+            @include rk-btn-color($rk-btn-success);
+        }
+    }
+
+    // Timeline (rendered by the script in road-map.blade.php).
+    .rk-gt {
+        @apply relative text-gray-700;
+    }
+
+    .rk-gt__toolbar {
+        @apply mb-4 flex items-center justify-between gap-3;
+    }
+
+    .rk-gt__seg {
+        @apply inline-flex rounded-full bg-gray-100 p-1;
+    }
+
+    .rk-gt__seg-btn {
+        @apply rounded-full px-4 py-1.5 text-sm text-gray-500 transition;
+
+        &.is-active {
+            @apply bg-white font-medium text-gray-900 shadow-sm;
+        }
+    }
+
+    .rk-gt__today-btn {
+        @apply rounded-full border border-gray-300 bg-white px-4 py-1.5 text-sm text-gray-600 transition hover:bg-gray-50;
+    }
+
+    .rk-gt__empty {
+        @apply rounded-2xl bg-gray-50 px-4 py-10 text-center text-sm text-gray-500;
+    }
+
+    .rk-gt__scroll {
+        @apply relative overflow-auto rounded-2xl border border-gray-200 bg-white;
+
+        max-height: calc(100vh - 21rem);
+        min-height: 18rem;
+    }
+
+    .rk-gt__inner {
+        @apply relative;
+
+        min-width: 100%;
+    }
+
+    // Sticky left column (names) + sticky header.
+    .rk-gt__cell-left {
+        @apply flex shrink-0 items-center gap-2 border-r border-gray-200 bg-white px-4;
+
+        position: sticky;
+        left: 0;
+        z-index: 10;
+        width: var(--left);
+    }
+
+    .rk-gt__head {
+        @apply flex border-b border-gray-200 bg-white;
+
+        position: sticky;
+        top: 0;
+        z-index: 20;
+    }
+
+    .rk-gt__head-left {
+        @apply h-14 text-xs font-medium uppercase tracking-wide text-gray-400;
+    }
+
+    .rk-gt__head-right {
+        @apply relative shrink-0;
+    }
+
+    .rk-gt__head-top,
+    .rk-gt__head-bottom {
+        @apply relative h-7;
+    }
+
+    .rk-gt__top-cell {
+        @apply absolute top-0 h-7 overflow-hidden whitespace-nowrap border-l border-gray-100 px-3 text-xs font-semibold capitalize leading-7 text-gray-800;
+    }
+
+    .rk-gt__tick {
+        @apply absolute top-0 h-7 overflow-hidden whitespace-nowrap text-center text-[11px] leading-7 text-gray-500;
+
+        &.is-weekend {
+            @apply bg-gray-50 text-gray-400;
+        }
+    }
+
+    // Rows.
+    .rk-gt__row {
+        @apply flex border-b border-gray-100;
+    }
+
+    .rk-gt__row--epic {
+        @apply h-14 bg-gray-50;
+
+        .rk-gt__cell-left {
+            @apply bg-gray-50;
+        }
+    }
+
+    .rk-gt__row--ticket {
+        @apply h-11 bg-white hover:bg-slate-50;
+
+        .rk-gt__cell-left {
+            @apply bg-white pl-12;
+        }
+
+        &:hover .rk-gt__cell-left {
+            @apply bg-slate-50;
+        }
+    }
+
+    .rk-gt__cell-right {
+        @apply relative shrink-0;
+
+        z-index: 2;
+    }
+
+    .rk-gt__chev {
+        @apply -ml-1 flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-base leading-none text-gray-500 transition hover:bg-gray-200;
+
+        &.is-closed {
+            transform: rotate(-90deg);
+        }
+    }
+
+    .rk-gt__dot {
+        @apply h-2.5 w-2.5 shrink-0 rounded-full;
+
+        &--muted {
+            @apply bg-gray-300;
+        }
+    }
+
+    .rk-gt__epic-text {
+        @apply flex min-w-0 flex-1 flex-col text-left text-sm font-semibold text-gray-900;
+    }
+
+    .rk-gt__epic-name {
+        @apply truncate text-left text-sm font-semibold text-gray-900 hover:text-primary-600;
+    }
+
+    .rk-gt__epic-range {
+        @apply text-xs font-normal text-gray-500;
+    }
+
+    .rk-gt__count {
+        @apply shrink-0 rounded-full bg-white px-2 py-0.5 text-xs font-medium text-gray-500 ring-1 ring-gray-200;
+    }
+
+    .rk-gt__ticket-name {
+        @apply min-w-0 flex-1 truncate text-left text-[13px] text-gray-700 hover:text-primary-600 hover:underline;
+    }
+
+    .rk-gt__avatar {
+        @apply h-6 w-6 shrink-0 rounded-full bg-gray-200 object-cover;
+
+        &--text {
+            @apply flex items-center justify-center bg-primary-50 text-[10px] font-semibold text-primary-700;
+        }
+    }
+
+    .rk-gt__pct {
+        @apply w-9 shrink-0 text-right text-xs text-gray-400;
+
+        &.is-done {
+            @apply font-semibold text-success-600;
+        }
+    }
+
+    // Bars (epics and tickets): solid pills with a slight 3D feel (lit top edge,
+    // darker bottom edge, soft drop shadow). The finished part is a darker
+    // shade, the name sits inside in white. They tilt up into place when the
+    // chart renders (staggered by --i) and lift on hover.
+    .rk-gt__bar,
+    .rk-gt__tbar {
+        @apply absolute flex items-center overflow-hidden rounded-full text-left;
+
+        background: color-mix(in srgb, var(--c) 92%, white);
+        transform-origin: left center;
+        box-shadow:
+            0 3px 6px -4px color-mix(in srgb, var(--c) 60%, black),
+            inset 0 1px 0 rgba(255, 255, 255, 0.3),
+            inset 0 -2px 0 rgba(0, 0, 0, 0.07);
+        transition: transform 0.2s ease, box-shadow 0.2s ease, filter 0.2s ease;
+        animation: rk-gt-bar-in 0.75s cubic-bezier(0.22, 1, 0.36, 1) both;
+        animation-delay: calc(var(--i, 0) * 45ms);
+
+        &:hover {
+            transform: translateY(-1px);
+            filter: brightness(1.03);
+            box-shadow:
+                0 6px 10px -6px color-mix(in srgb, var(--c) 65%, black),
+                inset 0 1px 0 rgba(255, 255, 255, 0.35),
+                inset 0 -2px 0 rgba(0, 0, 0, 0.07);
+        }
+    }
+
+    .rk-gt__bar {
+        top: 10px;
+        height: 36px;
+    }
+
+    .rk-gt__tbar {
+        top: 8px;
+        height: 28px;
+
+        &.is-open {
+            // not scheduled: runs up to today - lighter, dashed edge, dark text
+            background: color-mix(in srgb, var(--c) 30%, white);
+            box-shadow: none;
+            outline: 1.5px dashed color-mix(in srgb, var(--c) 85%, black);
+            outline-offset: -1.5px;
+
+            .rk-gt__bar-label {
+                color: color-mix(in srgb, var(--c) 45%, black);
+                text-shadow: none;
+            }
+        }
+    }
+
+    .rk-gt__bar-fill {
+        @apply absolute inset-y-0 left-0 rounded-full;
+
+        background: color-mix(in srgb, var(--c) 82%, black);
+        box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.2);
+        transform-origin: left center;
+        animation: rk-gt-fill 1s cubic-bezier(0.22, 1, 0.36, 1) both;
+        animation-delay: calc(var(--i, 0) * 45ms + 250ms);
+    }
+
+    .rk-gt__bar-label {
+        @apply relative z-10 truncate px-4 text-[13px] font-medium text-white;
+
+        text-shadow: 0 1px 1px rgba(0, 0, 0, 0.25);
+    }
+
+    .rk-gt__tbar .rk-gt__bar-label {
+        @apply px-3 text-xs;
+    }
+
+    @keyframes rk-gt-bar-in {
+        from {
+            opacity: 0;
+            transform: perspective(900px) rotateX(-45deg) scaleX(0.3);
+        }
+
+        to {
+            opacity: 1;
+            transform: perspective(900px) rotateX(0) scaleX(1);
+        }
+    }
+
+    @keyframes rk-gt-fill {
+        from {
+            transform: scaleX(0);
+        }
+    }
+
+    @keyframes rk-gt-draw {
+        from {
+            stroke-dashoffset: var(--len);
+        }
+    }
+
+    @keyframes rk-gt-fade {
+        from {
+            opacity: 0;
+        }
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+        .rk-gt__bar,
+        .rk-gt__tbar,
+        .rk-gt__bar-fill,
+        .rk-gt__arrow,
+        .rk-gt__arrow-head {
+            animation: none !important;
+        }
+    }
+
+    // Dependency arrows (blocked by / dependent epic).
+    .rk-gt__body {
+        @apply relative;
+    }
+
+    .rk-gt__arrows {
+        @apply pointer-events-none absolute top-0;
+
+        // below the sticky name column, above the row backgrounds
+        z-index: 0;
+        overflow: visible;
+    }
+
+    .rk-gt__arrow {
+        fill: none;
+        stroke: #5b6472;
+        stroke-width: 1.5;
+        stroke-linejoin: round;
+        --len: 1200px;
+        stroke-dasharray: var(--len);
+        animation: rk-gt-draw 0.9s ease-out 0.7s both;
+    }
+
+    .rk-gt__arrow-head {
+        fill: #5b6472;
+        animation: rk-gt-fade 0.3s ease-out 1.4s both;
+    }
+
+    // Vertical grid lines + "today" marker.
+    .rk-gt__overlay {
+        @apply pointer-events-none absolute;
+
+        top: 0;
+        bottom: 0;
+        left: var(--left);
+        z-index: 1;
+    }
+
+    .rk-gt__vline {
+        @apply absolute bottom-0 w-px bg-gray-100;
+
+        top: 3.5rem;
+    }
+
+    .rk-gt__weekend {
+        @apply absolute bottom-0;
+
+        top: 3.5rem;
+        background: repeating-linear-gradient(135deg, rgba(148, 163, 184, 0.16) 0, rgba(148, 163, 184, 0.16) 2px, transparent 2px, transparent 6px);
+    }
+
+    .rk-gt__today {
+        @apply absolute bottom-0 w-0.5;
+
+        background: #ee9a82;
+
+        top: 3.5rem;
+    }
+
+    .rk-gt__today-pill {
+        @apply absolute rounded-full px-2 py-0.5 text-[10px] font-semibold text-white;
+
+        background: #ee9a82;
+
+        top: 0.2rem;
+        transform: translateX(-50%);
+        z-index: 3;
+    }
+
+    .rk-gt__tip {
+        @apply pointer-events-none absolute z-50 flex w-60 flex-col gap-1 rounded-xl p-3 text-xs text-white;
+
+        background: rgba(38, 38, 38, 0.92);
+
+        b {
+            @apply text-sm font-semibold;
+        }
+
+        span {
+            @apply text-gray-200;
+        }
+    }
+}
+
+// --- Create / edit modals (Road Map, Kanban "Create ticket") ---------------
+.dialog-container {
+    .dialog {
+        @apply rounded-3xl border-0 p-6 shadow-2xl sm:p-8;
+
+        .dialog-header {
+            @apply border-b border-gray-100 text-xl font-bold tracking-tight text-gray-900;
+        }
+    }
+
+    // Native selects inside the modal forms: same pill as the other inputs.
+    .dialog select {
+        @apply h-[46px] w-full rounded-full border-gray-200 pl-5 pr-10 text-sm shadow-none hover:border-gray-400 focus:border-primary-500 focus:ring-primary-500;
+    }
+
+    // Locked fields (e.g. the project in the epic form) must look locked.
+    .dialog select:disabled,
+    .dialog input:disabled {
+        @apply cursor-not-allowed border-gray-200 bg-gray-100 text-gray-500 opacity-100 hover:border-gray-200;
+    }
+
+    .dialog-buttons {
+        @apply border-t border-gray-100;
+
+        button {
+            @include rk-btn;
+            @include rk-btn-color($rk-btn-primary);
+            @apply px-6;
+
+            min-width: 0;
+
+            &:not([type='submit']):not(.delete) {
+                @apply border border-gray-300 bg-white text-gray-600;
+                filter: none;
+            }
+
+            &.delete {
+                @include rk-btn-color($rk-btn-error);
+                @apply ml-auto;
+            }
+        }
+    }
+}
+
+// --- Empty states (all tables, Road Map, Analytics) -------------------------
+// The "x in a circle" bubble of Filament's table empty state becomes a sad
+// folder with a magnifier. The original icon is hidden (not removed); the
+// loading spinner that Filament shows while the table reloads is kept.
+.filament-tables-empty-state > div:first-child {
+    @apply h-40 w-56 rounded-none bg-transparent;
+
+    background-image: $rk-empty-art;
+    background-position: center;
+    background-repeat: no-repeat;
+    background-size: contain;
+
+    > svg:first-child {
+        display: none !important;
+    }
+}
+
+.rk-analytics-page .rk-an-empty--hero,
+.rk-roadmap-page .rk-gt__empty {
+    @apply flex flex-col items-center gap-2 bg-transparent;
+
+    &::before {
+        content: '';
+        @apply block h-40 w-56;
+
+        background-image: $rk-empty-art;
+        background-position: center;
+        background-repeat: no-repeat;
+        background-size: contain;
+    }
+}
+
+// --- Tools pages: Jira import, API tokens, General settings -----------------
+// Soft notices instead of solid yellow/blue/red bars, a pill submit button, a
+// readable token field, and the Jira wizard header. The pages are targeted by
+// the `rk-path-<slug>` body class that resources/js/filament.js sets.
+.rk-notice {
+    @apply flex w-full flex-col gap-1 rounded-2xl px-4 py-3 text-sm font-medium;
+
+    --n-bg: #e8f3fa;
+    --n-fg: #1f5fae;
+    background: var(--n-bg);
+    color: var(--n-fg);
+
+    &--info {
+        --n-bg: #e8f3fa;
+        --n-fg: #1f5fae;
+    }
+
+    &--warning {
+        --n-bg: #fdf3df;
+        --n-fg: #8a5a12;
+    }
+
+    &--danger {
+        --n-bg: #fbe7e2;
+        --n-fg: #a8432f;
+    }
+
+    &--success {
+        --n-bg: #e4f5ea;
+        --n-fg: #1f7a45;
+    }
+
+    > span:not(:first-child) {
+        @apply font-normal;
+    }
+}
+
+.rk-lead {
+    @apply px-1 text-sm text-gray-500;
+}
+
+.rk-submit {
+    @include rk-btn;
+    @include rk-btn-color($rk-btn-primary);
+    @apply px-6;
+}
+
+.rk-path-api-tokens {
+    .rk-token-notice {
+        @apply gap-2 p-5;
+    }
+
+    .rk-token-input {
+        @apply mt-1 h-11 w-full rounded-full border border-gray-200 bg-white px-5 font-mono text-xs text-gray-900 shadow-none;
+
+        &:focus {
+            @apply border-primary-500 ring-1 ring-primary-500;
+        }
+    }
+}
+
+.rk-path-jira-import {
+    // Wizard header: rounded bordered steps, current step in the primary colour.
+    .filament-forms-wizard-component > ol,
+    .filament-forms-wizard-component > div:first-child {
+        @apply overflow-hidden rounded-2xl border border-gray-200 bg-white;
+    }
+
+    // Wizard buttons (Previous / Next) as pills; the Import button is `.rk-submit`.
+    .filament-forms-wizard-component .filament-button {
+        @include rk-btn;
+        @apply px-6 focus:ring-0 focus:ring-offset-0;
+
+        &.bg-primary-600,
+        &[class*='bg-primary'] {
+            @include rk-btn-color($rk-btn-primary);
+        }
+
+        &[class~='bg-white'] {
+            @apply border border-gray-300 text-gray-600;
+            background-color: #fff;
+            filter: none;
+        }
+    }
+}
+
+// --- Filament modal footer buttons (forms in modals, e.g. "Buat token") -----
+// Same soft pills as everywhere else: coloured for the main action, outlined
+// for Cancel. Confirmation dialogs are SweetAlert and styled separately.
+.filament-modal-window .filament-modal-actions .filament-button {
+    @include rk-btn;
+    @apply px-6 focus:ring-0 focus:ring-offset-0;
+
+    &.bg-primary-600 {
+        @include rk-btn-color($rk-btn-primary);
+    }
+
+    &.bg-danger-600 {
+        @include rk-btn-color($rk-btn-error);
+    }
+
+    &.bg-success-600 {
+        @include rk-btn-color($rk-btn-success);
+    }
+
+    &.bg-warning-600 {
+        @include rk-btn-color($rk-btn-warning);
+    }
+
+    &[class~='bg-white'] {
+        @apply border border-gray-300 text-gray-600;
+        background-color: #fff;
+        filter: none;
+    }
+}
+
+// --- Language flags (General settings > Site language) ----------------------
+// Round flag before each language option, picked by the option's locale code
+// (data-value). Images come from flagcdn.com (img-src https: is allowed by the
+// CSP); the label text itself stays plain so the dropdown search is unaffected.
+$rk-lang-flags: ('en': 'gb', 'fr': 'fr', 'ar': 'sa', 'az': 'az', 'be': 'by', 'bg': 'bg', 'bn': 'bd', 'bs': 'ba', 'ca': 'es', 'cs': 'cz', 'cy': 'gb-wls', 'da': 'dk', 'de': 'de', 'el': 'gr', 'es': 'es', 'et': 'ee', 'eu': 'es', 'fa': 'ir', 'fi': 'fi', 'fil': 'ph', 'gl': 'es', 'he': 'il', 'hi': 'in', 'hr': 'hr', 'hu': 'hu', 'hy': 'am', 'id': 'id', 'is': 'is', 'it': 'it', 'ja': 'jp', 'ka': 'ge', 'kk': 'kz', 'km': 'kh', 'kn': 'in', 'ko': 'kr', 'lt': 'lt', 'lv': 'lv', 'mk': 'mk', 'mn': 'mn', 'mr': 'in', 'ms': 'my', 'nb': 'no', 'ne': 'np', 'nl': 'nl', 'pl': 'pl', 'ps': 'af', 'pt': 'pt', 'ro': 'ro', 'ru': 'ru', 'si': 'lk', 'sk': 'sk', 'sl': 'si', 'sq': 'al', 'sv': 'se', 'sw': 'tz', 'tg': 'tj', 'th': 'th', 'tk': 'tm', 'tl': 'ph', 'tr': 'tr', 'ug': 'cn', 'uk': 'ua', 'ur': 'pk', 'vi': 'vn', 'zh': 'cn');
+
+.rk-path-manage-general-settings {
+    .choices__item[data-value]::before {
+        content: none;
+    }
+
+    @each $lang, $cc in $rk-lang-flags {
+        .choices__item[data-value='#{$lang}']::before {
+            content: '';
+            @apply mr-2.5 inline-block h-6 w-6 shrink-0 rounded-full align-middle;
+
+            background: #e5e7eb url('https://flagcdn.com/w80/#{$cc}.png') center / cover no-repeat;
+            box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.06);
+        }
+
+        .choices__item[data-value='#{$lang}'] {
+            @apply flex items-center;
+        }
+    }
+}
+
+// --- User menu (top-right dropdown) ------------------------------------------
+// A profile card + three tiles + pill Log out, rendered by the
+// user-menu.account.before hook. Filament's own lists are hidden: they hold the
+// same links, so nothing is lost.
+.filament-main-topbar .filament-dropdown-panel:has(.rk-um) {
+    @apply w-[21rem] max-w-[calc(100vw-1.5rem)] divide-y-0 rounded-3xl border-0 p-6;
+
+    box-shadow: 0 12px 40px rgba(15, 23, 42, 0.14);
+
+    > .filament-dropdown-list {
+        display: none;
+    }
+}
+
+.rk-um {
+    &__title {
+        @apply mb-5 text-lg font-semibold text-gray-900;
+    }
+
+    &__user {
+        @apply flex items-center gap-4 border-b border-gray-200 pb-5;
+    }
+
+    &__avatar {
+        @apply h-20 w-20 shrink-0 rounded-full object-cover;
+    }
+
+    &__who {
+        @apply flex min-w-0 flex-col gap-0.5;
+
+        b {
+            @apply truncate text-base font-semibold text-gray-900;
+        }
+
+        span {
+            @apply truncate text-sm text-gray-500;
+        }
+    }
+
+    &__mail {
+        @apply mt-1 flex items-center gap-1.5;
+
+        svg {
+            @apply shrink-0;
+        }
+    }
+
+    &__items {
+        @apply flex flex-col gap-1 py-4;
+    }
+
+    &__item {
+        @apply flex items-center gap-4 rounded-2xl p-2 transition;
+
+        &:hover {
+            @apply bg-gray-50;
+        }
+
+        b {
+            @apply block text-sm font-semibold text-gray-900;
+        }
+
+        small {
+            @apply block text-xs text-gray-500;
+        }
+    }
+
+    &__badge {
+        @apply ml-auto rounded-full px-2 py-0.5 text-xs font-medium not-italic text-white;
+
+        background: #ee9a82;
+    }
+
+    &__tile {
+        @apply flex h-12 w-12 shrink-0 items-center justify-center rounded-xl;
+
+        &--blue {
+            background: #e7f0fb;
+            color: $rk-btn-primary;
+        }
+
+        &--green {
+            background: #e3f5ea;
+            color: #3fae6a;
+        }
+
+        &--red {
+            background: #fcebe6;
+            color: #e0785c;
+        }
+    }
+
+    &__logout {
+        @include rk-btn;
+        @include rk-btn-color($rk-btn-primary);
+        @apply w-full;
+    }
+}
+
+// --- My profile page ----------------------------------------------------------
+.rk-pf {
+    @apply mb-6;
+
+    &__banner {
+        @apply h-40 rounded-3xl md:h-48;
+
+        background: linear-gradient(120deg, #c9d8a8 0%, #8fb5a0 22%, #fbf1c4 45%, #f6c9c0 62%, #b99cf0 82%, #7d8cf2 100%);
+    }
+
+    &__card {
+        @apply relative -mt-14 flex flex-wrap items-center gap-x-6 gap-y-3 rounded-3xl bg-white px-6 pb-0 pt-6 md:mx-8;
+
+        box-shadow: 0 2px 14px rgba(15, 23, 42, 0.06);
+    }
+
+    &__avatar {
+        @apply -mt-16 h-28 w-28 shrink-0 rounded-full border-4 border-white object-cover;
+
+        box-shadow: 0 2px 10px rgba(15, 23, 42, 0.12);
+    }
+
+    &__who {
+        @apply min-w-0 flex-1;
+
+        h2 {
+            @apply flex flex-wrap items-center gap-2 text-2xl font-semibold text-gray-900;
+        }
+
+        p {
+            @apply mt-1 flex items-center gap-1.5 text-sm text-gray-600;
+        }
+    }
+
+    &__badge {
+        @apply rounded-full border px-3 py-0.5 text-xs font-normal;
+
+        border-color: $rk-btn-primary;
+        color: $rk-btn-primary;
+        background: #eaf2fc;
+    }
+
+    &__status {
+        @apply font-medium text-gray-800;
+
+        i {
+            @apply inline-block h-2.5 w-2.5 rounded-full;
+
+            background: #72cc90;
+        }
+    }
+
+    &__tabs {
+        @apply mt-2 flex w-full gap-6 border-t border-gray-100;
+    }
+
+    &__edit {
+        @include rk-btn;
+        @include rk-btn-color($rk-btn-primary);
+        @apply ml-auto self-start;
+    }
+
+    &__grid {
+        @apply mt-6 grid grid-cols-1 items-start gap-6 lg:grid-cols-[minmax(0,2fr)_minmax(0,3fr)] md:mx-8;
+    }
+
+    &__col {
+        @apply flex flex-col gap-6;
+    }
+
+    &__panel {
+        @apply rounded-3xl bg-white p-6;
+
+        box-shadow: 0 2px 14px rgba(15, 23, 42, 0.06);
+
+        h3 {
+            @apply mb-3 text-xl font-semibold text-gray-900;
+        }
+
+        h4 {
+            @apply mb-3 text-base font-semibold text-gray-900;
+        }
+
+        hr {
+            @apply my-5 border-gray-100;
+        }
+    }
+
+    &__about {
+        @apply text-sm leading-relaxed text-gray-700;
+    }
+
+    &__row {
+        @apply mb-3 flex items-center gap-4 rounded-2xl last:mb-0;
+
+        b {
+            @apply block text-sm font-semibold text-gray-900;
+        }
+
+        small {
+            @apply block text-sm text-gray-600;
+        }
+
+        &:is(a):hover {
+            @apply bg-gray-50;
+        }
+    }
+
+    &__tile {
+        @apply flex h-11 w-11 shrink-0 items-center justify-center rounded-full;
+
+        &--blue {
+            background: #e7f0fb;
+            color: $rk-btn-primary;
+        }
+
+        &--green {
+            background: #e3f5ea;
+            color: #3fae6a;
+        }
+
+        &--yellow {
+            background: #fdf3de;
+            color: #d9a441;
+        }
+
+        &--gray {
+            background: #eceef1;
+            color: #6f767e;
+        }
+    }
+
+    &__more {
+        @apply mt-3 inline-block text-sm;
+
+        color: $rk-btn-primary;
+    }
+
+    &__empty {
+        @apply py-4 text-sm text-gray-500;
+    }
+
+    &__ticket {
+        @apply flex items-center justify-between gap-4 border-b border-gray-100 py-3 last:border-0;
+
+        b {
+            @apply block text-sm font-semibold text-gray-900;
+        }
+
+        small {
+            @apply block text-xs text-gray-500;
+        }
+
+        &:hover b {
+            color: $rk-btn-primary;
+        }
+    }
+
+    &__chip {
+        @apply shrink-0 rounded-full px-3 py-1 text-xs;
+
+        background: color-mix(in srgb, var(--c) 14%, white);
+        color: var(--c);
+    }
+
+    &__tab {
+        @apply -mb-px flex items-center gap-2 border-b-2 border-transparent bg-transparent px-1 py-4 text-sm text-gray-600;
+
+        &.is-active {
+            border-color: $rk-btn-primary;
+            color: $rk-btn-primary;
+        }
+    }
+
+    &__stats {
+        @apply grid grid-cols-1 gap-4 sm:grid-cols-3;
+    }
+
+    &__stat {
+        @apply flex items-center gap-4 rounded-3xl bg-white p-5;
+
+        box-shadow: 0 2px 14px rgba(15, 23, 42, 0.06);
+
+        > span {
+            @apply flex h-14 w-14 shrink-0 items-center justify-center rounded-2xl;
+        }
+
+        b {
+            @apply block text-2xl font-semibold leading-tight text-gray-900;
+        }
+
+        small {
+            @apply text-sm text-gray-600;
+        }
+
+        &--blue > span {
+            background: #e7f0fb;
+            color: $rk-btn-primary;
+        }
+
+        &--green > span {
+            background: #e3f5ea;
+            color: #3fae6a;
+        }
+
+        &--red > span {
+            background: #fcebe6;
+            color: #e0785c;
+        }
+
+        &--yellow > span {
+            background: #fdf3de;
+            color: #d9a441;
+        }
+
+        &--gray > span {
+            background: #eceef1;
+            color: #6f767e;
+        }
+    }
+}
+
+// Breezy's own sections (personal info, password, 2FA, tokens) become stacked
+// rounded cards: title above, form inside, same as the other settings pages.
+.rk-path-my-profile {
+    .filament-breezy-grid-section {
+        @apply grid-cols-1 gap-3 md:mx-8;
+
+        > div:first-child {
+            @apply col-span-1;
+        }
+
+        > form,
+        > div:not(:first-child) {
+            @apply col-span-1;
+        }
+    }
+
+    .filament-breezy-grid-title {
+        @apply text-lg font-semibold text-gray-900;
+    }
+
+    .filament-card {
+        @apply rounded-3xl border-0 p-6;
+
+        box-shadow: 0 2px 14px rgba(15, 23, 42, 0.06);
+    }
+
+    .filament-hr {
+        @apply hidden;
+    }
+
+    form .filament-button.filament-button {
+        @include rk-btn;
+        @include rk-btn-color($rk-btn-primary);
+        @apply h-10 min-h-0 rounded-full px-5;
+        box-shadow: none;
+    }
+}
+
+// --- Inbox (user menu > My inbox) ---------------------------------------------
+.rk-inbox {
+    @apply rounded-3xl bg-white p-6;
+
+    box-shadow: 0 2px 14px rgba(15, 23, 42, 0.06);
+
+    &__head {
+        @apply mb-2 flex items-center justify-between gap-4;
+
+        h3 {
+            @apply text-xl font-semibold text-gray-900;
+        }
+    }
+
+    &__all,
+    &__read {
+        @apply rounded-full px-4 py-1.5 text-xs;
+
+        background: #e7f0fb;
+        color: $rk-btn-primary;
+
+        &:hover {
+            filter: brightness(0.96);
+        }
+    }
+
+    &__item {
+        @apply flex items-start gap-4 border-b border-gray-100 py-4 last:border-0;
+    }
+
+    &__dot {
+        @apply mt-1.5 h-2.5 w-2.5 shrink-0 rounded-full bg-transparent;
+    }
+
+    &__item.is-unread &__dot {
+        background: $rk-btn-primary;
+    }
+
+    &__body {
+        @apply flex min-w-0 flex-1 flex-col gap-0.5;
+
+        b {
+            @apply text-sm font-semibold text-gray-900;
+        }
+
+        small {
+            @apply text-xs text-gray-500;
+        }
+
+        a:hover b {
+            color: $rk-btn-primary;
+        }
+    }
+
+    &__empty {
+        @apply py-8 text-center text-sm text-gray-500;
+    }
+}
+
+// --- My profile: feed, team and projects tabs -----------------------------------
+.rk-pf {
+    &__tabs {
+        @apply overflow-x-auto;
+    }
+
+    &__tab {
+        @apply shrink-0 whitespace-nowrap;
+    }
+
+    &__mini {
+        @apply h-10 w-10 shrink-0 rounded-full object-cover;
+
+        &--lg {
+            @apply h-11 w-11;
+        }
+
+        &--xl {
+            @apply h-14 w-14;
+        }
+    }
+
+    &__error {
+        @apply mt-1 text-xs text-danger-600;
+    }
+
+    &__feedtabs {
+        @apply mb-4 flex items-center gap-1;
+
+        button {
+            @apply h-10 rounded-lg bg-transparent px-5 text-sm text-gray-800 transition;
+
+            &.is-active {
+                @apply text-white;
+
+                background: $rk-btn-primary;
+            }
+
+            &:not(.is-active):hover {
+                @apply bg-gray-50;
+            }
+        }
+    }
+
+    &__box {
+        @apply flex flex-col gap-3 rounded-3xl border border-gray-200 bg-white p-5;
+
+        textarea {
+            @apply w-full resize-none border-0 bg-transparent px-1 py-2 text-base text-gray-900 shadow-none;
+
+            &:focus {
+                @apply ring-0;
+            }
+
+            &::placeholder {
+                @apply text-gray-400;
+            }
+        }
+    }
+
+    &__toolbar {
+        @apply flex items-center gap-1 rounded-full bg-gray-100 px-4 py-2;
+
+        button {
+            @apply flex h-10 min-w-[2.5rem] items-center justify-center rounded-full bg-transparent px-2 text-gray-500 transition;
+
+            &:hover {
+                @apply bg-gray-200 text-gray-800;
+            }
+        }
+    }
+
+    &__ghost {
+        @apply flex items-center gap-2 bg-transparent px-2 py-1 text-base text-gray-700;
+
+        &:hover {
+            color: $rk-btn-primary;
+        }
+    }
+
+    &__emoji {
+        @apply relative;
+    }
+
+    &__emoji-pop {
+        @apply absolute bottom-full left-0 z-10 mb-2 grid w-56 grid-cols-6 gap-1 rounded-2xl border border-gray-100 bg-white p-2;
+
+        box-shadow: 0 8px 28px rgba(15, 23, 42, 0.14);
+
+        button {
+            @apply rounded-lg bg-transparent py-1 text-xl;
+
+            &:hover {
+                @apply bg-gray-100;
+            }
+        }
+    }
+
+    &__composer {
+        @apply flex flex-col gap-3;
+    }
+
+    &__author {
+        @apply flex items-center gap-3 text-sm;
+    }
+
+    &__composer-foot {
+        @apply flex flex-wrap items-center gap-4 pt-1;
+
+        small {
+            @apply ml-auto hidden text-xs text-gray-500 sm:block;
+        }
+
+        .rk-pf__post {
+            @apply ml-auto sm:ml-0;
+        }
+    }
+
+    &__post {
+        @include rk-btn;
+        @include rk-btn-color($rk-btn-primary);
+        @apply shrink-0;
+    }
+
+    &__post-card {
+        header {
+            @apply flex items-center gap-3;
+
+            > div {
+                @apply min-w-0 flex-1;
+            }
+
+            b {
+                @apply block text-sm font-semibold text-gray-900;
+            }
+
+            small {
+                @apply block text-xs text-gray-500;
+            }
+        }
+
+        footer {
+            @apply mt-4 flex items-center gap-5;
+        }
+    }
+
+    &__text {
+        @apply mt-4 break-words text-sm leading-relaxed text-gray-700;
+
+        ul {
+            @apply my-1 list-disc pl-5;
+        }
+
+        ol {
+            @apply my-1 list-decimal pl-5;
+        }
+
+        a {
+            color: $rk-btn-primary;
+
+            @apply underline;
+        }
+    }
+
+    &__icon {
+        @apply flex h-8 w-8 items-center justify-center rounded-full bg-transparent text-gray-400;
+
+        &:hover {
+            @apply bg-gray-100 text-gray-700;
+        }
+    }
+
+    &__act {
+        @apply flex items-center gap-2 bg-transparent text-sm text-gray-600;
+
+        &:hover,
+        &.is-on {
+            color: $rk-btn-primary;
+        }
+
+        &--end {
+            @apply ml-auto;
+        }
+    }
+
+    &__comments {
+        @apply mt-4 flex flex-col gap-4 border-t border-gray-100 pt-4;
+    }
+
+    &__comment {
+        @apply flex items-start gap-3;
+
+        > div {
+            @apply min-w-0 flex-1 rounded-2xl bg-gray-50 px-4 py-2;
+        }
+
+        b {
+            @apply text-sm font-semibold text-gray-900;
+
+            small {
+                @apply ml-1 text-xs font-normal text-gray-500;
+            }
+        }
+
+        .rk-pf__ctext {
+            @apply break-words text-sm text-gray-700;
+
+            ul {
+                @apply list-disc pl-5;
+            }
+
+            ol {
+                @apply list-decimal pl-5;
+            }
+
+            a {
+                color: $rk-btn-primary;
+
+                @apply underline;
+            }
+        }
+    }
+
+    &__reply {
+        @apply flex items-center gap-3;
+
+        input {
+            @apply h-10 min-w-0 flex-1 rounded-full border border-gray-200 bg-white px-5 text-sm shadow-none;
+
+            &:focus {
+                @apply border-primary-500 ring-1 ring-primary-500;
+            }
+        }
+    }
+
+    &__tab-body {
+        @apply mt-6 md:mx-8;
+    }
+
+    &__bar {
+        @apply mb-5 flex flex-wrap items-center justify-between gap-3;
+
+        h3 {
+            @apply flex items-center gap-3 text-2xl font-semibold text-gray-900;
+        }
+    }
+
+    &__count {
+        @apply rounded-full bg-gray-500 px-2.5 py-0.5 text-xs font-medium text-white;
+    }
+
+    &__search {
+        @apply flex h-11 w-full items-center gap-2 rounded-full border border-gray-200 bg-white px-4 text-gray-400 sm:w-72;
+
+        input {
+            @apply min-w-0 flex-1 border-0 bg-transparent p-0 text-sm text-gray-900 shadow-none;
+
+            &:focus {
+                @apply ring-0;
+            }
+        }
+    }
+
+    &__cards {
+        @apply grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3;
+    }
+
+    &__member {
+        @apply flex items-center gap-4 rounded-3xl bg-white p-5;
+
+        box-shadow: 0 2px 14px rgba(15, 23, 42, 0.06);
+
+        > div {
+            @apply min-w-0 flex-1;
+        }
+
+        b {
+            @apply block truncate text-base font-semibold text-gray-900;
+        }
+
+        small {
+            @apply block truncate text-sm text-gray-500;
+        }
+    }
+
+    &__project {
+        @apply flex flex-col items-center rounded-3xl bg-white px-5 pt-6 text-center transition;
+
+        box-shadow: 0 2px 14px rgba(15, 23, 42, 0.06);
+
+        &:hover {
+            transform: translateY(-2px);
+        }
+
+        b {
+            @apply mt-4 max-w-full truncate text-lg font-semibold text-gray-900;
+        }
+
+        small {
+            @apply mb-5 text-sm text-gray-500;
+        }
+    }
+
+    &__initial {
+        @apply flex h-24 w-24 items-center justify-center rounded-full text-4xl font-semibold;
+    }
+
+    &__project-foot {
+        @apply -mx-5 flex w-[calc(100%+2.5rem)] items-center justify-center gap-6 rounded-b-3xl border-t border-gray-100 bg-gray-50 py-3 text-sm text-gray-600;
+
+        span {
+            @apply flex items-center gap-1.5;
+        }
+    }
+}
+
+// The profile page draws its own banner + header card, so Filament's title bar
+// (Profil saya / Home . Profil) is redundant here.
+.rk-path-my-profile .filament-header.filament-header,
+.rk-path-inbox .filament-header.filament-header {
+    display: none;
+}
+
+// Phones: the profile tab splits into "Posts" and "About me" (data-sub is set
+// by Alpine); from lg up both columns are always visible side by side.
+.rk-pf__subtabs {
+    @apply col-span-full flex items-center gap-6 border-b border-gray-200 bg-white px-5 lg:hidden;
+
+    border-radius: 1.5rem 1.5rem 0 0;
+
+    button {
+        @apply -mb-px flex items-center gap-2 border-b-2 border-transparent bg-transparent px-1 py-4 text-sm text-gray-600 transition;
+
+        &.is-active {
+            border-color: $rk-btn-primary;
+            color: $rk-btn-primary;
+        }
+    }
+}
+
+@media (max-width: 1023px) {
+    .rk-pf__grid[data-sub='feed'] .rk-pf__col--about,
+    .rk-pf__grid[data-sub='about'] .rk-pf__col--feed {
+        display: none;
+    }
+}
+
+
+// --- Inbox: direct messages (Spike chat layout) ---------------------------------
+.rk-ib {
+    @apply grid min-h-[34rem] overflow-hidden rounded-3xl bg-white lg:grid-cols-[22rem_minmax(0,1fr)] xl:grid-cols-[26rem_minmax(0,1fr)];
+
+    height: calc(100vh - 9rem);
+    box-shadow: 0 2px 14px rgba(15, 23, 42, 0.06);
+
+    &__side {
+        @apply flex min-h-0 flex-col border-r border-gray-100;
+    }
+
+    &__me {
+        @apply flex items-center gap-4 p-6 pb-4;
+
+        b {
+            @apply block text-base font-semibold text-gray-900;
+        }
+
+        small {
+            @apply block text-sm text-gray-500;
+        }
+    }
+
+    &__avatar {
+        @apply h-11 w-11 shrink-0 rounded-full object-cover;
+
+        &--lg {
+            @apply h-14 w-14;
+        }
+    }
+
+    &__search {
+        @apply mx-6 flex h-11 items-center gap-2 rounded-full border border-gray-200 bg-white px-5 text-gray-400;
+
+        input {
+            @apply min-w-0 flex-1 border-0 bg-transparent p-0 text-sm text-gray-900 shadow-none;
+
+            &:focus {
+                @apply ring-0;
+            }
+        }
+    }
+
+    &__tabs {
+        @apply mt-4 flex gap-5 border-b border-gray-100 px-6;
+
+        button {
+            @apply -mb-px flex items-center gap-2 border-b-2 border-transparent bg-transparent py-3 text-sm text-gray-600;
+
+            &.is-active {
+                border-color: $rk-btn-primary;
+                color: $rk-btn-primary;
+            }
+        }
+    }
+
+    &__badge {
+        @apply rounded-full px-1.5 text-xs text-white;
+
+        background: #ee9a82;
+    }
+
+    &__list {
+        @apply min-h-0 flex-1 overflow-y-auto;
+    }
+
+    &__none {
+        @apply p-6 text-sm text-gray-500;
+    }
+
+    &__row {
+        @apply flex w-full items-center gap-4 bg-transparent px-6 py-4 text-left transition;
+
+        &:hover {
+            @apply bg-gray-50;
+        }
+
+        &.is-active {
+            background: #eaf1fb;
+        }
+    }
+
+    &__row-body {
+        @apply flex min-w-0 flex-1 flex-col gap-0.5;
+    }
+
+    &__row-top,
+    &__row-bottom {
+        @apply flex items-center justify-between gap-3;
+    }
+
+    &__row-top b {
+        @apply truncate text-base font-semibold text-gray-900;
+    }
+
+    &__row-top small {
+        @apply shrink-0 text-xs text-gray-500;
+    }
+
+    &__row-bottom small {
+        @apply truncate text-sm text-gray-500;
+
+        &.is-unread {
+            @apply font-semibold text-gray-900;
+        }
+    }
+
+    &__dot {
+        @apply h-2.5 w-2.5 shrink-0 rounded-full;
+
+        background: $rk-btn-primary;
+    }
+
+    &__main {
+        @apply flex min-h-0 min-w-0 flex-col;
+    }
+
+    &__head {
+        @apply flex items-center gap-4 border-b border-gray-100 px-6 py-4;
+
+        > div {
+            @apply min-w-0 flex-1;
+        }
+
+        b {
+            @apply block truncate text-lg font-semibold text-gray-900;
+        }
+
+        small {
+            @apply block truncate text-sm text-gray-500;
+        }
+    }
+
+    &__back {
+        @apply flex h-9 w-9 items-center justify-center rounded-full bg-transparent text-gray-600 lg:hidden;
+
+        &:hover {
+            @apply bg-gray-100;
+        }
+    }
+
+    &__link {
+        @apply rounded-full px-4 py-1.5 text-xs;
+
+        background: #e7f0fb;
+        color: $rk-btn-primary;
+    }
+
+    &__feed {
+        @apply min-h-0 flex-1 overflow-y-auto px-6 py-4;
+    }
+
+    &__thread {
+        @apply flex flex-col gap-5;
+    }
+
+    &__older {
+        @apply mx-auto rounded-full px-4 py-1.5 text-xs;
+
+        background: #e7f0fb;
+        color: $rk-btn-primary;
+    }
+
+    &__msg {
+        @apply flex max-w-[85%] items-start gap-3;
+
+        small {
+            @apply mb-1 block text-xs text-gray-500;
+        }
+
+        &.is-mine {
+            @apply ml-auto flex-row-reverse;
+
+            > div {
+                @apply text-right;
+            }
+
+            .rk-ib__bubble {
+                @apply text-left;
+
+                background: #e1edfb;
+            }
+        }
+    }
+
+    &__bubble {
+        @apply inline-block break-words rounded-2xl px-4 py-2.5 text-sm leading-relaxed text-gray-800;
+
+        background: #eef2f8;
+
+        ul {
+            @apply list-disc pl-5;
+        }
+
+        ol {
+            @apply list-decimal pl-5;
+        }
+
+        a {
+            color: $rk-btn-primary;
+
+            @apply underline;
+        }
+    }
+
+    &__compose {
+        @apply flex items-center gap-3 border-t border-gray-100 px-6 py-3;
+
+        input {
+            @apply h-12 min-w-0 flex-1 border-0 bg-transparent p-0 text-base text-gray-900 shadow-none;
+
+            &:focus {
+                @apply ring-0;
+            }
+        }
+
+        button {
+            @apply flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-transparent;
+
+            color: $rk-btn-primary;
+
+            &:hover {
+                background: #e7f0fb;
+            }
+        }
+    }
+
+    &__blank {
+        @apply flex flex-1 flex-col items-center justify-center gap-2 p-8 text-center text-gray-400;
+
+        b {
+            @apply text-lg font-semibold text-gray-700;
+        }
+
+        span {
+            @apply text-sm;
+        }
+    }
+}
+
+// Phones: one pane at a time (data-open is chat when a conversation or the
+// notifications are open, list otherwise).
+@media (max-width: 1023px) {
+    .rk-ib {
+        @apply block;
+
+        &[data-open='chat'] .rk-ib__side,
+        &[data-open='list'] .rk-ib__main {
+            display: none;
+        }
+
+        &[data-open='list'] .rk-ib__side,
+        &[data-open='chat'] .rk-ib__main {
+            height: 100%;
+        }
+    }
+}
+
+// Inbox: attachments, media panel and the three-dots toggle.
+.rk-ib {
+    &__chat {
+        @apply flex min-h-0 flex-1 flex-col;
+    }
+
+    &__body {
+        @apply relative flex min-h-0 flex-1;
+
+        .rk-ib__thread {
+            @apply min-w-0 flex-1;
+        }
+    }
+
+    &__kebab {
+        @apply ml-auto flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-transparent text-gray-500 transition;
+
+        &:hover,
+        &.is-on {
+            @apply bg-gray-100 text-gray-800;
+        }
+    }
+
+    &__panel {
+        @apply absolute inset-0 z-10 overflow-y-auto bg-white p-6 xl:static xl:z-auto xl:w-[20rem] xl:shrink-0 xl:border-l xl:border-gray-100;
+
+        h4 {
+            @apply mb-3 mt-1 text-lg font-semibold text-gray-900;
+        }
+
+        p {
+            @apply mb-4 text-sm text-gray-500;
+        }
+    }
+
+    &__thumbs {
+        @apply mb-6 grid grid-cols-3 gap-2;
+
+        a {
+            @apply block aspect-square overflow-hidden rounded-2xl bg-gray-100;
+        }
+
+        img {
+            @apply h-full w-full object-cover;
+        }
+
+        p {
+            @apply col-span-3 mb-0;
+        }
+    }
+
+    &__files {
+        @apply flex flex-col gap-2;
+    }
+
+    &__note {
+        @apply mt-5 rounded-2xl bg-gray-50 p-3 text-xs text-gray-500;
+    }
+
+    &__img {
+        @apply mb-1 block max-w-[20rem] overflow-hidden rounded-2xl bg-gray-100;
+
+        img {
+            @apply block max-h-72 w-full object-cover;
+        }
+    }
+
+    &__file {
+        @apply mb-1 flex items-center gap-3 rounded-2xl bg-white p-2 pr-4 text-left transition;
+
+        &:hover {
+            @apply bg-gray-50;
+        }
+
+        b {
+            @apply block max-w-[11rem] truncate text-sm font-semibold text-gray-900;
+        }
+
+        small {
+            @apply mb-0 block text-xs text-gray-500;
+        }
+    }
+
+    &__ext {
+        @apply flex h-11 w-11 shrink-0 items-center justify-center rounded-xl text-xs font-semibold;
+
+        background: #eceef1;
+        color: #6f767e;
+
+        &--pdf {
+            background: #fcebe6;
+            color: #e0785c;
+        }
+
+        &--doc,
+        &--docx {
+            background: #e7f0fb;
+            color: $rk-btn-primary;
+        }
+
+        &--xls,
+        &--xlsx,
+        &--csv {
+            background: #e3f5ea;
+            color: #3fae6a;
+        }
+
+        &--ppt,
+        &--pptx {
+            background: #fdf3de;
+            color: #d9a441;
+        }
+    }
+
+    &__chip {
+        @apply mx-6 mb-2 flex w-fit max-w-full items-center gap-2 rounded-full bg-gray-100 px-4 py-1.5 text-sm text-gray-700;
+
+        span {
+            @apply truncate;
+        }
+
+        button {
+            @apply flex shrink-0 items-center justify-center bg-transparent text-gray-500;
+        }
+    }
+
+    &__gone {
+        @apply flex items-center gap-2 text-gray-500;
+    }
+}
+
+// --- Organization settings (Owner / Admin / Member) ---------------------------
+.rk-og {
+    @apply flex w-full flex-col gap-6;
+
+    &__hero {
+        @apply flex flex-wrap items-center gap-x-6 gap-y-4 rounded-3xl bg-white p-6;
+
+        box-shadow: 0 2px 14px rgba(15, 23, 42, 0.06);
+    }
+
+    &__logo {
+        @apply flex h-16 w-16 shrink-0 items-center justify-center rounded-2xl text-2xl font-semibold;
+
+        background: #e7f0fb;
+        color: $rk-btn-primary;
+    }
+
+    &__hero-main {
+        @apply min-w-0 flex-1;
+
+        h2 {
+            @apply flex flex-wrap items-center gap-2 text-2xl font-semibold text-gray-900;
+        }
+
+        p {
+            @apply mt-1 text-sm text-gray-500;
+        }
+    }
+
+    &__stats {
+        @apply w-full;
+
+        .rk-pf__stat {
+            @apply p-4;
+
+            b {
+                @apply text-lg;
+            }
+
+            > span {
+                @apply h-12 w-12;
+            }
+        }
+    }
+
+    &__panel {
+        @apply rounded-3xl bg-white p-6;
+
+        box-shadow: 0 2px 14px rgba(15, 23, 42, 0.06);
+    }
+
+    &__panel-head {
+        @apply mb-2 flex flex-wrap items-center justify-between gap-3;
+
+        h3 {
+            @apply flex items-center gap-3 text-xl font-semibold text-gray-900;
+        }
+    }
+
+    &__row {
+        @apply flex items-center gap-4 border-b border-gray-100 py-4 last:border-0;
+
+        &--stack {
+            @apply flex-col items-stretch gap-3;
+        }
+    }
+
+    &__row-top {
+        @apply flex items-center gap-4;
+    }
+
+    &__avatar {
+        @apply flex h-11 w-11 shrink-0 items-center justify-center rounded-full text-sm font-semibold;
+    }
+
+    &__row-main {
+        @apply min-w-0 flex-1;
+
+        b {
+            @apply block truncate text-sm font-semibold text-gray-900;
+        }
+
+        small {
+            @apply block text-xs text-gray-500;
+        }
+    }
+
+    &__meta {
+        @apply flex flex-col gap-1 pl-[3.75rem] text-xs text-gray-500;
+    }
+
+    &__actions {
+        @apply flex flex-wrap gap-2 pl-[3.75rem];
+    }
+
+    &__chip {
+        @apply shrink-0 rounded-full px-3 py-1 text-xs font-medium;
+
+        &--yellow {
+            background: #fdf3de;
+            color: #b8841f;
+        }
+
+        &--blue {
+            background: #e7f0fb;
+            color: $rk-btn-primary;
+        }
+
+        &--red {
+            background: #fcebe6;
+            color: #d0644a;
+        }
+
+        &--gray {
+            background: #eceef1;
+            color: #6f767e;
+        }
+
+        &--green {
+            background: #e3f5ea;
+            color: #3fae6a;
+        }
+    }
+
+    &__ghost {
+        @apply inline-flex h-10 items-center gap-2 rounded-full border bg-white px-4 text-sm transition;
+
+        border-color: #f3c7bb;
+        color: #d0644a;
+
+        &:hover {
+            background: #fcebe6;
+        }
+    }
+}
+
+// Pill buttons on the Organization pages (Filament's own buttons, per colour).
+.rk-path-organization .filament-button.filament-button,
+.rk-path-create-organization .filament-button.filament-button {
+    @include rk-btn;
+    @include rk-btn-color($rk-btn-primary);
+    @apply h-10 min-h-0 rounded-full px-5;
+
+    box-shadow: none;
+
+    &.bg-danger-600 {
+        background-color: $rk-btn-error;
+    }
+
+    &.bg-warning-600 {
+        background-color: $rk-btn-warning;
+    }
+
+    &.bg-success-600 {
+        background-color: $rk-btn-success;
+    }
+}
+
+// A table's header actions share the row-actions class: keep them as a real
+// pill button instead of the three-dots stand-in used for rows.
+:is(.rk-path-organization, .rk-path-platform-organizations) .filament-tables-header .filament-tables-actions-container {
+    @apply h-auto w-auto cursor-default rounded-none bg-transparent;
+
+    &:hover {
+        background: transparent;
+    }
+
+    &::before {
+        content: none;
+    }
+
+    > * {
+        display: inline-flex !important;
+    }
+
+    .filament-link {
+        @include rk-btn;
+        @include rk-btn-color($rk-btn-primary);
+        @apply px-5;
+
+        svg {
+            @apply text-white;
+        }
+    }
+}
+
+// --- Organization invitation landing page ---------------------------------------
+.rk-inv {
+    @apply flex flex-col items-center gap-4 text-center;
+
+    h2 {
+        @apply text-2xl font-bold tracking-tight text-gray-900;
+    }
+
+    p {
+        @apply text-sm leading-relaxed text-gray-600;
+    }
+
+    &__hint {
+        @apply rounded-2xl bg-gray-50 px-4 py-3 text-gray-500;
+    }
+
+    &__foot {
+        @apply mt-2 text-sm text-gray-500;
+    }
+
+    &__icon {
+        @apply flex h-16 w-16 items-center justify-center rounded-full;
+
+        &--blue {
+            background: #e7f0fb;
+            color: $rk-btn-primary;
+        }
+
+        &--green {
+            background: #e3f5ea;
+            color: #3fae6a;
+        }
+
+        &--yellow {
+            background: #fdf3de;
+            color: #d9a441;
+        }
+
+        &--red {
+            background: #fcebe6;
+            color: #e0785c;
+        }
+    }
+
+    .filament-button {
+        @include rk-btn;
+        @include rk-btn-color($rk-btn-primary);
+        @apply w-full;
+    }
+}
+
+// "+ Create organization" in the sidebar switcher: a small outline pill.
+.filament-sidebar .organization-switcher .rk-org-create {
+    @apply inline-flex h-8 w-fit items-center rounded-full border px-4 text-xs font-medium transition;
+
+    border-color: #cfe0f6;
+    color: $rk-btn-primary;
+
+    &:hover {
+        background: #e7f0fb;
+    }
+}
+
+// Members table on phones: each row becomes a compact card (name + e-mail on
+// the left, role badge + row menu on the right) instead of a clipped table.
+@media (max-width: 639px) {
+    .rk-path-organization {
+        .filament-tables-header-toolbar {
+            @apply h-auto flex-wrap gap-2;
+        }
+
+        .filament-tables-header .filament-tables-actions-container {
+            @apply w-full;
+
+            .filament-link {
+                @apply w-full;
+            }
+        }
+
+        .filament-tables-search-container {
+            @apply w-full;
+
+            > * {
+                @apply w-full max-w-none;
+            }
+        }
+
+        .filament-tables-table thead {
+            display: none;
+        }
+
+        .filament-tables-table tbody tr:not(.filament-tables-pagination-container tr) {
+            display: grid;
+            grid-template-columns: minmax(0, 1fr) auto;
+            grid-template-areas:
+                'name role'
+                'email menu';
+            @apply items-center gap-x-3 gap-y-0.5 px-4 py-3;
+
+            > td {
+                @apply min-w-0 border-0 bg-transparent p-0 shadow-none;
+
+                // Filament pads the cell's inner wrapper; the grid gap does the spacing here.
+                > div,
+                .filament-tables-column-wrapper,
+                .filament-tables-text-column {
+                    @apply p-0 px-0 py-0;
+                }
+            }
+
+            > .filament-table-cell-name {
+                grid-area: name;
+            }
+
+            > .filament-table-cell-email {
+                grid-area: email;
+
+                @apply text-xs text-gray-500;
+            }
+
+            > .filament-table-cell-member-role {
+                grid-area: role;
+                @apply justify-self-end;
+            }
+
+            > .filament-tables-actions-cell {
+                grid-area: menu;
+                @apply justify-self-end;
+
+                &::before,
+                &::after {
+                    display: none;
+                }
+            }
+
+            > .filament-tables-reorder-cell {
+                display: none;
+            }
+        }
+    }
+}
+
+// --- Timesheet (dashboard, export, list) ---------------------------------------
+.rk-ts {
+    @apply flex w-full flex-col gap-6;
+
+    &__stats {
+        @apply sm:grid-cols-2 xl:grid-cols-4;
+    }
+
+    &__grid {
+        @apply grid items-start gap-6 lg:grid-cols-[minmax(0,3fr)_minmax(0,2fr)];
+    }
+
+    &__chips {
+        @apply mb-5 flex flex-wrap gap-2;
+
+        button {
+            @apply h-9 rounded-full border bg-white px-4 text-sm text-gray-700 transition;
+
+            border-color: #cfe0f6;
+
+            &:hover {
+                background: #e7f0fb;
+                color: $rk-btn-primary;
+            }
+        }
+    }
+
+    &__note {
+        @apply mb-4 text-sm text-gray-500;
+    }
+
+    &__cols {
+        @apply flex flex-wrap gap-2;
+
+        span {
+            @apply rounded-full px-3 py-1 text-xs font-medium;
+
+            background: #e7f0fb;
+            color: $rk-btn-primary;
+        }
+    }
+}
+
+// Dashboard cards: same soft white cards as the rest of the app, pill filter.
+.rk-path-timesheet-dashboard {
+    .filament-widget,
+    .filament-widgets-chart-widget {
+        @apply rounded-3xl border-0 bg-white;
+
+        box-shadow: 0 2px 14px rgba(15, 23, 42, 0.06);
+    }
+
+    // Filament's own grid classes (lg:col-span-6) are not in its compiled CSS:
+    // monthly chart full width, the other two side by side.
+    .filament-widgets-container {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr);
+
+        @media (min-width: 1024px) {
+            grid-template-columns: repeat(6, minmax(0, 1fr));
+
+            > .filament-widget {
+                grid-column: span 3 / span 3;
+
+                &:first-child {
+                    grid-column: 1 / -1;
+                }
+            }
+        }
+    }
+
+    .filament-widgets-chart-widget {
+        @apply p-6;
+
+        // The widget's own inner card would be a card inside the card.
+        > div {
+            @apply rounded-none bg-transparent p-0 shadow-none;
+
+            // The generic dashboard rules centre the canvas (my-auto / mx-auto),
+            // which makes Chart.js fall back to its 300x150 default. A fixed-height,
+            // relative box lets it fill the card (maintainAspectRatio is off).
+            > div:last-child {
+                @apply my-0;
+            }
+
+            .filament-hr + div {
+                @apply relative my-0 w-full;
+
+                height: 300px;
+            }
+
+            canvas {
+                @apply mx-0 w-full;
+            }
+        }
+
+        // Heading + filter: wrap instead of overflowing narrow cards.
+        [class~='justify-between'][class~='items-center'] {
+            flex-wrap: wrap;
+            gap: 0.75rem;
+        }
+
+        select {
+            @apply w-auto min-w-0 max-w-full;
+        }
+
+        h2,
+        .filament-widgets-chart-widget-heading {
+            @apply text-lg font-semibold text-gray-900;
+        }
+
+        select {
+            @apply h-10 max-w-full rounded-full border border-gray-200 bg-white px-4 text-sm text-gray-700 shadow-none;
+
+            &:focus {
+                @apply border-primary-500 ring-1 ring-primary-500;
+            }
+        }
+    }
+}
+
+// Export page: pill date pickers and download button.
+.rk-path-timesheet-export .filament-button.filament-button {
+    @include rk-btn;
+    @include rk-btn-color($rk-btn-primary);
+    @apply h-10 min-h-0 rounded-full px-5;
+
+    box-shadow: none;
+}
+
+// Export page: the form's own card would sit inside the panel card.
+.rk-path-timesheet-export.rk-path-timesheet-export {
+    .filament-forms-card-component {
+        @apply border-0 bg-transparent p-0 shadow-none;
+    }
+
+    .filament-button.filament-button {
+        flex-direction: row;
+        white-space: nowrap;
+    }
+
+    .rk-ts__chips {
+        @apply mt-3;
+    }
+}
+
+// Widget filter dropdown: the app's pill dropdown (same look as .rk-dd elsewhere).
+.rk-path-timesheet-dashboard .rk-dd {
+    @apply relative shrink-0;
+
+    &__btn {
+        @apply flex h-10 w-full items-center justify-between gap-3 rounded-full border border-gray-200 bg-white pl-5 pr-4 text-left text-sm text-gray-800 transition-colors hover:border-gray-400 focus:border-primary-500 focus:outline-none focus:ring-1 focus:ring-primary-500;
+    }
+
+    &__label {
+        @apply min-w-0 flex-1 truncate;
+    }
+
+    &__chevron {
+        @apply h-4 w-4 shrink-0 text-gray-500 transition-transform;
+    }
+
+    &__list {
+        @apply absolute right-0 top-full z-30 mt-2 max-h-72 min-w-[11rem] overflow-y-auto rounded-3xl bg-white p-1.5 shadow-xl ring-1 ring-black/5;
+    }
+
+    &__item {
+        @apply block w-full whitespace-nowrap rounded-full px-4 py-2 text-left text-sm text-gray-700 hover:bg-gray-100 hover:text-gray-900;
+
+        &.is-selected {
+            @apply bg-primary-50 font-medium text-primary-700;
+        }
+    }
+}
+
+// --- Platform dashboard (Super Admin) -----------------------------------------
+.rk-pl {
+    @apply flex w-full flex-col gap-6;
+
+    &__stats {
+        @apply grid grid-cols-1 gap-4 sm:grid-cols-2 2xl:grid-cols-4;
+    }
+
+    &__stat {
+        @apply flex items-start gap-4 rounded-3xl bg-white p-5;
+
+        box-shadow: 0 2px 14px rgba(15, 23, 42, 0.06);
+
+        small {
+            @apply block text-sm text-gray-600;
+        }
+
+        b {
+            @apply mt-1 block text-3xl font-semibold leading-none text-gray-900;
+        }
+
+        em {
+            @apply mt-2 block text-xs not-italic;
+
+            span {
+                @apply text-gray-500;
+            }
+
+            &.is-up {
+                color: #3fae6a;
+            }
+
+            &.is-down {
+                color: #e0785c;
+            }
+
+            &.is-flat {
+                @apply text-gray-400;
+            }
+        }
+    }
+
+    &__stat-icon,
+    &__act-icon {
+        @apply flex shrink-0 items-center justify-center rounded-2xl;
+    }
+
+    &__stat-icon {
+        @apply h-14 w-14;
+    }
+
+    &__act-icon {
+        @apply h-11 w-11;
+    }
+
+    // Same shape as the reference: one tall right column (activity, then quick
+    // actions) beside the cards, the charts and the table.
+    // Wide screens: cards + charts + table in the left column, activity and quick
+    // actions in a tall right column. Medium screens: the table drops full width
+    // under both, so no column has to be squeezed.
+    &__layout {
+        @apply grid items-start gap-6;
+
+        grid-template-columns: minmax(0, 1fr);
+        grid-template-areas:
+            'top'
+            'table'
+            'side';
+
+        @media (min-width: 1280px) {
+            grid-template-columns: minmax(0, 1fr) 18rem;
+            grid-template-areas:
+                'top side'
+                'table table';
+        }
+
+        // The side column spans both rows. `auto 1fr` makes the top row keep its own
+        // height, so when the detail panel makes the side column longer the extra
+        // length goes below the table instead of pushing the table down.
+        @media (min-width: 1536px) {
+            grid-template-columns: minmax(0, 1fr) 22rem;
+            grid-template-rows: auto minmax(0, 1fr);
+            grid-template-areas:
+                'top side'
+                'table side';
+        }
+    }
+
+    &__top {
+        @apply flex min-w-0 flex-col gap-6 self-stretch;
+
+        grid-area: top;
+
+        // When the right column is taller, the chart panels grow to meet it.
+        .rk-pl__charts {
+            @apply flex-1;
+        }
+
+        .rk-og__panel {
+            @apply flex flex-col;
+        }
+    }
+
+    &__table {
+        @apply min-w-0;
+
+        grid-area: table;
+    }
+
+    &__side {
+        @apply flex min-w-0 flex-col gap-6;
+
+        grid-area: side;
+    }
+
+    &__charts {
+        @apply grid items-stretch gap-6 md:grid-cols-[minmax(0,1.25fr)_minmax(0,1fr)];
+    }
+
+    &__sub {
+        @apply mt-0.5 text-sm text-gray-500;
+    }
+
+    &__canvas {
+        @apply relative mt-4 w-full flex-1;
+
+        min-height: 260px;
+    }
+
+    // Legend beside the ring when the card is wide enough, below it otherwise.
+    &__donut {
+        @apply mt-2 flex flex-wrap items-center justify-center gap-x-6 gap-y-5;
+    }
+
+    &__donut-chart {
+        @apply relative h-48 w-48 shrink-0;
+    }
+
+    &__legend {
+        @apply flex flex-1 flex-col gap-3 text-sm;
+
+        min-width: 11rem;
+
+        li {
+            @apply flex items-center gap-3;
+
+            i {
+                @apply h-2.5 w-2.5 shrink-0 rounded-full;
+            }
+
+            span {
+                @apply flex-1 text-gray-800;
+            }
+
+            b {
+                @apply font-medium text-gray-900;
+            }
+
+            small {
+                @apply w-10 text-right text-gray-500;
+            }
+        }
+    }
+
+    // Icon | text | time. In the narrower right column (xl, below 2xl) the time
+    // drops under the text so titles are not cut to "Tiket ba...".
+    &__act {
+        @apply grid items-center gap-x-3 border-b border-gray-100 py-3 last:border-0;
+
+        grid-template-columns: auto minmax(0, 1fr);
+
+        > span {
+            grid-row: span 2;
+        }
+
+        > div {
+            @apply min-w-0;
+        }
+
+        b {
+            @apply block truncate text-sm font-semibold text-gray-900;
+        }
+
+        small {
+            @apply block truncate text-xs text-gray-500;
+        }
+
+        time {
+            @apply text-xs text-gray-400;
+
+            grid-column: 2;
+        }
+
+        @media (min-width: 1536px) {
+            grid-template-columns: auto minmax(0, 1fr) auto;
+
+            > span {
+                grid-row: auto;
+            }
+
+            time {
+                grid-column: auto;
+                white-space: nowrap;
+            }
+        }
+    }
+
+    &__qa {
+        @apply mb-2 flex w-full items-center gap-3 rounded-2xl border border-gray-100 bg-white p-3 text-left transition last:mb-0;
+
+        &:hover {
+            @apply bg-gray-50;
+        }
+    }
+
+    &__qa-text {
+        @apply min-w-0 flex-1;
+
+        b {
+            @apply block text-sm font-semibold text-gray-900;
+        }
+
+        small {
+            @apply block truncate text-xs text-gray-500;
+        }
+    }
+
+    &__qa-chevron {
+        @apply h-4 w-4 shrink-0 text-gray-400;
+    }
+
+    // Organization cell in the table: coloured initial + name.
+    &__org {
+        @apply flex items-center gap-3;
+
+        b {
+            @apply font-semibold text-gray-900;
+        }
+    }
+
+    &__tile {
+        @apply flex h-9 w-9 shrink-0 items-center justify-center rounded-xl text-xs font-semibold not-italic;
+    }
+}
+
+// Chart-card filter: the same pill dropdown as the other pages, a bit smaller.
+.rk-pl .rk-dd {
+    @apply relative shrink-0;
+
+    &__btn {
+        @apply flex h-10 w-full items-center justify-between gap-3 rounded-full border border-gray-200 bg-white pl-5 pr-4 text-left text-sm text-gray-800 transition-colors hover:border-gray-400 focus:border-primary-500 focus:outline-none focus:ring-1 focus:ring-primary-500;
+    }
+
+    &__label {
+        @apply min-w-0 flex-1 truncate;
+    }
+
+    &__chevron {
+        @apply h-4 w-4 shrink-0 text-gray-500 transition-transform;
+    }
+
+    &__list {
+        @apply absolute right-0 top-full z-30 mt-2 max-h-72 min-w-[11rem] overflow-y-auto rounded-3xl bg-white p-1.5 shadow-xl ring-1 ring-black/5;
+    }
+
+    &__item {
+        @apply block w-full whitespace-nowrap rounded-full px-4 py-2 text-left text-sm text-gray-700 hover:bg-gray-100 hover:text-gray-900;
+
+        &.is-selected {
+            @apply bg-primary-50 font-medium text-primary-700;
+        }
+    }
+}
+
+// Purple tint used by the platform dashboard (projects, new users).
+.rk-pf__tile--purple {
+    background: #ece8fb;
+    color: #8b6fd6;
+}
+
+.rk-pf__tile--red {
+    background: #fcebe6;
+    color: #e0785c;
+}
+
+// Platform organizations table: tighter cells so every column fits next to the
+// activity column; long Full Access notes wrap instead of widening the table.
+.rk-path-platform-organizations .filament-tables-table {
+    th,
+    td {
+        padding-left: 0.5rem;
+        padding-right: 0.5rem;
+    }
+
+    td > div,
+    td .filament-tables-column-wrapper,
+    td .filament-tables-text-column {
+        padding-left: 0.25rem;
+        padding-right: 0.25rem;
+    }
+
+    .filament-table-cell-full-access-status {
+        max-width: 13rem;
+
+        * {
+            white-space: normal;
+        }
+    }
+
+    .filament-table-cell-created-at {
+        white-space: nowrap;
+    }
+}
+
+// --- Support session (Super Admin) -------------------------------------------
+// CSS only: the blade (and the 295 tests around it) is untouched. Plain CSS in
+// places on purpose - selectors with `.flex` would make Tailwind's @apply loop.
+.rk-path-platform-support-session {
+    // Each section (heading + content) is a white card.
+    [class~='flex'][class~='flex-col']:has(> .rk-sp__section-head, > h3) {
+        background: #fff;
+        border-radius: 1.75rem;
+        box-shadow: 0 2px 14px rgba(15, 23, 42, 0.06);
+        overflow-x: auto;
+        padding: 1.5rem;
+
+        h3 {
+            color: #111827;
+            font-size: 1.25rem;
+            font-weight: 600;
+        }
+    }
+
+    // Overview numbers: soft tiles instead of bordered boxes.
+    [class~='grid'] > [class~='border'][class~='rounded-lg'] {
+        background: #f6f8fb;
+        border: 0;
+        border-radius: 1.25rem;
+        padding: 1rem 1.25rem;
+
+        > span:first-child {
+            color: #6f767e;
+        }
+
+        > span:last-child {
+            color: #111827;
+            font-size: 1.15rem;
+            font-weight: 600;
+        }
+    }
+
+    table {
+        border-collapse: separate;
+        border-spacing: 0;
+        width: 100%;
+
+        th {
+            color: #6f767e;
+            font-size: 0.75rem;
+            font-weight: 600;
+            letter-spacing: 0.04em;
+            text-transform: uppercase;
+            white-space: nowrap;
+        }
+
+        th,
+        td {
+            border-bottom: 1px solid #f1f3f6 !important;
+            padding: 0.75rem 1rem 0.75rem 0 !important;
+            vertical-align: middle;
+        }
+
+        tbody tr:hover td {
+            background: #fafbfd;
+        }
+    }
+
+    // Pill inputs / selects, like every other form in the panel.
+    select:not([multiple]),
+    input[type='date'],
+    input[type='text'] {
+        background-color: #fff;
+        border: 1px solid #e5e7eb;
+        border-radius: 9999px;
+        font-size: 0.875rem;
+        height: 2.5rem;
+        padding: 0 1rem;
+
+        &:focus {
+            border-color: #3b82d6;
+            box-shadow: 0 0 0 1px #3b82d6;
+            outline: none;
+        }
+    }
+
+    select[multiple] {
+        border: 1px solid #e5e7eb;
+        border-radius: 1rem;
+        font-size: 0.8rem;
+        height: 5.5rem;
+        min-width: 9.5rem;
+        padding: 0.35rem 0.5rem;
+    }
+
+    input[type='text'] {
+        min-width: 15rem;
+    }
+
+    td {
+        min-width: 7rem;
+    }
+
+    // Text buttons (bulk delete / restore, row delete) become small outline pills.
+    button[class~='text-danger-600'],
+    button[class~='text-primary-600'] {
+        background: #fff;
+        border: 1px solid #f3c7bb;
+        border-radius: 9999px;
+        color: #d0644a;
+        font-size: 0.875rem;
+        height: 2.25rem;
+        padding: 0 1rem;
+        transition: background-color 0.15s;
+
+        &:hover {
+            background: #fcebe6;
+        }
+    }
+
+    button[class~='text-primary-600'] {
+        border-color: #cfe0f6;
+        color: #3b82d6;
+
+        &:hover {
+            background: #e7f0fb;
+        }
+    }
+
+    .filament-button.filament-button {
+        @include rk-btn;
+        @include rk-btn-color($rk-btn-primary);
+        @apply h-10 min-h-0 rounded-full px-5;
+
+        box-shadow: none;
+
+        &.bg-danger-600 {
+            background-color: $rk-btn-error;
+        }
+    }
+}
+
+// Support session page: header card, section nav, section heads, pill dropdown.
+.rk-sp {
+    &__head {
+        @apply flex flex-col gap-5 rounded-3xl bg-white p-6;
+
+        box-shadow: 0 2px 14px rgba(15, 23, 42, 0.06);
+        --tone: #6f767e;
+
+        &--yellow {
+            --tone: #d9a441;
+        }
+
+        &--red {
+            --tone: #ee9a82;
+        }
+
+        &-top {
+            @apply flex flex-wrap items-center gap-4;
+        }
+
+        &-title {
+            @apply flex min-w-0 flex-1 flex-wrap items-center gap-x-3 gap-y-1;
+
+            h2 {
+                @apply w-full text-xl font-semibold text-gray-900;
+            }
+        }
+    }
+
+    &__tile {
+        @apply flex h-14 w-14 shrink-0 items-center justify-center rounded-2xl text-xl font-semibold text-white;
+
+        background: var(--tone);
+    }
+
+    &__level-label {
+        @apply text-sm text-gray-500;
+    }
+
+    &__chip {
+        @apply rounded-full px-3 py-1 text-xs font-medium;
+
+        background: color-mix(in srgb, var(--tone) 16%, white);
+        color: color-mix(in srgb, var(--tone) 70%, black);
+    }
+
+    &__meta {
+        @apply grid grid-cols-1 gap-3 sm:grid-cols-3;
+
+        > div {
+            @apply rounded-2xl p-4;
+
+            background: #f6f8fb;
+        }
+
+        dt {
+            @apply mb-1 flex items-center gap-1.5 text-xs font-medium uppercase tracking-wide text-gray-500;
+        }
+
+        dd {
+            @apply text-sm text-gray-900;
+
+            overflow-wrap: anywhere;
+        }
+    }
+
+    &__can {
+        @apply grid grid-cols-1 gap-4 md:grid-cols-2;
+
+        > div {
+            @apply rounded-2xl p-4;
+
+            border: 1px solid #eef0f4;
+        }
+
+        b {
+            @apply mb-2 block text-sm font-semibold text-gray-800;
+        }
+
+        ul {
+            @apply flex flex-col gap-1.5;
+        }
+
+        li {
+            @apply flex items-start gap-2 text-sm text-gray-700;
+
+            svg {
+                @apply mt-0.5 shrink-0;
+            }
+
+            &.is-yes svg {
+                color: #3fae6a;
+            }
+
+            &.is-no svg {
+                color: #ee9a82;
+            }
+        }
+    }
+
+    &__audit {
+        @apply flex items-center gap-2 rounded-2xl px-4 py-3 text-sm;
+
+        background: #fdf3de;
+        color: #7a5a14;
+    }
+
+    &__nav {
+        @apply flex flex-wrap gap-2;
+
+        a {
+            @apply rounded-full bg-white px-4 py-2 text-sm text-gray-700;
+
+            box-shadow: 0 1px 6px rgba(15, 23, 42, 0.06);
+            transition: background-color 0.15s, color 0.15s;
+
+            &:hover {
+                background: #e7f0fb;
+                color: $rk-btn-primary;
+            }
+        }
+    }
+
+    &__anchor {
+        display: block;
+        position: relative;
+        top: -5rem;
+        visibility: hidden;
+        height: 0;
+    }
+
+    &__section-head {
+        h3 {
+            @apply flex items-center gap-2;
+        }
+
+        p {
+            @apply mt-1 text-sm text-gray-500;
+        }
+    }
+
+    &__count {
+        @apply rounded-full px-2.5 py-0.5 text-xs font-medium;
+
+        background: #e7f0fb;
+        color: $rk-btn-primary;
+    }
+
+    &__trash {
+        @apply ml-1 rounded-full px-2 py-0.5 text-xs font-medium;
+
+        background: #fcebe6;
+        color: #d0644a;
+    }
+}
+
+.rk-ss {
+    @apply inline-block;
+
+    &__btn {
+        @apply inline-flex h-10 items-center gap-2 rounded-full border bg-white px-4 text-sm text-gray-800;
+
+        border-color: #e5e7eb;
+        transition: border-color 0.15s, box-shadow 0.15s;
+        white-space: nowrap;
+
+        &:hover {
+            border-color: #c4c9d0;
+        }
+
+        &:focus-visible,
+        &[aria-expanded='true'] {
+            border-color: $rk-btn-primary;
+            box-shadow: 0 0 0 1px $rk-btn-primary;
+            outline: none;
+        }
+    }
+
+    &__chevron {
+        @apply h-4 w-4 text-gray-500;
+
+        transition: transform 0.15s;
+    }
+
+    &__dot {
+        @apply inline-block h-2.5 w-2.5 shrink-0 rounded-full;
+    }
+
+    &__list {
+        @apply fixed z-50 max-h-64 overflow-y-auto rounded-2xl bg-white p-1.5;
+
+        box-shadow: 0 8px 30px rgba(15, 23, 42, 0.16);
+    }
+
+    &__item {
+        @apply flex w-full items-center gap-2 rounded-xl px-3 py-2 text-left text-sm text-gray-800;
+
+        &:hover {
+            background: #f3f4f6;
+        }
+
+        &.is-selected {
+            background: #e7f0fb;
+            color: #2f6fba;
+            font-weight: 500;
+        }
+    }
+
+    &__check {
+        @apply ml-auto h-4 w-4;
+    }
+
+    &__dots {
+        @apply inline-flex items-center;
+
+        .rk-ss__dot {
+            @apply -ml-1 border-2 border-white first:ml-0;
+
+            box-sizing: content-box;
+        }
+    }
+
+    &__muted {
+        @apply text-gray-500;
+    }
+
+    &__list--multi {
+        @apply w-64 overflow-visible p-2;
+
+        max-height: none;
+
+        ul {
+            @apply max-h-52 overflow-y-auto;
+        }
+    }
+
+    &__search {
+        @apply mb-2 h-9 w-full rounded-full border px-3 text-sm;
+
+        border-color: #e5e7eb;
+
+        &:focus {
+            border-color: $rk-btn-primary;
+            box-shadow: 0 0 0 1px $rk-btn-primary;
+            outline: none;
+        }
+    }
+
+    &__box {
+        @apply flex h-4 w-4 shrink-0 items-center justify-center rounded border text-white;
+
+        border-color: #c4c9d0;
+
+        svg {
+            @apply h-3 w-3;
+        }
+    }
+
+    &__item.is-selected &__box {
+        background: $rk-btn-primary;
+        border-color: $rk-btn-primary;
+    }
+
+    &__empty {
+        @apply px-3 py-2 text-sm text-gray-500;
+    }
+
+    &__foot {
+        @apply mt-2 flex items-center justify-between border-t pt-2;
+
+        border-color: #f1f3f6;
+
+        small {
+            @apply text-xs text-gray-500;
+        }
+    }
+
+    &__apply {
+        @apply h-8 rounded-full px-4 text-sm text-white;
+
+        background: $rk-btn-primary;
+
+        &:disabled {
+            opacity: 0.4;
+            cursor: not-allowed;
+        }
+    }
+}
+
+// Created-at cell of the platform table: date on top, time below.
+.rk-pl__date {
+    @apply flex flex-col leading-tight;
+
+    b {
+        @apply text-sm font-medium text-gray-800;
+    }
+
+    small {
+        @apply text-xs text-gray-500;
+    }
+}
+
+.rk-path-platform-organizations .filament-tables-table {
+    .filament-table-cell-name {
+        min-width: 11rem;
+    }
+
+    // Columns keep a readable width; on narrower screens the table scrolls
+    // sideways inside its card instead of squeezing text to one letter per line.
+    .filament-table-cell-owner {
+        min-width: 11rem;
+    }
+
+    .filament-table-cell-full-access-status {
+        min-width: 9rem;
+    }
+
+    .filament-table-cell-created-at {
+        min-width: 7.5rem;
+    }
+}
+
+// --- Platform: organization detail panel (opens when a table row is clicked) ----
+.rk-pl__detail {
+    .rk-pl__d-head {
+        @apply flex items-center gap-3;
+
+        > div {
+            @apply min-w-0 flex-1;
+        }
+
+        h3 {
+            @apply mb-1 truncate text-lg font-semibold text-gray-900;
+        }
+    }
+
+    .rk-pl__d-tile {
+        @apply flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl text-base font-semibold;
+    }
+
+    .rk-pl__d-close {
+        @apply flex h-9 w-9 shrink-0 items-center justify-center self-start rounded-full bg-transparent text-gray-500 transition;
+
+        &:hover {
+            @apply bg-gray-100 text-gray-800;
+        }
+    }
+
+    .rk-pl__d-tabs {
+        @apply -mx-1 mb-4 mt-4 flex gap-6 border-b border-gray-200 px-1;
+
+        button {
+            @apply -mb-px border-b-2 border-transparent bg-transparent py-3 text-sm text-gray-600 transition;
+
+            &.is-active {
+                border-color: $rk-btn-primary;
+                color: $rk-btn-primary;
+            }
+        }
+    }
+
+    h4 {
+        @apply mb-3 mt-5 text-base font-semibold text-gray-900 first:mt-0;
+    }
+
+    .rk-pl__d-rows {
+        @apply flex flex-col gap-4;
+
+        > div {
+            @apply grid items-start gap-3;
+
+            grid-template-columns: minmax(0, 9.5rem) minmax(0, 1fr);
+        }
+
+        dt {
+            @apply flex items-center gap-3 text-sm text-gray-600;
+
+            svg {
+                @apply shrink-0 text-gray-500;
+            }
+        }
+
+        dd {
+            @apply flex min-w-0 flex-col items-start gap-1 break-words text-sm font-medium text-gray-900;
+
+            small {
+                @apply text-xs font-normal text-gray-500;
+            }
+        }
+    }
+
+    .rk-pl__plan {
+        @apply flex items-start gap-3 rounded-2xl p-4 text-sm;
+
+        b {
+            @apply block font-semibold;
+        }
+
+        p {
+            @apply mt-1 text-xs leading-relaxed;
+        }
+
+        &--red {
+            background: #fcebe6;
+            color: #a8432c;
+        }
+
+        &--yellow {
+            background: #fdf3de;
+            color: #7a5a14;
+        }
+
+        &--green {
+            background: #e3f5ea;
+            color: #2f7d4f;
+        }
+
+        &--blue {
+            background: #e7f0fb;
+            color: #2f6fbd;
+        }
+    }
+
+    .rk-pl__cta {
+        @apply mt-3 flex h-11 w-full items-center justify-center rounded-xl border bg-white text-sm font-medium transition;
+
+        border-color: #b9d3f3;
+        color: $rk-btn-primary;
+        background: #f1f6fd;
+
+        &:hover {
+            background: #e3eefb;
+        }
+    }
+
+    .rk-pl__d-actions {
+        @apply mt-4 flex flex-wrap gap-2;
+
+        button {
+            @apply inline-flex h-9 items-center gap-2 rounded-full border border-gray-200 bg-white px-4 text-xs text-gray-700 transition;
+
+            &:hover {
+                @apply bg-gray-50;
+            }
+        }
+    }
+
+    .rk-pl__d-member {
+        @apply flex items-center gap-3 border-b border-gray-100 py-3 last:border-0;
+
+        > div {
+            @apply min-w-0 flex-1;
+        }
+
+        b {
+            @apply block truncate text-sm font-semibold text-gray-900;
+        }
+
+        small {
+            @apply block truncate text-xs text-gray-500;
+        }
+    }
+
+    .rk-pl__d-more {
+        @apply pt-2 text-xs text-gray-500;
+    }
+}
+
+// The clicked row of the platform table.
+.rk-path-platform-organizations tbody tr.rk-pl__row-selected {
+    td {
+        background: #eef4fd !important;
+    }
+
+    td:first-child {
+        box-shadow: inset 3px 0 0 #3b82d6;
+    }
+}
+
+// Detail panel placement: in the right column on wide screens, a slide-over sheet
+// (with a dimmed backdrop) below 1536px so it never stretches the page.
+.rk-pl__detail {
+    animation: rk-detail-in 0.25s cubic-bezier(0.22, 1, 0.36, 1) both;
+
+    // Inline (right column): one fixed height whichever tab is open, so the page
+    // length does not change when switching between Detail / Anggota / Aktivitas.
+    @media (min-width: 1536px) {
+        min-height: 51.5rem;
+    }
+
+    @media (max-width: 1535px) {
+        @apply fixed bottom-4 right-4 top-4 z-[35] overflow-y-auto;
+
+        width: min(26rem, calc(100vw - 2rem));
+        box-shadow: 0 24px 64px rgba(15, 23, 42, 0.28);
+    }
+}
+
+.rk-pl__backdrop {
+    display: none;
+
+    @media (max-width: 1535px) {
+        @apply fixed inset-0 z-[34] block;
+
+        background: rgba(15, 23, 42, 0.28);
+        animation: rk-fade-in 0.2s ease both;
+    }
+}
+
+@keyframes rk-detail-in {
+    from {
+        opacity: 0;
+        transform: translateX(28px);
+    }
+
+    to {
+        opacity: 1;
+        transform: none;
+    }
+}
+
+@keyframes rk-fade-in {
+    from {
+        opacity: 0;
+    }
+
+    to {
+        opacity: 1;
+    }
+}
+
+// On the widest layout the side column spans the table row too: keep the chart
+// panels at their natural height when the detail panel makes that column taller.
+@media (min-width: 1536px) {
+    .rk-pl__top {
+        align-self: start;
+    }
+}
+
+.rk-path-platform-organizations .filament-tables-header-description {
+    @apply mt-0.5 text-sm font-normal text-gray-500;
+}
+
+// --- Users / Roles / Permissions (settings group) ---------------------------------
+// Permission and role pickers: a scrollable card of soft checkbox rows, a pill
+// search box, and a tinted row for every ticked option.
+.filament-resources-roles,
+.filament-resources-users {
+    input[type='search'] {
+        border-color: #e5e7eb;
+        border-radius: 9999px;
+        height: 2.5rem;
+        padding: 0 1rem;
+    }
+
+    .filament-forms-checkbox-list-component {
+        border: 1px solid #eef0f4;
+        border-radius: 1.25rem;
+        max-height: 26rem;
+        overflow-y: auto;
+        padding: 0.75rem;
+    }
+
+    .filament-forms-checkbox-list-component-option-label {
+        border-radius: 0.75rem;
+        padding: 0.4rem 0.6rem;
+        transition: background-color 0.15s;
+
+        &:hover {
+            background: #f3f4f6;
+        }
+
+        &:has(input:checked) {
+            background: #e7f0fb;
+            color: #2f6fba;
+        }
+    }
+}
+
+// Super Admin yes/no column: soft tinted dots instead of the heroicon circles.
+.filament-resources-users .filament-tables-icon-column {
+    svg[class~='text-success-500'] {
+        color: #3fae6a;
+    }
+
+    svg[class~='text-danger-500'] {
+        color: #d5d9de;
+    }
+}
+
+// Permission checklist grouped by module (roles form, forms/components/permission-groups).
+.rk-pg {
+    &__bar {
+        display: flex;
+        gap: 0.75rem;
+        margin-bottom: 0.75rem;
+
+        input[type='search'] {
+            flex: 1 1 auto;
+        }
+    }
+
+    &__all,
+    &__group header button {
+        background: #e7f0fb;
+        border-radius: 9999px;
+        color: #2f6fba;
+        font-size: 0.8rem;
+        padding: 0.35rem 0.9rem;
+        white-space: nowrap;
+
+        &:hover {
+            filter: brightness(0.96);
+        }
+    }
+
+    &__grid {
+        display: grid;
+        gap: 0.75rem;
+        grid-template-columns: repeat(auto-fill, minmax(17rem, 1fr));
+    }
+
+    &__group {
+        background: #fff;
+        border: 1px solid #eef0f4;
+        border-radius: 1.25rem;
+        padding: 0.9rem 1rem;
+
+        header {
+            align-items: center;
+            display: flex;
+            gap: 0.55rem;
+            margin-bottom: 0.7rem;
+
+            b {
+                color: #111827;
+                font-weight: 600;
+                margin-right: auto;
+            }
+        }
+    }
+
+    &__count {
+        color: #6f767e;
+        font-size: 0.75rem;
+    }
+
+    &__rows {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 0.4rem;
+    }
+
+    &__row {
+        align-items: center;
+        background: #f6f8fb;
+        border-radius: 9999px;
+        cursor: pointer;
+        display: inline-flex;
+        font-size: 0.85rem;
+        gap: 0.4rem;
+        padding: 0.3rem 0.8rem 0.3rem 0.6rem;
+        transition: background-color 0.15s;
+
+        &:hover {
+            background: #eef1f6;
+        }
+
+        &:has(input:checked) {
+            background: #e7f0fb;
+            color: #2f6fba;
+        }
+    }
+
+    &__empty {
+        color: #6f767e;
+        font-size: 0.875rem;
+        padding: 0.5rem;
+    }
+}
+
+.rk-pg__check {
+    align-items: center;
+    background: #e7f0fb;
+    border-radius: 9999px;
+    color: #2f6fba;
+    cursor: pointer;
+    display: inline-flex;
+    font-size: 0.875rem;
+    gap: 0.5rem;
+    padding: 0 1.1rem;
+    white-space: nowrap;
+
+    small {
+        color: #6f767e;
+        font-size: 0.75rem;
+    }
+}
+
+.rk-pg__gcheck {
+    border-radius: 0.375rem;
+}
+
+// "Signed in via" cell of the users table: one soft chip per method.
+.rk-login-via {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.35rem;
+
+    &__chip {
+        align-items: center;
+        background: #f3f4f6;
+        border-radius: 9999px;
+        color: #374151;
+        display: inline-flex;
+        font-size: 0.8rem;
+        gap: 0.4rem;
+        padding: 0.2rem 0.7rem 0.2rem 0.55rem;
+        white-space: nowrap;
+
+        svg {
+            height: 1rem;
+            width: 1rem;
+        }
+
+        &--mail {
+            background: #e7f0fb;
+            color: #2f6fba;
+        }
+    }
+}
+
+.filament-resources-users {
+    td.filament-table-cell-email-verified-at,
+    td.filament-table-cell-created-at {
+        white-space: nowrap;
+    }
+}
+
+.filament-resources-users {
+    .filament-tables-table {
+        th,
+        td {
+            padding-left: 0.4rem;
+            padding-right: 0.4rem;
+        }
+    }
+
+    td span {
+        white-space: nowrap;
+    }
+
+    // Narrow laptops: long names/e-mails and headers wrap instead of pushing the
+    // last columns (verified at, signed in via, created at) out of the card.
+    th {
+        white-space: normal;
+        line-height: 1.25;
+    }
+
+    td.filament-table-cell-name {
+        max-width: 15rem;
+        overflow-wrap: anywhere;
+    }
+
+    td.filament-table-cell-name > * {
+        white-space: normal;
+    }
+
+    td.filament-table-cell-name div[class~='text-gray-500'] {
+        color: #6f767e;
+        font-size: 0.8rem;
+        font-weight: 400;
+    }
 }
