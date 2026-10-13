@@ -543,4 +543,36 @@ class OrganizationManagementTest extends TestCase
 
         $this->assertSame('Renamed Organization', $organization->fresh()->name);
     }
+
+    // --------------------------------------------------- summary card
+
+    public function test_the_summary_card_reports_members_pending_invitations_and_trial_state(): void
+    {
+        $organization = Organization::factory()->create(['trial_ends_at' => now()->addDays(3)]);
+        $owner = User::factory()->create();
+        $member = User::factory()->create();
+        $this->attach($organization, $owner, 'owner');
+        $this->attach($organization, $member, 'member');
+        \App\Models\OrganizationInvitation::factory()->create(['organization_id' => $organization->id]);
+
+        $this->actingAs($owner);
+        $summary = Livewire::test(OrganizationSettings::class)->assertSee('Anggota')->instance()->summary();
+
+        $this->assertSame(2, $summary['members']);
+        $this->assertSame(1, $summary['pending']);
+        $this->assertSame('owner', $summary['role']);
+        $this->assertSame('yellow', $summary['trial']['tone']);
+        $this->assertStringContainsString('3', $summary['trial']['label']);
+
+        // A plain member never sees the pending-invitation figure.
+        $this->actingAs($member);
+        $this->assertNull(Livewire::test(OrganizationSettings::class)->instance()->summary()['pending']);
+
+        $organization->forceFill(['trial_ends_at' => now()->subDay()])->save();
+        $this->actingAs($owner);
+        $this->assertSame('red', Livewire::test(OrganizationSettings::class)->instance()->summary()['trial']['tone']);
+
+        $organization->forceFill(['trial_ends_at' => null])->save();
+        $this->assertSame('green', Livewire::test(OrganizationSettings::class)->instance()->summary()['trial']['tone']);
+    }
 }

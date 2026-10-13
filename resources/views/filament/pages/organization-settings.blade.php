@@ -1,6 +1,24 @@
 <x-filament::page>
 
-    <div class="w-full flex flex-col gap-8">
+    @php($summary = $this->summary())
+
+    <div class="rk-og">
+        {{-- Summary card --}}
+        <section class="rk-og__hero">
+            <span class="rk-og__logo">{{ \Illuminate\Support\Str::upper(\Illuminate\Support\Str::substr($summary['name'], 0, 1)) }}</span>
+            <div class="rk-og__hero-main">
+                <h2>{{ $summary['name'] }} @if ($summary['role'])<span class="rk-pf__badge">{{ __(ucfirst($summary['role'])) }}</span>@endif</h2>
+                <p>{{ trans_choice(':count member|:count members', $summary['members'], ['count' => $summary['members']]) }}</p>
+            </div>
+            <div class="rk-pf__stats rk-og__stats">
+                <div class="rk-pf__stat rk-pf__stat--blue"><span><x-heroicon-o-users class="h-6 w-6" /></span><div><b>{{ $summary['members'] }}</b><small>{{ __('Members') }}</small></div></div>
+                @if ($summary['pending'] !== null)
+                    <div class="rk-pf__stat rk-pf__stat--green"><span><x-heroicon-o-mail class="h-6 w-6" /></span><div><b>{{ $summary['pending'] }}</b><small>{{ __('Pending invitations') }}</small></div></div>
+                @endif
+                <div class="rk-pf__stat rk-pf__stat--{{ $summary['trial']['tone'] }}"><span><x-heroicon-o-clock class="h-6 w-6" /></span><div><b>{{ $summary['trial']['label'] }}</b><small>{{ __('Plan status') }}</small></div></div>
+            </div>
+        </section>
+
         <form wire:submit.prevent="save">
             {{ $this->form }}
 
@@ -17,32 +35,35 @@
             @php($pendingInvitations = $this->pendingInvitations())
 
             @if ($pendingInvitations->isNotEmpty())
-                <div class="flex flex-col gap-2">
-                    <h3 class="text-base font-medium">{{ __('Pending invitations') }}</h3>
-
-                    <div class="divide-y divide-gray-100 dark:divide-gray-700 border border-gray-100 dark:border-gray-700 rounded-lg">
-                        @foreach ($pendingInvitations as $invitation)
-                            <div class="flex items-center justify-between gap-4 px-4 py-3">
-                                <div class="flex flex-col">
-                                    <span class="text-sm font-medium">{{ $invitation->email }}</span>
-                                    <span class="text-xs text-gray-500">
-                                        {{ config('system.organizations.affectations.roles.list')[$invitation->role] ?? $invitation->role }}
-                                        &middot;
-                                        {{ __('Expires :date', ['date' => $invitation->expires_at->diffForHumans()]) }}
-                                    </span>
-                                </div>
-
-                                <x-filament::button
-                                    color="danger"
-                                    size="sm"
-                                    wire:click="revokeInvitation({{ $invitation->id }})"
-                                >
-                                    {{ __('Revoke') }}
-                                </x-filament::button>
-                            </div>
-                        @endforeach
+                <section class="rk-og__panel">
+                    <div class="rk-og__panel-head">
+                        <h3>{{ __('Pending invitations') }} <span class="rk-pf__count">{{ $pendingInvitations->count() }}</span></h3>
                     </div>
-                </div>
+
+                    @foreach ($pendingInvitations as $invitation)
+                        <div class="rk-og__row" wire:key="invitation-{{ $invitation->id }}">
+                            <span class="rk-og__avatar rk-pf__tile--blue">{{ \Illuminate\Support\Str::upper(\Illuminate\Support\Str::substr($invitation->email, 0, 1)) }}</span>
+                            <div class="rk-og__row-main">
+                                <b>{{ $invitation->email }}</b>
+                                <small>
+                                    {{ config('system.organizations.affectations.roles.list')[$invitation->role] ?? $invitation->role }}
+                                    &middot;
+                                    {{ __('Expires :date', ['date' => $invitation->expires_at->diffForHumans()]) }}
+                                </small>
+                            </div>
+
+                            <x-filament::button
+                                color="danger"
+                                size="sm"
+                                wire:click="revokeInvitation({{ $invitation->id }})"
+                                data-swal-confirm="{{ __('Revoke this invitation? The invitee will no longer be able to join with it.') }}"
+                                data-swal-severity="danger"
+                            >
+                                {{ __('Revoke') }}
+                            </x-filament::button>
+                        </div>
+                    @endforeach
+                </section>
             @endif
 
             {{-- Phase 7 (Full Access UI/UX Gate). Owner-only (canApproveFullAccess()
@@ -52,6 +73,7 @@
             @if ($this->canApproveFullAccess())
                 @php($fullAccessGrants = $this->fullAccessGrants())
                 @php($finishedFullAccessGrantStatuses = ['consumed', 'revoked', 'expired'])
+                @php($statusTone = ['requested' => 'yellow', 'approved' => 'blue', 'consumed' => 'gray', 'revoked' => 'red', 'expired' => 'gray'])
                 {{-- Deliberately NOT $fullAccessGrants->contains(...): that collection is
                      capped at 20 rows (fullAccessGrants()'s own ->limit(20)), so an
                      organization with more than 20 grants where the 20 newest are all
@@ -61,9 +83,9 @@
                 @php($hasFinishedFullAccessGrants = $this->hasFinishedFullAccessGrants())
 
                 @if ($fullAccessGrants->isNotEmpty())
-                    <div class="flex flex-col gap-2">
-                        <div class="flex items-center justify-between gap-4">
-                            <h3 class="text-base font-medium">{{ __('Full Access requests') }}</h3>
+                    <section class="rk-og__panel">
+                        <div class="rk-og__panel-head">
+                            <h3>{{ __('Full Access requests') }} <span class="rk-pf__count">{{ $fullAccessGrants->count() }}</span></h3>
 
                             @if ($hasFinishedFullAccessGrants)
                                 {{-- Same confirm()-gated Livewire call pattern as the destructive
@@ -77,119 +99,121 @@
                                     type="button"
                                     x-data
                                     x-on:click="
-                                        if (confirm(@js($deleteAllFinishedConfirm))) {
+                                        RencanakanAlert.confirm({ severity: 'danger', text: @js($deleteAllFinishedConfirm) }).then((confirmed) => { if (confirmed) {
                                             $wire.deleteAllFinishedFullAccessGrants()
-                                        }
+                                        } })
                                     "
-                                    class="text-sm text-danger-600 hover:text-danger-700 dark:text-danger-400"
+                                    class="rk-og__ghost"
                                 >
-                                    {{ __('Delete all finished') }}
+                                    <x-heroicon-o-trash class="h-4 w-4" /> {{ __('Delete all finished') }}
                                 </button>
                             @endif
                         </div>
 
-                        <div class="divide-y divide-gray-100 dark:divide-gray-700 border border-gray-100 dark:border-gray-700 rounded-lg">
-                            @foreach ($fullAccessGrants as $grant)
-                                @php($status = $grant->status())
+                        @foreach ($fullAccessGrants as $grant)
+                            @php($status = $grant->status())
 
-                                <div class="flex flex-col gap-2 px-4 py-3">
-                                    <div class="flex items-center justify-between gap-4">
-                                        <div class="flex flex-col">
-                                            <span class="text-sm font-medium">{{ $grant->requester?->name }} ({{ $grant->requester?->email }})</span>
-                                            <span class="text-xs text-gray-500">{{ $grant->reason }}</span>
-                                        </div>
-                                        <span class="text-xs font-semibold uppercase">
-                                            @if ($status === 'requested') {{ __('Requested') }}
-                                            @elseif ($status === 'approved') {{ __('Approved') }}
-                                            @elseif ($status === 'consumed') {{ __('Consumed') }}
-                                            @elseif ($status === 'revoked') {{ __('Revoked') }}
-                                            @else {{ __('Expired') }}
+                            <div class="rk-og__row rk-og__row--stack" wire:key="grant-{{ $grant->id }}">
+                                <div class="rk-og__row-top">
+                                    <span class="rk-og__avatar rk-pf__tile--{{ $statusTone[$status] }}">{{ \Illuminate\Support\Str::upper(\Illuminate\Support\Str::substr($grant->requester?->name ?? '?', 0, 1)) }}</span>
+                                    <div class="rk-og__row-main">
+                                        <b>{{ $grant->requester?->name }} ({{ $grant->requester?->email }})</b>
+                                        <small>{{ $grant->reason }}</small>
+                                    </div>
+                                    <span class="rk-og__chip rk-og__chip--{{ $statusTone[$status] }}">
+                                        @if ($status === 'requested') {{ __('Requested') }}
+                                        @elseif ($status === 'approved') {{ __('Approved') }}
+                                        @elseif ($status === 'consumed') {{ __('Consumed') }}
+                                        @elseif ($status === 'revoked') {{ __('Revoked') }}
+                                        @else {{ __('Expired') }}
+                                        @endif
+                                    </span>
+                                </div>
+
+                                <div class="rk-og__meta">
+                                    <span>{{ __('Scope') }}: {{ __('Belum ada kapabilitas yang disetujui untuk Full Access.') }}</span>
+                                    <span>
+                                        {{ __('Requested at') }}: {{ $grant->requested_at?->format('d M Y H:i') }}
+                                        &middot; {{ __('Expires') }}: {{ $grant->request_expires_at?->format('d M Y H:i') }}
+                                    </span>
+
+                                    @if ($grant->approved_at !== null)
+                                        <span>
+                                            {{ __('Approved by') }}: {{ $grant->approver?->name ?? '—' }}
+                                            {{ __('at') }} {{ $grant->approved_at->format('d M Y H:i') }}
+                                            &middot; {{ __('Grant expires') }}: {{ $grant->grant_expires_at?->format('d M Y H:i') }}
+                                        </span>
+                                    @endif
+
+                                    @if ($grant->revoked_at !== null)
+                                        <span>
+                                            {{ __('Revoked by') }}: {{ $grant->revoker?->name ?? '—' }}
+                                            {{ __('at') }} {{ $grant->revoked_at->format('d M Y H:i') }}
+                                        </span>
+                                    @endif
+
+                                    @if ($grant->session)
+                                        <span>
+                                            {{ __('Session status') }}:
+                                            @if ($grant->session->ended_at !== null)
+                                                {{ __('Ended') }}
+                                            @elseif ($grant->session->isActive())
+                                                {{ __('Active') }}
+                                            @else
+                                                {{ __('Expired') }}
+                                            @endif
+                                            &middot; {{ __('Started') }}: {{ $grant->session->started_at?->format('d M Y H:i') }}
+                                            @if ($grant->session->ended_at !== null)
+                                                &middot; {{ __('Ended at') }}: {{ $grant->session->ended_at->format('d M Y H:i') }}
+                                            @else
+                                                &middot; {{ __('Expires') }}: {{ $grant->session->expires_at?->format('d M Y H:i') }}
                                             @endif
                                         </span>
-                                    </div>
-
-                                    <div class="text-xs text-gray-500 flex flex-col gap-1">
-                                        <span>{{ __('Scope') }}: {{ __('Belum ada kapabilitas yang disetujui untuk Full Access.') }}</span>
-                                        <span>
-                                            {{ __('Requested at') }}: {{ $grant->requested_at?->format('d M Y H:i') }}
-                                            &middot; {{ __('Expires') }}: {{ $grant->request_expires_at?->format('d M Y H:i') }}
-                                        </span>
-
-                                        @if ($grant->approved_at !== null)
-                                            <span>
-                                                {{ __('Approved by') }}: {{ $grant->approver?->name ?? '—' }}
-                                                {{ __('at') }} {{ $grant->approved_at->format('d M Y H:i') }}
-                                                &middot; {{ __('Grant expires') }}: {{ $grant->grant_expires_at?->format('d M Y H:i') }}
-                                            </span>
-                                        @endif
-
-                                        @if ($grant->revoked_at !== null)
-                                            <span>
-                                                {{ __('Revoked by') }}: {{ $grant->revoker?->name ?? '—' }}
-                                                {{ __('at') }} {{ $grant->revoked_at->format('d M Y H:i') }}
-                                            </span>
-                                        @endif
-
-                                        @if ($grant->session)
-                                            <span>
-                                                {{ __('Session status') }}:
-                                                @if ($grant->session->ended_at !== null)
-                                                    {{ __('Ended') }}
-                                                @elseif ($grant->session->isActive())
-                                                    {{ __('Active') }}
-                                                @else
-                                                    {{ __('Expired') }}
-                                                @endif
-                                                &middot; {{ __('Started') }}: {{ $grant->session->started_at?->format('d M Y H:i') }}
-                                                @if ($grant->session->ended_at !== null)
-                                                    &middot; {{ __('Ended at') }}: {{ $grant->session->ended_at->format('d M Y H:i') }}
-                                                @else
-                                                    &middot; {{ __('Expires') }}: {{ $grant->session->expires_at?->format('d M Y H:i') }}
-                                                @endif
-                                            </span>
-                                        @endif
-                                    </div>
-
-                                    @if ($status === 'requested')
-                                        <div class="flex gap-2">
-                                            <x-filament::button size="sm" wire:click="approveFullAccessGrant({{ $grant->id }})">
-                                                {{ __('Approve') }}
-                                            </x-filament::button>
-                                            <x-filament::button size="sm" color="danger" wire:click="revokeFullAccessGrant({{ $grant->id }})">
-                                                {{ __('Reject') }}
-                                            </x-filament::button>
-                                        </div>
-                                    @elseif ($status === 'approved')
-                                        <div class="flex gap-2">
-                                            <x-filament::button size="sm" color="danger" wire:click="revokeFullAccessGrant({{ $grant->id }})">
-                                                {{ __('Revoke') }}
-                                            </x-filament::button>
-                                        </div>
-                                    @elseif (in_array($status, $finishedFullAccessGrantStatuses, true))
-                                        {{-- Only ever shown for consumed/revoked/expired rows —
-                                             deleteFullAccessGrant() itself silently refuses
-                                             requested/approved grants too, this just keeps the
-                                             button from appearing on a row it would no-op on. --}}
-                                        <div class="flex gap-2">
-                                            @php($deleteGrantConfirm = __('Delete this Full Access request? This cannot be undone.'))
-                                            <button
-                                                type="button"
-                                                x-data
-                                                x-on:click="
-                                                    if (confirm(@js($deleteGrantConfirm))) {
-                                                        $wire.deleteFullAccessGrant({{ $grant->id }})
-                                                    }
-                                                "
-                                                class="text-sm text-danger-600 hover:text-danger-700 dark:text-danger-400"
-                                            >
-                                                {{ __('Delete') }}
-                                            </button>
-                                        </div>
                                     @endif
                                 </div>
-                            @endforeach
-                        </div>
-                    </div>
+
+                                @if ($status === 'requested')
+                                    <div class="rk-og__actions">
+                                        <x-filament::button size="sm" wire:click="approveFullAccessGrant({{ $grant->id }})"
+                                            data-swal-confirm="{{ __('Approve this Full Access request?') }}">
+                                            {{ __('Approve') }}
+                                        </x-filament::button>
+                                        <x-filament::button size="sm" color="danger" wire:click="revokeFullAccessGrant({{ $grant->id }})"
+                                            data-swal-confirm="{{ __('Reject this Full Access request?') }}" data-swal-severity="danger">
+                                            {{ __('Reject') }}
+                                        </x-filament::button>
+                                    </div>
+                                @elseif ($status === 'approved')
+                                    <div class="rk-og__actions">
+                                        <x-filament::button size="sm" color="danger" wire:click="revokeFullAccessGrant({{ $grant->id }})"
+                                            data-swal-confirm="{{ __('Revoke this Full Access grant?') }}" data-swal-severity="danger">
+                                            {{ __('Revoke') }}
+                                        </x-filament::button>
+                                    </div>
+                                @elseif (in_array($status, $finishedFullAccessGrantStatuses, true))
+                                    {{-- Only ever shown for consumed/revoked/expired rows —
+                                         deleteFullAccessGrant() itself silently refuses
+                                         requested/approved grants too, this just keeps the
+                                         button from appearing on a row it would no-op on. --}}
+                                    <div class="rk-og__actions">
+                                        @php($deleteGrantConfirm = __('Delete this Full Access request? This cannot be undone.'))
+                                        <button
+                                            type="button"
+                                            x-data
+                                            x-on:click="
+                                                RencanakanAlert.confirm({ severity: 'danger', text: @js($deleteGrantConfirm) }).then((confirmed) => { if (confirmed) {
+                                                    $wire.deleteFullAccessGrant({{ $grant->id }})
+                                                } })
+                                            "
+                                            class="rk-og__ghost"
+                                        >
+                                            <x-heroicon-o-trash class="h-4 w-4" /> {{ __('Delete') }}
+                                        </button>
+                                    </div>
+                                @endif
+                            </div>
+                        @endforeach
+                    </section>
                 @endif
             @endif
         @endif

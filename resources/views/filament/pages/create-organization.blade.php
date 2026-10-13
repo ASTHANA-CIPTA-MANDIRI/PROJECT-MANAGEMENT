@@ -1,6 +1,8 @@
 <x-filament::page>
 
-    <div class="w-full flex flex-col gap-8">
+    <div class="w-full flex flex-col gap-6">
+        <p class="rk-lead">{{ __('Give your organization a name. You can invite your team as soon as it is created.') }}</p>
+
         <form wire:submit.prevent="create">
             {{ $this->form }}
 

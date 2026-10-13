@@ -88,7 +88,8 @@ class OrganizationSwitcherTest extends TestCase
 
         Livewire::test(OrganizationSwitcher::class)
             ->assertSee('Only Org')
-            ->assertDontSeeHtml('<select');
+            ->assertDontSeeHtml('<select')
+            ->assertDontSeeHtml('role="listbox"');
 
         $this->assertTrue(OrganizationContext::current($user)->is($organization));
     }
@@ -103,7 +104,8 @@ class OrganizationSwitcherTest extends TestCase
         $this->actingAs($user);
 
         Livewire::test(OrganizationSwitcher::class)
-            ->assertSeeHtml('<select')
+            ->assertSeeHtml('role="listbox"')
+            ->assertDontSeeHtml('<select')
             ->assertSee('Org A')
             ->assertSee('Org B');
     }

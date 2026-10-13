@@ -518,4 +518,23 @@ class AcceptOrganizationInvitationTest extends TestCase
         $response->assertOk();
         $response->assertSee(__('This invitation has already been accepted.'));
     }
+
+    public function test_the_landing_page_is_one_html_document_with_a_state_specific_message(): void
+    {
+        [$pending, $pendingToken] = $this->invitationWithToken();
+        [, $revokedToken] = $this->invitationWithToken(['revoked_at' => now()]);
+
+        $page = $this->get(route('organization-invitations.accept', $pendingToken))->assertOk();
+        $page->assertSee('Anda diundang')->assertSee($pending->organization->name);
+        // The card used to be wrapped in a second layouts.base, loading Livewire twice.
+        $this->assertSame(1, substr_count($page->getContent(), '<html'));
+
+        $this->get(route('organization-invitations.accept', $revokedToken))
+            ->assertOk()
+            ->assertSee('Undangan dibatalkan');
+
+        $this->get(route('organization-invitations.accept', 'token-palsu'))
+            ->assertOk()
+            ->assertSee('Undangan tidak ditemukan');
+    }
 }

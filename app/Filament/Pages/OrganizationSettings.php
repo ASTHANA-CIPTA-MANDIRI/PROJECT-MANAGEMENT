@@ -131,6 +131,43 @@ class OrganizationSettings extends AuthorizedPage implements HasForms, HasTable
         return __('Organization settings');
     }
 
+    /**
+     * Read-only numbers for the summary card at the top of the page: member
+     * count, pending invitations (only for those who may manage them) and the
+     * trial/subscription state, all from the user's own current Organization.
+     *
+     * @return array{name: string, role: ?string, members: int, pending: ?int, trial: array{label: string, tone: string}}
+     */
+    public function summary(): array
+    {
+        $organization = $this->organization();
+
+        // mount() only runs on the first request: a later Livewire request can
+        // find the user no longer belongs to the Organization.
+        abort_unless($organization !== null, 404);
+
+        $user = auth()->user();
+        $trialEnds = $organization->trial_ends_at;
+
+        $trial = match (true) {
+            $organization->isSubscribed() => ['label' => __('Subscribed'), 'tone' => 'blue'],
+            $trialEnds === null => ['label' => __('No time limit'), 'tone' => 'green'],
+            $trialEnds->isFuture() => [
+                'label' => trans_choice(':count day left|:count days left', max(1, (int) ceil(now()->floatDiffInDays($trialEnds))), ['count' => max(1, (int) ceil(now()->floatDiffInDays($trialEnds)))]),
+                'tone' => 'yellow',
+            ],
+            default => ['label' => __('Trial ended'), 'tone' => 'red'],
+        };
+
+        return [
+            'name' => $organization->name,
+            'role' => $organization->roleOf($user),
+            'members' => $organization->users()->count(),
+            'pending' => $this->canManageOrganization() ? $organization->invitations()->pending()->count() : null,
+            'trial' => $trial,
+        ];
+    }
+
     // ------------------------------------------------------------- settings
 
     protected function getFormSchema(): array
@@ -261,6 +298,7 @@ class OrganizationSettings extends AuthorizedPage implements HasForms, HasTable
                     // Role happens to be named "Owner".
                     Select::make('access_role_id')
                         ->label(__('Role'))
+                        ->searchable()
                         ->required()
                         ->helperText(__('Feature permissions for this member, managed by a Super Admin under Roles.'))
                         ->default(fn () => $this->accessRoleFor(config('system.organizations.affectations.roles.default'))?->id)
