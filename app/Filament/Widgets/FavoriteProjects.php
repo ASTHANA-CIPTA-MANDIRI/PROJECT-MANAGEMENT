@@ -2,8 +2,12 @@
 
 namespace App\Filament\Widgets;
 
+use App\Models\Project;
+use App\Models\Ticket;
+use Filament\Facades\Filament;
 use Filament\Widgets\StatsOverviewWidget as BaseWidget;
 use Filament\Widgets\StatsOverviewWidget\Card;
+use Illuminate\Support\Facades\Route;
 use Illuminate\Support\HtmlString;
 
 class FavoriteProjects extends BaseWidget
@@ -12,8 +16,8 @@ class FavoriteProjects extends BaseWidget
 
     protected int|string|array $columnSpan = [
         'sm' => 1,
-        'md' => 6,
-        'lg' => 6,
+        'md' => 1,
+        'lg' => 12,
     ];
 
     protected function getColumns(): int
@@ -44,7 +48,7 @@ class FavoriteProjects extends BaseWidget
             ->with(['users', 'owner', 'media'])
             ->get();
 
-        $cards = [];
+        $cards = $this->summaryCards();
         foreach ($favoriteProjects as $project) {
             $ticketsCount = $project->tickets_count;
             $contributorsCount = $project->contributors->count();
@@ -57,7 +61,7 @@ class FavoriteProjects extends BaseWidget
                 '))
                 ->color('success')
                 ->extraAttributes([
-                    'class' => 'hover:shadow-lg',
+                    'class' => 'fav-project-card hover:shadow-lg',
                 ])
                 ->description(new HtmlString('
                         <div class="w-full flex items-center gap-2 mt-2 text-gray-500 font-normal">'
@@ -86,5 +90,91 @@ class FavoriteProjects extends BaseWidget
         }
 
         return $cards;
+    }
+
+    /**
+     * Top row of the dashboard: one welcome card plus the headline KPI cards.
+     * Every count goes through the same access scopes the listings use
+     * (accessibleBy / visibleTo), so a user never sees a total that includes
+     * records they cannot open.
+     *
+     * @return array<int, Card>
+     */
+    private function summaryCards(): array
+    {
+        $user = auth()->user();
+        $canListTickets = $user->can('List tickets');
+        $projectsCount = Project::query()->accessibleBy($user)->count();
+
+        $openTickets = fn () => Ticket::query()->visibleTo($user)
+            ->whereHas('status', fn ($query) => $query->where('is_final', false));
+        $myActive = $canListTickets
+            ? $openTickets()->where('responsible_id', $user->id)->count()
+            : 0;
+
+        $cards = [$this->welcomeCard($user, $canListTickets, $myActive, $projectsCount)];
+
+        if ($canListTickets) {
+            $kpis = [
+                Card::make(__('Active tickets'), $openTickets()->count())->icon('heroicon-o-ticket'),
+                Card::make(__('My active tickets'), $myActive)->icon('heroicon-o-user'),
+                Card::make(__('Completed tickets'), Ticket::query()->visibleTo($user)
+                    ->whereHas('status', fn ($query) => $query->where('is_final', true))->count())
+                    ->icon('heroicon-o-check-circle'),
+            ];
+
+            foreach ($kpis as $index => $card) {
+                $cards[] = $card->extraAttributes(['class' => 'kpi-card kpi-card-'.($index + 1)]);
+            }
+        }
+
+        return $cards;
+    }
+
+    private function welcomeCard($user, bool $canListTickets, int $myActive, int $projectsCount): Card
+    {
+        $summary = $canListTickets
+            ? __('You have :tickets active tickets across :projects projects', [
+                'tickets' => $myActive,
+                'projects' => $projectsCount,
+            ])
+            : __('You have access to :projects projects', ['projects' => $projectsCount]);
+
+        $button = '';
+        if ($canListTickets && Route::has('filament.resources.tickets.index')) {
+            $button = '<a href="'.e(route('filament.resources.tickets.index')).'" class="welcome-card__button">'
+                .e(__('View my tickets')).'</a>';
+        }
+
+        return Card::make('', new HtmlString('
+                <div class="welcome-card__body">
+                    <img src="'.e(Filament::getUserAvatarUrl($user)).'" alt="" class="welcome-card__avatar">
+                    <div class="welcome-card__text">
+                        <div class="welcome-card__title">'.e(__($this->greeting()).', '.$user->name).'</div>
+                        <p class="welcome-card__summary">'.e($summary).'</p>
+                        '.$button.'
+                    </div>
+                </div>
+            '))
+            ->extraAttributes([
+                'class' => 'welcome-card'.($canListTickets ? '' : ' welcome-card--wide'),
+            ]);
+    }
+
+    /**
+     * Time-of-day greeting key, based on the application timezone
+     * (config app.timezone): 05-10 morning, 11-14 afternoon, 15-17 evening,
+     * 18-04 night.
+     */
+    private function greeting(): string
+    {
+        $hour = (int) now(config('app.display_timezone'))->format('G');
+
+        return match (true) {
+            $hour >= 5 && $hour < 11 => 'Good morning',
+            $hour >= 11 && $hour < 15 => 'Good afternoon',
+            $hour >= 15 && $hour < 18 => 'Good evening',
+            default => 'Good night',
+        };
     }
 }

@@ -10,12 +10,12 @@ use Illuminate\Support\HtmlString;
 
 class LatestTickets extends BaseWidget
 {
-    protected static ?int $sort = 6;
+    protected static ?int $sort = 7;
 
     protected int|string|array $columnSpan = [
         'sm' => 1,
-        'md' => 6,
-        'lg' => 3,
+        'md' => 1,
+        'lg' => 8,
     ];
 
     public function mount(): void
@@ -58,6 +58,7 @@ class LatestTickets extends BaseWidget
         return [
             Tables\Columns\TextColumn::make('name')
                 ->label(__('Ticket'))
+                ->wrap()
                 ->formatStateUsing(fn ($record) => new HtmlString('
                     <div class="flex flex-col gap-1">
                         <span class="text-gray-400 font-medium text-xs">
@@ -85,20 +86,25 @@ class LatestTickets extends BaseWidget
                 ->label(__('Status'))
                 ->formatStateUsing(fn ($record) => view('components.color-badge', [
                     'color' => $record->status->color,
-                    'title' => $record->status->name,
-                    'class' => 'mt-1',
+                    'label' => $record->status->name,
+                    'pill' => true,
                 ])),
 
             Tables\Columns\TextColumn::make('type.name')
                 ->label(__('Type'))
-                ->formatStateUsing(fn ($record) => view('components.ticket-type', ['type' => $record->type])),
+                ->formatStateUsing(fn ($record) => view('components.color-badge', [
+                    'color' => $record->type->color,
+                    'label' => $record->type->name,
+                    'icon' => $record->type->icon,
+                    'pill' => true,
+                ])),
 
             Tables\Columns\TextColumn::make('priority.name')
                 ->label(__('Priority'))
                 ->formatStateUsing(fn ($record) => view('components.color-badge', [
                     'color' => $record->priority->color,
-                    'title' => $record->priority->name,
-                    'class' => 'mt-1',
+                    'label' => $record->priority->name,
+                    'pill' => true,
                 ])),
         ];
     }

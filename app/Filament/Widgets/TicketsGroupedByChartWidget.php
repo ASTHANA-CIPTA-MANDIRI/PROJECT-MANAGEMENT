@@ -3,22 +3,65 @@
 namespace App\Filament\Widgets;
 
 use App\Filament\Widgets\Concerns\WithCachedData;
-use Filament\Widgets\DoughnutChartWidget;
+use Filament\Widgets\ChartWidget;
 use Illuminate\Database\Eloquent\Builder;
 
-abstract class TicketsGroupedByChartWidget extends DoughnutChartWidget
+abstract class TicketsGroupedByChartWidget extends ChartWidget
 {
     use WithCachedData;
 
     protected static ?string $heading = 'Chart';
 
-    protected static ?string $maxHeight = '300px';
+    protected static ?string $maxHeight = '240px';
+
+    // Visual only (Chart.js options, not data): a bottom legend with
+    // dot-style markers instead of the default top legend with square
+    // swatches. `layout.padding` leaves room for the selected slice's offset.
+    protected static ?array $options = [
+        'layout' => ['padding' => 12],
+        'plugins' => [
+            'legend' => [
+                'position' => 'bottom',
+                'labels' => [
+                    'usePointStyle' => true,
+                    'pointStyle' => 'circle',
+                    'boxWidth' => 8,
+                    'boxHeight' => 8,
+                    'padding' => 16,
+                ],
+            ],
+        ],
+    ];
 
     protected int|string|array $columnSpan = [
         'sm' => 1,
-        'md' => 6,
-        'lg' => 3,
+        'md' => 1,
+        'lg' => 4,
     ];
+
+    protected function getType(): string
+    {
+        return 'pie';
+    }
+
+    /**
+     * Chart options are JSON-encoded, so no callbacks can live here. The click
+     * behaviour is a Chart.js plugin in resources/js/filament.js; the texts it
+     * needs travel as plugin options so they stay translatable.
+     */
+    protected function getOptions(): ?array
+    {
+        return array_replace_recursive(static::$options ?? [], [
+            'plugins' => [
+                'rencanakanPieDetail' => [
+                    'enabled' => true,
+                    'hint' => __('Click a slice to see details'),
+                    'countLabel' => __('Tickets'),
+                    'shareLabel' => __('Share of total'),
+                ],
+            ],
+        ]);
+    }
 
     public static function canView(): bool
     {
@@ -55,15 +98,18 @@ abstract class TicketsGroupedByChartWidget extends DoughnutChartWidget
                 [
                     'label' => $this->getHeading(),
                     'data' => $data->values()->toArray(),
+                    // Blue-accent triad (still just colors, not a palette
+                    // the viewer can't tell apart) to match the dashboard's
+                    // accent color instead of Chart.js's generic defaults.
                     'backgroundColor' => [
-                        'rgba(255, 99, 132, .6)',
-                        'rgba(54, 162, 235, .6)',
-                        'rgba(255, 205, 86, .6)',
+                        'rgba(37, 99, 235, .8)',
+                        'rgba(147, 197, 253, .8)',
+                        'rgba(30, 41, 59, .8)',
                     ],
                     'borderColor' => [
-                        'rgba(255, 99, 132, .8)',
-                        'rgba(54, 162, 235, .8)',
-                        'rgba(255, 205, 86, .8)',
+                        'rgba(37, 99, 235, 1)',
+                        'rgba(147, 197, 253, 1)',
+                        'rgba(30, 41, 59, 1)',
                     ],
                     'hoverOffset' => 4,
                 ],

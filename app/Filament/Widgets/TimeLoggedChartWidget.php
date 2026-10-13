@@ -12,12 +12,35 @@ abstract class TimeLoggedChartWidget extends BarChartWidget
 
     protected static ?string $heading = 'Chart';
 
-    protected static ?string $maxHeight = '300px';
+    protected static ?string $maxHeight = '240px';
+
+    // Visual only (Chart.js options, not data): a single-series bar chart
+    // doesn't need its own legend row, and flatter gridlines read cleaner,
+    // matching the dashboard's bar-chart card.
+    protected static ?array $options = [
+        'plugins' => [
+            'legend' => [
+                'display' => false,
+            ],
+        ],
+        'scales' => [
+            'x' => [
+                'grid' => [
+                    'display' => false,
+                ],
+            ],
+            'y' => [
+                'grid' => [
+                    'color' => 'rgba(148, 163, 184, .15)',
+                ],
+            ],
+        ],
+    ];
 
     protected int|string|array $columnSpan = [
         'sm' => 1,
-        'md' => 6,
-        'lg' => 3,
+        'md' => 1,
+        'lg' => 6,
     ];
 
     public static function canView(): bool
@@ -67,12 +90,16 @@ abstract class TimeLoggedChartWidget extends BarChartWidget
                 [
                     'label' => __('Total time logged (hours)'),
                     'data' => array_column($rows, 'hours'),
+                    // Blue accent to match the rest of the dashboard, with
+                    // rounded bar corners for the bento look.
                     'backgroundColor' => [
-                        'rgba(54, 162, 235, .6)',
+                        'rgba(37, 99, 235, .8)',
                     ],
                     'borderColor' => [
-                        'rgba(54, 162, 235, .8)',
+                        'rgba(37, 99, 235, 1)',
                     ],
+                    'borderRadius' => 6,
+                    'borderSkipped' => false,
                 ],
             ],
             'labels' => array_column($rows, 'label'),

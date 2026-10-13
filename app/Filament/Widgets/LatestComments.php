@@ -11,12 +11,12 @@ use Illuminate\Support\HtmlString;
 
 class LatestComments extends BaseWidget
 {
-    protected static ?int $sort = 8;
+    protected static ?int $sort = 9;
 
     protected int|string|array $columnSpan = [
         'sm' => 1,
-        'md' => 6,
-        'lg' => 3,
+        'md' => 1,
+        'lg' => 12,
     ];
 
     public function mount(): void

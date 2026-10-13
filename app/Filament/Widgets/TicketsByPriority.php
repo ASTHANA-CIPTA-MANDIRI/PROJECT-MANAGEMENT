@@ -6,7 +6,7 @@ use App\Models\TicketPriority;
 
 class TicketsByPriority extends TicketsGroupedByChartWidget
 {
-    protected static ?int $sort = 3;
+    protected static ?int $sort = 5;
 
     protected function getHeading(): string
     {

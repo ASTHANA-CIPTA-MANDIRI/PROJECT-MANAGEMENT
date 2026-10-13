@@ -7,7 +7,13 @@ use Illuminate\Database\Eloquent\Builder;
 
 class UserTimeLogged extends TimeLoggedChartWidget
 {
-    protected static ?int $sort = 5;
+    protected static ?int $sort = 3;
+
+    protected int|string|array $columnSpan = [
+        'sm' => 1,
+        'md' => 1,
+        'lg' => 4,
+    ];
 
     protected function getHeading(): string
     {

@@ -6,7 +6,7 @@ use App\Models\TicketType;
 
 class TicketsByType extends TicketsGroupedByChartWidget
 {
-    protected static ?int $sort = 2;
+    protected static ?int $sort = 4;
 
     protected function getHeading(): string
     {

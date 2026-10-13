@@ -7,7 +7,13 @@ use Illuminate\Database\Eloquent\Builder;
 
 class TicketTimeLogged extends TimeLoggedChartWidget
 {
-    protected static ?int $sort = 4;
+    protected static ?int $sort = 2;
+
+    protected int|string|array $columnSpan = [
+        'sm' => 1,
+        'md' => 1,
+        'lg' => 8,
+    ];
 
     protected function getHeading(): string
     {

@@ -135,6 +135,43 @@ class WidgetsTest extends TestCase
             ->assertDontSee('Secret Foreign Project');
     }
 
+    public function test_the_favorite_projects_widget_greets_the_logged_in_user(): void
+    {
+        $this->seedActivity();
+
+        Livewire::test(\App\Filament\Widgets\FavoriteProjects::class)
+            ->assertSuccessful()
+            ->assertSeeHtml('welcome-card')
+            ->assertSee($this->user->name);
+    }
+
+    public function test_the_welcome_greeting_follows_the_time_of_day(): void
+    {
+        $this->seedActivity();
+
+        $cases = [
+            '04:59' => 'Selamat malam',
+            '05:00' => 'Selamat pagi',
+            '10:59' => 'Selamat pagi',
+            '11:00' => 'Selamat siang',
+            '14:59' => 'Selamat siang',
+            '15:00' => 'Selamat sore',
+            '17:59' => 'Selamat sore',
+            '18:00' => 'Selamat malam',
+        ];
+
+        foreach ($cases as $time => $greeting) {
+            \Illuminate\Support\Carbon::setTestNow(
+                \Illuminate\Support\Carbon::parse('2026-10-03 '.$time, config('app.display_timezone'))
+            );
+
+            Livewire::test(\App\Filament\Widgets\FavoriteProjects::class)
+                ->assertSee($greeting.', '.$this->user->name);
+        }
+
+        \Illuminate\Support\Carbon::setTestNow();
+    }
+
     public function test_the_latest_projects_widget_renders(): void
     {
         $this->seedActivity();

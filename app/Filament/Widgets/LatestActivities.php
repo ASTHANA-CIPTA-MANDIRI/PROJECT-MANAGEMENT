@@ -10,12 +10,12 @@ use Illuminate\Support\HtmlString;
 
 class LatestActivities extends BaseWidget
 {
-    protected static ?int $sort = 9;
+    protected static ?int $sort = 8;
 
     protected int|string|array $columnSpan = [
         'sm' => 1,
-        'md' => 6,
-        'lg' => 3,
+        'md' => 1,
+        'lg' => 4,
     ];
 
     public function mount(): void

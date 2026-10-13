@@ -109,7 +109,8 @@ class DueDateTest extends TestCase
         // Force the 'id' JSON group to load, then override just the "Y-m-d"
         // line - simulating a translator turning it into a localized (and
         // Carbon-invalid) date format. The card must still render the real
-        // ISO date: the format string must never pass through __().
+        // date (now the short "08 Oct" style of the redesigned card): the
+        // format string must never pass through __().
         app('translator')->get('force-load');
         app('translator')->addLines(['*.Y-m-d' => 'BROKEN-FORMAT'], 'id');
 
@@ -124,7 +125,7 @@ class DueDateTest extends TestCase
         ]);
 
         Livewire::test(\App\Filament\Pages\Kanban::class, ['project' => $project])
-            ->assertSee($dueDate->format('Y-m-d'))
+            ->assertSee($dueDate->translatedFormat($dueDate->isCurrentYear() ? 'd M' : 'd M Y'))
             ->assertDontSee('BROKEN-FORMAT');
     }
 

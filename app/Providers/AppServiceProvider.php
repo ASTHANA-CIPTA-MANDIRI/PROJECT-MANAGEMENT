@@ -68,6 +68,8 @@ class AppServiceProvider extends ServiceProvider
         // Render the Organization switcher (Phase 3C) near the top of every
         // Filament panel page's sidebar.
         $this->configureOrganizationSwitcher();
+        $this->configureAlertTexts();
+        $this->configureProfileDisplay();
 
         // Monitor database queries in local development. Writes to a dedicated
         // storage/logs/query.log channel; never active in testing/production.
@@ -239,6 +241,161 @@ class AppServiceProvider extends ServiceProvider
             'sidebar.start',
             fn (): string => Blade::render("@livewire('organization-switcher')")
         );
+    }
+
+    /**
+     * Translated default texts for the SweetAlert2 helper
+     * (window.RencanakanAlert in resources/js/filament.js). Rendered through
+     * __() so Indonesian/English follow the app locale; JSON-encoded with the
+     * hex flags so a translation can never break out of the script tag.
+     */
+    private function configureAlertTexts(): void
+    {
+        Filament::registerRenderHook('scripts.start', function (): HtmlString {
+            $texts = [
+                'title' => __('Are you sure?'),
+                'confirm' => __('Yes, continue'),
+                'cancel' => __('No, cancel'),
+                'newBadge' => __('new'),
+                'rowsPerPage' => __('Rows per page'),
+                'of' => __('of'),
+                'disableTwoFactor' => __('Disable two-factor authentication? Your account will be less protected.'),
+            ];
+
+            return new HtmlString(
+                '<script>window.RencanakanAlertTexts = '
+                .json_encode($texts, JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT | JSON_UNESCAPED_UNICODE)
+                .';</script>'
+            );
+        });
+    }
+
+    /**
+     * Presentation only: a profile card pinned to the bottom of the sidebar
+     * (with logout) and the name/role next to the topbar avatar. Reuses
+     * Filament's own user-menu items, so the account and logout URLs stay
+     * whatever the panel already configures.
+     */
+    private function configureProfileDisplay(): void
+    {
+        $render = function (string $template, array $extra = []): string {
+            $user = Filament::auth()->user();
+
+            if (! $user) {
+                return '';
+            }
+
+            $items = Filament::getUserMenuItems();
+
+            return Blade::render($template, [
+                'name' => Filament::getUserName($user),
+                'avatar' => Filament::getUserAvatarUrl($user),
+                'role' => method_exists($user, 'getRoleNames') ? $user->getRoleNames()->first() : null,
+                'accountUrl' => ($items['account'] ?? null)?->getUrl(),
+                'accountLabel' => ($items['account'] ?? null)?->getLabel() ?? __('Profile'),
+                'logoutUrl' => ($items['logout'] ?? null)?->getUrl() ?? route('filament.auth.logout'),
+                'email' => $user->email,
+                'tasksUrl' => $user->can('viewAny', \App\Models\Ticket::class) ? route('filament.resources.tickets.index') : null,
+                'inboxUrl' => route('filament.pages.inbox'),
+            ] + $extra);
+        };
+
+        Filament::registerRenderHook('sidebar.end', fn (): string => $render(<<<'BLADE'
+            <div
+                class="sidebar-profile-card"
+                x-data="{ open: false }"
+                x-on:click.outside="open = false"
+                x-on:keydown.escape.window="open = false"
+            >
+                {{-- Sidebar expanded: profile link + logout icon --}}
+                <div class="sidebar-profile-expanded">
+                    <a @if ($accountUrl) href="{{ $accountUrl }}" @endif class="sidebar-profile-link" title="{{ $accountLabel }}">
+                        <img src="{{ $avatar }}" alt="{{ $name }}" class="sidebar-profile-avatar">
+                        <span class="sidebar-profile-text">
+                            <span class="sidebar-profile-name">{{ $name }}</span>
+                            @if ($role)<span class="sidebar-profile-role">{{ $role }}</span>@endif
+                        </span>
+                    </a>
+                    <form method="POST" action="{{ $logoutUrl }}">
+                        @csrf
+                        <button type="submit" class="sidebar-profile-logout" title="{{ __('filament::layout.buttons.logout.label') }}" aria-label="{{ __('filament::layout.buttons.logout.label') }}">
+                            <x-heroicon-o-logout class="w-5 h-5" />
+                        </button>
+                    </form>
+                </div>
+
+                {{-- Sidebar collapsed: avatar only, click for Profile / Logout --}}
+                <div class="sidebar-profile-collapsed">
+                    <button type="button" class="sidebar-profile-trigger" x-on:click="open = ! open" x-bind:aria-expanded="open" aria-haspopup="true" title="{{ $name }}">
+                        <img src="{{ $avatar }}" alt="{{ $name }}" class="sidebar-profile-avatar">
+                    </button>
+                    <div class="sidebar-profile-menu" x-show="open" x-cloak x-transition.opacity>
+                        @if ($accountUrl)
+                            <a href="{{ $accountUrl }}" class="sidebar-profile-menu-item" title="{{ $accountLabel }}">
+                                <x-heroicon-o-user-circle class="w-5 h-5 shrink-0" />
+                            </a>
+                        @endif
+                        <form method="POST" action="{{ $logoutUrl }}">
+                            @csrf
+                            <button type="submit" class="sidebar-profile-menu-item" title="{{ __('filament::layout.buttons.logout.label') }}">
+                                <x-heroicon-o-logout class="w-5 h-5 shrink-0" />
+                            </button>
+                        </form>
+                    </div>
+                </div>
+            </div>
+            BLADE));
+
+        // Top-right user menu: a profile card (avatar, name, role, e-mail), three
+        // shortcuts and a Log out button. It is rendered inside Filament's own
+        // dropdown, ahead of its default list, which CSS hides (the Log out here
+        // posts to the same route, so nothing about authentication changes).
+        Filament::registerRenderHook('user-menu.account.before', fn (): string => $render(<<<'BLADE'
+            <div class="rk-um">
+                <h3 class="rk-um__title">{{ __('User profile') }}</h3>
+
+                <div class="rk-um__user">
+                    <img src="{{ $avatar }}" alt="{{ $name }}" class="rk-um__avatar">
+                    <div class="rk-um__who">
+                        <b>{{ $name }}</b>
+                        @if ($role)<span>{{ $role }}</span>@endif
+                        <span class="rk-um__mail"><x-heroicon-o-mail class="h-4 w-4" /> {{ $email }}</span>
+                    </div>
+                </div>
+
+                <nav class="rk-um__items">
+                    @if ($accountUrl)
+                        <a href="{{ $accountUrl }}" class="rk-um__item">
+                            <span class="rk-um__tile rk-um__tile--blue"><x-heroicon-o-user-circle class="h-6 w-6" /></span>
+                            <span><b>{{ __('My profile') }}</b><small>{{ __('Account settings') }}</small></span>
+                        </a>
+                    @endif
+                    <a href="{{ $inboxUrl }}" class="rk-um__item">
+                        <span class="rk-um__tile rk-um__tile--green"><x-heroicon-o-inbox class="h-6 w-6" /></span>
+                        <span><b>{{ __('My inbox') }}</b><small>{{ __('Messages & emails') }}</small></span>
+                        @if ($chatUnread)<em class="rk-um__badge">{{ $chatUnread }}</em>@endif
+                    </a>
+                    @if ($tasksUrl)
+                        <a href="{{ $tasksUrl }}" class="rk-um__item">
+                            <span class="rk-um__tile rk-um__tile--red"><x-heroicon-o-clipboard-check class="h-6 w-6" /></span>
+                            <span><b>{{ __('My tickets') }}</b><small>{{ __('Your assigned and open work') }}</small></span>
+                        </a>
+                    @endif
+                </nav>
+
+                <form method="POST" action="{{ $logoutUrl }}">
+                    @csrf
+                    <button type="submit" class="rk-um__logout">{{ __('filament::layout.buttons.logout.label') }}</button>
+                </form>
+            </div>
+            BLADE, ['chatUnread' => ($u = Filament::auth()->user()) ? \App\Support\ChatDirectory::unreadCount($u) : 0]));
+
+        Filament::registerRenderHook('user-menu.start', fn (): string => $render(<<<'BLADE'
+            <div class="topbar-profile-text">
+                <span class="topbar-profile-name">{{ $name }}</span>
+                @if ($role)<span class="topbar-profile-role">{{ $role }}</span>@endif
+            </div>
+            BLADE));
     }
 
     private function configureSocialiteProviders(): void
