@@ -25,6 +25,11 @@ class RoleResource extends Resource
         return __('Roles');
     }
 
+    public static function getLabel(): string
+    {
+        return __('Role');
+    }
+
     public static function getPluralLabel(): ?string
     {
         return static::getNavigationLabel();
@@ -61,7 +66,7 @@ class RoleResource extends Resource
                                 Forms\Components\CheckboxList::make('permissions')
                                     ->label(__('Permissions'))
                                     ->required()
-                                    ->columns(4)
+                                    ->view('forms.components.permission-groups')
                                     ->relationship('permissions', 'name')
                                     // Privilege escalation: without this, anyone holding
                                     // "Update role" could tick every permission onto a
@@ -96,15 +101,15 @@ class RoleResource extends Resource
                     ->sortable()
                     ->searchable(),
 
-                Tables\Columns\TagsColumn::make('permissions.name')
+                Tables\Columns\TextColumn::make('permissions_count')
                     ->label(__('Permissions'))
-                    ->limit(2),
+                    ->counts('permissions')
+                    ->sortable(),
 
-                Tables\Columns\TextColumn::make('created_at')
-                    ->label(__('Created at'))
-                    ->dateTime()
-                    ->sortable()
-                    ->searchable(),
+                Tables\Columns\TextColumn::make('users_count')
+                    ->label(__('Users'))
+                    ->counts('users')
+                    ->sortable(),
             ])
             ->filters([
                 //

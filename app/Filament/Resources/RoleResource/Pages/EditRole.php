@@ -13,6 +13,13 @@ class EditRole extends EditRecord
     protected function getActions(): array
     {
         return [
+            Actions\Action::make('back')
+                ->label(__('Back to roles'))
+                ->icon('heroicon-o-arrow-left')
+                ->color('secondary')
+                ->extraAttributes(['class' => 'rk-back-action'])
+                ->url(RoleResource::getUrl('index')),
+
             Actions\ViewAction::make(),
             Actions\DeleteAction::make(),
         ];

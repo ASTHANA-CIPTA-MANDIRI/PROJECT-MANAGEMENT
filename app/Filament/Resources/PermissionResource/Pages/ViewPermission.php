@@ -13,6 +13,13 @@ class ViewPermission extends ViewRecord
     protected function getActions(): array
     {
         return [
+            Actions\Action::make('back')
+                ->label(__('Back to permissions'))
+                ->icon('heroicon-o-arrow-left')
+                ->color('secondary')
+                ->extraAttributes(['class' => 'rk-back-action'])
+                ->url(PermissionResource::getUrl('index')),
+
             Actions\EditAction::make(),
         ];
     }

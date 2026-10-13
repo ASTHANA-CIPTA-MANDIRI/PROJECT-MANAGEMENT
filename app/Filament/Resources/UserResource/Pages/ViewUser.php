@@ -13,6 +13,13 @@ class ViewUser extends ViewRecord
     protected function getActions(): array
     {
         return [
+            Actions\Action::make('back')
+                ->label(__('Back to users'))
+                ->icon('heroicon-o-arrow-left')
+                ->color('secondary')
+                ->extraAttributes(['class' => 'rk-back-action'])
+                ->url(UserResource::getUrl('index')),
+
             Actions\EditAction::make(),
         ];
     }

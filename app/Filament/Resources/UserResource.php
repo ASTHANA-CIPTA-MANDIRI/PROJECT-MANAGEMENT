@@ -13,6 +13,7 @@ use Filament\Resources\Table;
 use Filament\Tables;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\SoftDeletingScope;
+use Illuminate\Support\HtmlString;
 
 class UserResource extends Resource
 {
@@ -25,6 +26,11 @@ class UserResource extends Resource
     protected static function getNavigationLabel(): string
     {
         return __('Users');
+    }
+
+    public static function getLabel(): string
+    {
+        return __('User');
     }
 
     public static function getPluralLabel(): ?string
@@ -75,7 +81,7 @@ class UserResource extends Resource
                                 Forms\Components\CheckboxList::make('roles')
                                     ->label(__('Permission roles'))
                                     ->required()
-                                    ->columns(3)
+                                    ->columns(['default' => 1, 'sm' => 2, 'lg' => 3])
                                     ->relationship('roles', 'name')
                                     // Guards: the Super Admin role can't be removed
                                     // from the last Super Admin, and nobody may hand
@@ -131,15 +137,16 @@ class UserResource extends Resource
     {
         return $table
             ->columns([
+                // Name with the e-mail underneath: one column instead of two keeps the
+                // table inside the card on narrow laptops. e() because descriptions
+                // go through Markdown (an e-mail would turn into a mailto: link).
                 Tables\Columns\TextColumn::make('name')
                     ->label(__('Full name'))
+                    ->description(fn (User $record) => new HtmlString(e($record->email)))
                     ->sortable()
-                    ->searchable(),
-
-                Tables\Columns\TextColumn::make('email')
-                    ->label(__('Email address'))
-                    ->sortable()
-                    ->searchable(),
+                    ->searchable(query: fn (Builder $query, string $search): Builder => $query
+                        ->where('name', 'like', "%{$search}%")
+                        ->orWhere('email', 'like', "%{$search}%")),
 
                 Tables\Columns\TagsColumn::make('roles.name')
                     ->label(__('Roles'))
@@ -152,17 +159,18 @@ class UserResource extends Resource
 
                 Tables\Columns\TextColumn::make('email_verified_at')
                     ->label(__('Email verified at'))
-                    ->dateTime()
+                    ->dateTime('d M Y')
+                    ->placeholder('—')
                     ->sortable()
                     ->searchable(),
 
                 Tables\Columns\TextColumn::make('socials')
-                    ->label(__('Linked social networks'))
+                    ->label(__('Signed in via'))
                     ->view('partials.filament.resources.social-icon'),
 
                 Tables\Columns\TextColumn::make('created_at')
                     ->label(__('Created at'))
-                    ->dateTime()
+                    ->dateTime('d M Y')
                     ->sortable()
                     ->searchable(),
             ])

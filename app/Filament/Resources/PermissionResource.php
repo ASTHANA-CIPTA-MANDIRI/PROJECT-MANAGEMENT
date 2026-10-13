@@ -30,6 +30,11 @@ class PermissionResource extends Resource
         return __('Permissions');
     }
 
+    public static function getLabel(): string
+    {
+        return __('Permission');
+    }
+
     public static function getPluralLabel(): ?string
     {
         return static::getNavigationLabel();
@@ -68,11 +73,10 @@ class PermissionResource extends Resource
                     ->sortable()
                     ->searchable(),
 
-                Tables\Columns\TextColumn::make('created_at')
-                    ->label(__('Created at'))
-                    ->dateTime()
-                    ->sortable()
-                    ->searchable(),
+                Tables\Columns\TextColumn::make('roles_count')
+                    ->label(__('Used by roles'))
+                    ->counts('roles')
+                    ->sortable(),
             ])
             ->filters([
                 //
