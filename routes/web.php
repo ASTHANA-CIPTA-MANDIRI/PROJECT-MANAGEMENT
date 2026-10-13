@@ -80,6 +80,11 @@ Route::get('/media/{media}', [MediaController::class, 'show'])
     ->middleware('auth')
     ->name('media.show');
 
+// Chat attachments: private disk, participants only (see MediaController::chat).
+Route::get('/chat/attachments/{attachment}', [MediaController::class, 'chat'])
+    ->middleware('auth')
+    ->name('chat.attachment');
+
 Route::get('/email/verify/{id}/{hash}', function (EmailVerificationRequest $request) {
     $request->fulfill(); // menandai email sebagai terverifikasi
 

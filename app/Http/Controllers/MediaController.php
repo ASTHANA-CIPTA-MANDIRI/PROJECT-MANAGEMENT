@@ -2,6 +2,8 @@
 
 namespace App\Http\Controllers;
 
+use App\Models\MessageAttachment;
+use App\Support\ChatDirectory;
 use Illuminate\Support\Facades\Gate;
 use Illuminate\Support\Facades\Storage;
 use Spatie\MediaLibrary\MediaCollections\Models\Media;
@@ -39,6 +41,37 @@ class MediaController extends Controller
             $media->getPathRelativeToRoot(),
             $media->file_name,
             ['X-Content-Type-Options' => 'nosniff'],
+            $disposition
+        );
+    }
+
+    /**
+     * Stream a chat attachment to a participant of its conversation who may
+     * still message the other side (same gate as reading the chat itself).
+     * Images render inline; everything else downloads, with nosniff.
+     */
+    public function chat(MessageAttachment $attachment): StreamedResponse
+    {
+        $user = auth()->user();
+        $conversation = $attachment->conversation;
+
+        abort_unless($attachment->isAvailable(), 404);
+        abort_unless(
+            $conversation !== null
+                && in_array($user->id, [$conversation->user_a_id, $conversation->user_b_id], true)
+                && ChatDirectory::canMessage($user, $conversation->otherUserId($user)),
+            403
+        );
+
+        $disposition = $attachment->is_image
+            && in_array($attachment->mime, config('system.images.accepted_mime_types'), true)
+            ? 'inline'
+            : 'attachment';
+
+        return Storage::disk(MessageAttachment::DISK)->response(
+            $attachment->path,
+            $attachment->original_name,
+            ['X-Content-Type-Options' => 'nosniff', 'Cache-Control' => 'private, no-cache'],
             $disposition
         );
     }

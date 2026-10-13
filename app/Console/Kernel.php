@@ -34,6 +34,21 @@ class Kernel extends ConsoleKernel
         $schedule->command('model:prune')
             ->dailyAt('03:00')
             ->withoutOverlapping();
+
+        // The inbox keeps notifications the user has already read for 90
+        // days; unread ones are never touched.
+        $schedule->call(fn () => \Illuminate\Notifications\DatabaseNotification::query()
+            ->whereNotNull('read_at')
+            ->where('read_at', '<', now()->subDays(90))
+            ->delete())
+            ->name('notifications:prune-read')
+            ->dailyAt('03:30');
+
+        // Chat files/images are removed after system.chat.attachment_days
+        // (CHAT_ATTACHMENT_DAYS, default 30); the message keeps an "expired" note.
+        $schedule->call(fn () => \App\Models\MessageAttachment::purgeExpired())
+            ->name('chat:purge-attachments')
+            ->dailyAt('03:45');
     }
 
     /**

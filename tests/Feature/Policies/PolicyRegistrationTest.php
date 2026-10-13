@@ -62,13 +62,29 @@ class PolicyRegistrationTest extends TestCase
      * make themselves subscribed regardless of whether a Policy exists —
      * see this table's own migration docblock and Organization::isSubscribed().
      *
+     * The profile feed (ProfilePost, ProfilePostComment) and the Inbox chat
+     * (Conversation, Message, MessageAttachment) are exempt for the same
+     * shape of reason: no Filament Resource exposes them, and they are only
+     * reached through the Profile / Inbox Livewire pages, where every action
+     * resolves its row through a scoped query the user's own context decides
+     * (ProfilePost::scopeVisibleTo() - current Organization, trial-gated -
+     * and App\Support\ChatDirectory - Organization + accessible Projects,
+     * re-checked on every open/send/download), never from a posted id alone.
+     * Attachments are streamed by MediaController::chat() after the same
+     * ChatDirectory check.
+     *
      * @var array<int, string>
      */
     private const UNGUARDED_MODELS = [
+        \App\Models\Conversation::class,
+        \App\Models\Message::class,
+        \App\Models\MessageAttachment::class,
         \App\Models\OrganizationInvitation::class,
         \App\Models\OrganizationSupportAccessGrant::class,
         \App\Models\OrganizationSupportAction::class,
         \App\Models\OrganizationSupportSession::class,
+        \App\Models\ProfilePost::class,
+        \App\Models\ProfilePostComment::class,
         \App\Models\ProjectFavorite::class,
         \App\Models\ProjectUser::class,
         \App\Models\Subscription::class,
