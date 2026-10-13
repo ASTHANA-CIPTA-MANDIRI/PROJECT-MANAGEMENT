@@ -37,14 +37,34 @@ class MonthlyReport extends BarChartWidget
         return [
             'datasets' => [
                 [
-                    'label' => __('Total time logged'),
-                    'data' => $datasets['sets'],
-                    'backgroundColor' => [
-                        'rgba(54, 162, 235, .6)',
-                    ],
-                    'borderColor' => [
-                        'rgba(54, 162, 235, .8)',
-                    ],
+                    'label' => __('Weekdays'),
+                    // Floating bars ([from, to]) rather than a stacked chart: Chart.js turns off
+                    // the corner radius of the lower segment of a stack, which breaks the pills.
+                    'grouped' => false,
+                    'data' => $datasets['weekday'],
+                    'backgroundColor' => '#3b82d6',
+                    'hoverBackgroundColor' => '#6aa3e3',
+                    'borderColor' => '#ffffff',
+                    'borderWidth' => 3,
+                    'borderRadius' => 100,
+                    'borderSkipped' => false,
+                    'maxBarThickness' => 30,
+                    'barPercentage' => 0.7,
+                    'categoryPercentage' => 0.8,
+                ],
+                [
+                    'label' => __('Weekend'),
+                    'grouped' => false,
+                    'data' => $datasets['weekend'],
+                    'backgroundColor' => '#ee9a82',
+                    'hoverBackgroundColor' => '#f3b3a1',
+                    'borderColor' => '#ffffff',
+                    'borderWidth' => 3,
+                    'borderRadius' => 100,
+                    'borderSkipped' => false,
+                    'maxBarThickness' => 30,
+                    'barPercentage' => 0.7,
+                    'categoryPercentage' => 0.8,
                 ],
             ],
             'labels' => $datasets['labels'],
@@ -56,25 +76,50 @@ class MonthlyReport extends BarChartWidget
         return $this->yearFilterOptions();
     }
 
+    // Without a max height Chart.js sizes the canvas from its 300x150 default.
+    protected static ?string $maxHeight = '300px';
+
+    protected static string $view = 'filament.widgets.timesheet-chart';
+
     protected static ?array $options = [
+        'maintainAspectRatio' => false,
+        'interaction' => ['mode' => 'index', 'intersect' => false],
         'plugins' => [
-            'legend' => [
-                'display' => true,
+            'legend' => ['position' => 'bottom', 'labels' => ['usePointStyle' => true, 'pointStyle' => 'circle', 'padding' => 18, 'color' => '#6f767e']],
+            'tooltip' => [
+                'backgroundColor' => '#ffffff',
+                'titleColor' => '#1f2937',
+                'bodyColor' => '#1f2937',
+                'borderColor' => '#e5e7eb',
+                'borderWidth' => 1,
+                'padding' => 12,
+                'cornerRadius' => 12,
+                'usePointStyle' => true,
+                'boxPadding' => 6,
+                'titleFont' => ['weight' => '600'],
+                'bodyFont' => ['weight' => '600'],
             ],
+            'rkHoverBand' => ['enabled' => true],
         ],
+        'scales' => [
+            'x' => ['stacked' => false, 'grid' => ['display' => false], 'border' => ['display' => false], 'ticks' => ['color' => '#9aa0a6', 'font' => ['size' => 13]]],
+            'y' => ['stacked' => false, 'beginAtZero' => true, 'grid' => ['color' => 'rgba(148, 163, 184, .22)', 'drawBorder' => false], 'ticks' => ['color' => '#9aa0a6', 'font' => ['size' => 13]]],
+        ],
+        'animation' => ['duration' => 900, 'easing' => 'easeOutQuart'],
     ];
 
     protected int|string|array $columnSpan = [
         'sm' => 1,
         'md' => 6,
-        'lg' => 3,
+        'lg' => 6,
     ];
 
     /**
-     * Total logged hours per month number (1-12) for the user and year.
+     * Logged hours per month number (1-12) for the user and year, split into
+     * Monday-Friday and Saturday-Sunday so the two stack to the month's total.
      * Grouping happens in PHP so it runs on any database driver.
      *
-     * @return Collection<int, float>
+     * @return Collection<int, array{weekday: float, weekend: float}>
      */
     protected function filter(User $user, ?string $year): Collection
     {
@@ -88,47 +133,50 @@ class MonthlyReport extends BarChartWidget
             ])
             ->get()
             ->groupBy(fn (TicketHour $hour) => (int) $hour->created_at->format('n'))
-            ->map(fn (Collection $group) => (float) $group->sum('value'));
+            ->map(fn (Collection $group) => [
+                'weekday' => (float) $group->filter(fn (TicketHour $hour) => ! $hour->created_at->isWeekend())->sum('value'),
+                'weekend' => (float) $group->filter(fn (TicketHour $hour) => $hour->created_at->isWeekend())->sum('value'),
+            ]);
     }
 
+    /**
+     * @return array{weekday: array<int, ?array{0: float, 1: float}>, weekend: array<int, ?array{0: float, 1: float}>, labels: array<int, string>}
+     */
     protected function getDatasets(array $rapportData): array
     {
         $datasets = [
-            'sets' => [],
+            'weekday' => [],
+            'weekend' => [],
             'labels' => [],
         ];
 
         foreach ($rapportData as $data) {
-            $datasets['sets'][] = $data[1];
+            [, $weekday, $weekend] = $data;
+
             $datasets['labels'][] = $data[0];
+            // Weekdays from the axis up, weekend starting where weekdays end; an empty part is
+            // left out (null) so no zero-height sliver is drawn.
+            $datasets['weekday'][] = $weekday > 0 ? [0.0, $weekday] : null;
+            $datasets['weekend'][] = $weekend > 0 ? [$weekday, $weekday + $weekend] : null;
         }
 
         return $datasets;
     }
 
     /**
-     * @param  Collection<int, float>  $collection
+     * @param  Collection<int, array{weekday: float, weekend: float}>  $collection
      */
     protected function buildRapport(Collection $collection): array
     {
-        $months = [
-            1 => ['January', 0],
-            2 => ['February', 0],
-            3 => ['March', 0],
-            4 => ['April', 0],
-            5 => ['May', 0],
-            6 => ['June', 0],
-            7 => ['July', 0],
-            8 => ['August', 0],
-            9 => ['September', 0],
-            10 => ['October', 0],
-            11 => ['November', 0],
-            12 => ['December', 0],
-        ];
+        $months = [];
+        foreach (range(1, 12) as $month) {
+            $months[$month] = [Carbon::create(2000, $month, 1)->translatedFormat('F'), 0.0, 0.0];
+        }
 
         foreach ($collection as $month => $value) {
             if (isset($months[$month])) {
-                $months[$month][1] = (float) $value;
+                $months[$month][1] = $value['weekday'];
+                $months[$month][2] = $value['weekend'];
             }
         }
 

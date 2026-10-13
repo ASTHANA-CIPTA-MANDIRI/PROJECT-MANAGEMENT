@@ -47,17 +47,52 @@ class WeeklyReport extends BarChartWidget
                 [
                     'label' => __('Weekly time logged'),
                     'data' => $datasets,
-                    'backgroundColor' => [
-                        'rgba(54, 162, 235, .6)',
-                    ],
-                    'borderColor' => [
-                        'rgba(54, 162, 235, .8)',
-                    ],
+                    'backgroundColor' => '#3b82d6',
+                    'hoverBackgroundColor' => '#6aa3e3',
+                    'borderColor' => '#ffffff',
+                    'borderWidth' => 3,
+                    'borderRadius' => 100,
+                    'borderSkipped' => false,
+                    'maxBarThickness' => 30,
+                    'barPercentage' => 0.7,
+                    'categoryPercentage' => 0.8,
                 ],
             ],
-            'labels' => $dates,
+            'labels' => array_map(fn (string $date) => Carbon::parse($date)->translatedFormat('D d M'), $dates),
         ];
     }
+
+    // Without a max height Chart.js sizes the canvas from its 300x150 default.
+    protected static ?string $maxHeight = '300px';
+
+    protected static string $view = 'filament.widgets.timesheet-chart';
+
+    protected static ?array $options = [
+        'maintainAspectRatio' => false,
+        'interaction' => ['mode' => 'index', 'intersect' => false],
+        'plugins' => [
+            'legend' => ['display' => false],
+            'tooltip' => [
+                'backgroundColor' => '#ffffff',
+                'titleColor' => '#1f2937',
+                'bodyColor' => '#1f2937',
+                'borderColor' => '#e5e7eb',
+                'borderWidth' => 1,
+                'padding' => 12,
+                'cornerRadius' => 12,
+                'usePointStyle' => true,
+                'boxPadding' => 6,
+                'titleFont' => ['weight' => '600'],
+                'bodyFont' => ['weight' => '600'],
+            ],
+            'rkHoverBand' => ['enabled' => true],
+        ],
+        'scales' => [
+            'x' => ['grid' => ['display' => false], 'border' => ['display' => false], 'ticks' => ['color' => '#9aa0a6', 'font' => ['size' => 13]]],
+            'y' => ['beginAtZero' => true, 'grid' => ['color' => 'rgba(148, 163, 184, .22)', 'drawBorder' => false], 'ticks' => ['color' => '#9aa0a6', 'font' => ['size' => 13]]],
+        ],
+        'animation' => ['duration' => 900, 'easing' => 'easeOutQuart'],
+    ];
 
     protected function getFilters(): ?array
     {

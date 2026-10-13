@@ -6,6 +6,7 @@ namespace App\Filament\Pages;
 
 use App\Support\OrganizationContext;
 use App\Support\TrialGate;
+use Carbon\Carbon;
 use Closure;
 use Filament\Forms\Components\Card;
 use Filament\Forms\Components\DatePicker;
@@ -33,6 +34,11 @@ class TimesheetExport extends AuthorizedPage implements HasForms
         return __('Timesheet');
     }
 
+    protected function getTitle(): string
+    {
+        return __('Timesheet export');
+    }
+
     public function mount(): void
     {
         $this->form->fill();
@@ -46,17 +52,57 @@ class TimesheetExport extends AuthorizedPage implements HasForms
                     ->columns(2)
                     ->schema([
                         DatePicker::make('start_date')
+                            ->displayFormat('d M Y')
                             ->required()
                             ->reactive()
-                            ->label('Star date'),
+                            ->label(__('Start date')),
                         DatePicker::make('end_date')
+                            ->displayFormat('d M Y')
                             ->required()
                             ->reactive()
                             ->afterOrEqual(fn (Closure $get) => $get('start_date'))
-                            ->label('End date'),
+                            ->label(__('End date')),
                     ]),
             ]),
         ];
+    }
+
+    /**
+     * Quick presets for the two date fields. They only fill the form; the
+     * same validation (required, end >= start) and the same export run after.
+     */
+    public function setRange(string $range): void
+    {
+        $now = Carbon::now();
+
+        $dates = match ($range) {
+            'week' => [$now->copy()->startOfWeek(), $now->copy()->endOfWeek()],
+            'month' => [$now->copy()->startOfMonth(), $now->copy()->endOfMonth()],
+            'last_month' => [$now->copy()->subMonthNoOverflow()->startOfMonth(), $now->copy()->subMonthNoOverflow()->endOfMonth()],
+            'year' => [$now->copy()->startOfYear(), $now->copy()->endOfYear()],
+            default => null,
+        };
+
+        if ($dates === null) {
+            return;
+        }
+
+        // The form has no state path: its fields are plain component properties.
+        $this->fill([
+            'start_date' => $dates[0]->toDateString(),
+            'end_date' => $dates[1]->toDateString(),
+        ]);
+    }
+
+    /**
+     * Column headings of the CSV, for the "what is inside" panel. Kept next to
+     * the real export so the two cannot drift silently.
+     *
+     * @return array<int, string>
+     */
+    public function exportColumns(): array
+    {
+        return (new \App\Exports\TimesheetExport([]))->headings();
     }
 
     public function create(): ?BinaryFileResponse

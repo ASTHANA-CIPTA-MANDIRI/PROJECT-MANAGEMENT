@@ -2,6 +2,7 @@
 
 namespace Tests\Feature\Filament;
 
+use App\Filament\Pages\TimesheetDashboard;
 use App\Filament\Resources\TimesheetResource\Pages\ListTimesheet;
 use App\Filament\Widgets\Timesheet\ActivitiesReport;
 use App\Filament\Widgets\Timesheet\MonthlyReport;
@@ -214,7 +215,32 @@ class TimesheetTest extends TestCase
         $data = $this->widgetData(new MonthlyReport);
 
         $this->assertCount(12, $data['labels']);
-        $this->assertEqualsWithDelta(6.0, array_sum($data['datasets'][0]['data']), 0.001);
+        // Weekdays [0, a] + weekend [a, a + b] end at the month's total, whatever day "now" is.
+        $total = collect($data['datasets'])
+            ->flatMap(fn ($dataset) => $dataset['data'])
+            ->filter()
+            ->sum(fn (array $range) => $range[1] - $range[0]);
+        $this->assertEqualsWithDelta(6.0, $total, 0.001);
+    }
+
+    public function test_monthly_report_splits_weekday_and_weekend_hours(): void
+    {
+        $this->logHoursOn(\Carbon\Carbon::create(2026, 3, 4, 10), 2); // Wednesday
+        $this->logHoursOn(\Carbon\Carbon::create(2026, 3, 7, 10), 3); // Saturday
+        $this->logHoursOn(\Carbon\Carbon::create(2026, 3, 8, 10), 1.5); // Sunday
+
+        $widget = new MonthlyReport;
+        $widget->filter = '2026';
+        $data = $this->widgetData($widget);
+
+        $this->assertSame(__('Weekdays'), $data['datasets'][0]['label']);
+        $this->assertSame(__('Weekend'), $data['datasets'][1]['label']);
+        $this->assertSame([0.0, 2.0], $data['datasets'][0]['data'][2]);
+        // Weekend starts where the weekday part ends and is 3 + 1.5 hours long.
+        $this->assertSame([2.0, 6.5], $data['datasets'][1]['data'][2]);
+        // A month without hours leaves both parts out instead of drawing a sliver.
+        $this->assertNull($data['datasets'][0]['data'][0]);
+        $this->assertNull($data['datasets'][1]['data'][0]);
     }
 
     public function test_activities_report_groups_by_activity(): void
@@ -238,5 +264,47 @@ class TimesheetTest extends TestCase
         Livewire::test(WeeklyReport::class)->assertSuccessful();
         Livewire::test(MonthlyReport::class)->assertSuccessful();
         Livewire::test(ActivitiesReport::class)->assertSuccessful();
+    }
+
+    public function test_dashboard_summary_totals_only_the_users_own_hours(): void
+    {
+        $activity = Activity::factory()->create(['name' => 'Development']);
+        $other = Activity::factory()->create(['name' => 'Meeting']);
+        $this->logHoursOn(now(), 2, $activity->id);
+        $this->logHoursOn(now(), 3, $activity->id);
+        $this->logHoursOn(now(), 1, $other->id);
+        $this->logHoursOn(now()->subYears(2), 9, $other->id); // other year, excluded
+
+        // Someone else's hours never count.
+        $stranger = User::factory()->create();
+        $ticket = Ticket::factory()->create(['owner_id' => $stranger->id]);
+        TicketHour::factory()->hours(50)->create(['ticket_id' => $ticket->id, 'user_id' => $stranger->id, 'created_at' => now()]);
+
+        $summary = Livewire::test(TimesheetDashboard::class)->assertSee(__('This week'))->instance()->summary();
+
+        $this->assertEqualsWithDelta(6.0, $summary['year'], 0.001);
+        $this->assertEqualsWithDelta(6.0, $summary['month'], 0.001);
+        $this->assertEqualsWithDelta(6.0, $summary['week'], 0.001);
+        $this->assertSame('Development', $summary['topActivity']);
+        $this->assertEqualsWithDelta(5.0, $summary['topActivityHours'], 0.001);
+    }
+
+    public function test_dashboard_summary_is_empty_without_any_hours(): void
+    {
+        $summary = Livewire::test(TimesheetDashboard::class)->instance()->summary();
+
+        $this->assertSame(0.0, $summary['year']);
+        $this->assertNull($summary['topActivity']);
+    }
+
+    public function test_report_labels_are_translated_and_still_complete(): void
+    {
+        $months = $this->widgetData(new MonthlyReport)['labels'];
+        $this->assertCount(12, $months);
+        $this->assertSame(\Carbon\Carbon::create(2000, 1, 1)->translatedFormat('F'), $months[0]);
+
+        $week = $this->widgetData(new WeeklyReport)['labels'];
+        $this->assertCount(7, $week);
+        $this->assertDoesNotMatchRegularExpression('/^\d{4}-\d{2}-\d{2}$/', $week[0]);
     }
 }

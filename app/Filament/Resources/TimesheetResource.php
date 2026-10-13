@@ -104,6 +104,7 @@ class TimesheetResource extends Resource
 
                 Tables\Columns\TextColumn::make('value')
                     ->label(__('Hours'))
+                    ->formatStateUsing(fn ($state) => rtrim(rtrim(number_format((float) $state, 2, ',', '.'), '0'), ',').' '.__('hrs'))
                     ->sortable()
                     ->searchable(),
                 Tables\Columns\TextColumn::make('comment')
@@ -122,7 +123,7 @@ class TimesheetResource extends Resource
 
                 Tables\Columns\TextColumn::make('created_at')
                     ->label(__('Created at'))
-                    ->dateTime()
+                    ->dateTime('d M Y H:i')
                     ->sortable()
                     ->searchable(),
             ])

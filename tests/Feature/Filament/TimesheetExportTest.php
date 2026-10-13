@@ -171,4 +171,39 @@ class TimesheetExportTest extends TestCase
             $component->instance()->create()
         );
     }
+
+    public function test_quick_ranges_fill_both_dates_with_a_valid_period(): void
+    {
+        \Carbon\Carbon::setTestNow('2026-10-14 10:00:00');
+
+        $expected = [
+            'week' => ['2026-10-12', '2026-10-18'],
+            'month' => ['2026-10-01', '2026-10-31'],
+            'last_month' => ['2026-09-01', '2026-09-30'],
+            'year' => ['2026-01-01', '2026-12-31'],
+        ];
+
+        foreach ($expected as $range => [$start, $end]) {
+            $component = Livewire::test(TimesheetExport::class)->call('setRange', $range);
+
+            // The date picker may hydrate a time part; only the day matters.
+            $this->assertSame($start, substr((string) $component->get('start_date'), 0, 10));
+            $this->assertSame($end, substr((string) $component->get('end_date'), 0, 10));
+
+            $component->call('create')->assertHasNoFormErrors();
+        }
+
+        // An unknown preset leaves the form alone.
+        Livewire::test(TimesheetExport::class)->call('setRange', 'forever')->assertSet('start_date', null);
+
+        \Carbon\Carbon::setTestNow();
+    }
+
+    public function test_the_file_contents_panel_lists_the_real_csv_columns(): void
+    {
+        $columns = Livewire::test(TimesheetExport::class)->instance()->exportColumns();
+
+        $this->assertSame((new \App\Exports\TimesheetExport([]))->headings(), $columns);
+        $this->assertContains('Hours', $columns);
+    }
 }

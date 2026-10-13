@@ -7,10 +7,10 @@ namespace App\Filament\Widgets\Timesheet;
 use App\Models\TicketHour;
 use App\Models\User;
 use Carbon\Carbon;
-use Filament\Widgets\BarChartWidget;
+use Filament\Widgets\DoughnutChartWidget;
 use Illuminate\Support\Collection;
 
-class ActivitiesReport extends BarChartWidget
+class ActivitiesReport extends DoughnutChartWidget
 {
     use HasYearFilter;
 
@@ -27,6 +27,34 @@ class ActivitiesReport extends BarChartWidget
         $this->filter = (string) Carbon::now()->year;
 
         parent::__construct($id);
+    }
+
+    // Without a max height Chart.js sizes the canvas from its 300x150 default.
+    protected static ?string $maxHeight = '300px';
+
+    protected static string $view = 'filament.widgets.timesheet-chart';
+
+    protected static ?array $options = [
+        'maintainAspectRatio' => false,
+        'cutout' => '66%',
+        'plugins' => [
+            'legend' => ['position' => 'bottom', 'labels' => ['usePointStyle' => true, 'padding' => 16, 'color' => '#6f767e']],
+            'tooltip' => ['backgroundColor' => '#1f2937', 'padding' => 10, 'cornerRadius' => 10],
+        ],
+        'animation' => ['animateRotate' => true, 'duration' => 900],
+    ];
+
+    /**
+     * One hue, light to dark (the dashboard's single-colour rule), repeated
+     * when there are more activities than shades.
+     *
+     * @return array<int, string>
+     */
+    private function palette(int $count): array
+    {
+        $shades = ['#3b82d6', '#6aa3e3', '#2f6fbd', '#9cc2ee', '#245a9c', '#c2dbf6', '#6f767e', '#a9aeb4'];
+
+        return array_map(fn (int $i) => $shades[$i % count($shades)], range(0, max(0, $count - 1)));
     }
 
     protected function getHeading(): string
@@ -50,12 +78,10 @@ class ActivitiesReport extends BarChartWidget
                 [
                     'label' => __('Total time logged'),
                     'data' => $datasets['sets'],
-                    'backgroundColor' => [
-                        'rgba(54, 162, 235, .6)',
-                    ],
-                    'borderColor' => [
-                        'rgba(54, 162, 235, .8)',
-                    ],
+                    'backgroundColor' => $this->palette(count($datasets['sets'])),
+                    'borderColor' => '#ffffff',
+                    'borderWidth' => 3,
+                    'hoverOffset' => 8,
                 ],
             ],
             'labels' => $datasets['labels'],
