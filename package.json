@@ -22,5 +22,8 @@
     "dependencies": {
         "flowbite": "^1.5.3",
         "sweetalert2": "^11.26.25"
+    },
+    "overrides": {
+        "postcss-selector-parser": "7.1.6"
     }
 }

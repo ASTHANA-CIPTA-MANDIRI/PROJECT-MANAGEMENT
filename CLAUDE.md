@@ -23,6 +23,12 @@ vendor/bin/phpunit --filter=test_method_name
 vendor/bin/pint app database tests
 vendor/bin/pint <specific-file-or-dir>   # format just what you touched
 
+# Dependency advisories: run BEFORE every push. New advisories are published upstream
+# at any time and CI's security-audit job fails the day one lands, even with no code change.
+# Fix with composer/npm update when a patch exists; accept only with a write-up in
+# docs/security-advisories.md + the ID in docs/accepted-security-advisories.json.
+scripts/audit-gate.sh   # (PHP_BIN / COMPOSER_BIN env vars if php/composer are not on PATH)
+
 # Static analysis (must be 0 errors; baseline is a ratchet, not a muffler -
 # regenerating it to hide a new error defeats the point)
 vendor/bin/phpstan analyse

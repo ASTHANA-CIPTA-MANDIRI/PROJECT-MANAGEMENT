@@ -80,6 +80,26 @@ Wi-Fi), scope it to a local-only override (`.env`-driven or a personal,
 gitignored `vite.config.local.js`), never commit a `0.0.0.0`/LAN-facing
 default.
 
+### 1b. npm — `braces` (dev-only, no patched release exists) — added 2026-10-14
+
+| | |
+|---|---|
+| Package | `braces` 3.0.3 (transitive of `sass` → `chokidar`, and `tailwindcss` → `micromatch`) |
+| Advisory | `GHSA-vfj7-8cjw-p6xm` — stack-exhaustion DoS through deeply nested brace patterns, affected `<=3.0.3` |
+| Why not fixed | 3.0.3 is the **latest published release** (`npm view braces versions`), so there is no version to upgrade to. `npm audit fix` cannot resolve it and the only "fix" npm offers is a Tailwind 4 major jump, which does not remove `braces` either. |
+
+**Risk: effectively none in production.** `braces` is only used by build tooling
+(`sass` file watching, Tailwind content globbing) over **our own source
+patterns**; nothing at runtime ships it and it never sees untrusted input. A
+crafted brace pattern would have to be committed to the repo by a developer.
+
+**Fixed in the same pass (not accepted):** `axios` (12 advisories, now 1.18.x
+→ patched), `source-map-js`, and `postcss-selector-parser` (forced to 7.1.6 through
+`overrides` in `package.json`; the production CSS output was byte-identical
+before and after).
+
+**Resolved by:** a `braces` release newer than 3.0.3, picked up by `npm audit fix`.
+
 ## 2. composer — abandoned transitive packages (not vulnerable)
 
 | Package | Comes from | Replacement (later) |
