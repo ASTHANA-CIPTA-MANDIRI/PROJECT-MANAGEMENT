@@ -7,7 +7,7 @@ clears them. The CI `security-audit` job enforces this list on every run: an
 advisory ID here does not block CI, anything not here does — see
 [CI handling](#ci-handling) below.
 
-Reviewed: 2026-08-28.
+Reviewed: 2026-10-14 (last advisory added: Advisory 7, `PKSA-d5tc-s1qs-h781`).
 
 ## 0. Framework EOL status
 
@@ -268,6 +268,30 @@ change made, since the actual gap is upstream in the framework, not in how
 this app calls it.
 
 **Resolved by:** the Laravel 12 upgrade already tracked in Advisory 0.
+
+### 7b. `PKSA-d5tc-s1qs-h781` — XSS in the Laravel debug page (added 2026-10-14)
+
+| | |
+|---|---|
+| Advisory | `PKSA-d5tc-s1qs-h781` / CVE-2026-102279 (GHSA-jh5r-qr3c-85q8) — "Laravel: XSS in Debug Page Information" |
+| Affected | `<12.69.0` (and 13.x `<13.30.0`) with no lower bound, so **no 9.x release carries a fix** — same EOL situation as the rows above |
+| Installed | v9.52.20 |
+
+**Exposure check (2026-10-14):** the bug is in the exception *debug page*
+(the Ignition-style error screen), which is only rendered when
+`APP_DEBUG=true`. Every shipped deployment path forces it off: the Docker
+image rewrites `.env` with `APP_DEBUG=false` and `APP_ENV=production`
+(`Dockerfile`, the `RUN cp .env.example .env && sed ...` step), and
+`docs/deployment.md` lists `APP_DEBUG=false` in the production checklist.
+`.env.example` keeps `APP_DEBUG=true` only as a local default and warns about
+it in its header comment. With debug off, the vulnerable page is never sent to
+a visitor, so there is nothing to inject into in production.
+
+**Interim mitigation:** keep `APP_DEBUG=false` everywhere that is reachable by
+anyone other than the developer; never run a shared/staging instance with
+debug on.
+
+**Resolved by:** the Laravel 12+ upgrade already tracked in Advisory 0.
 
 ## CI handling
 
