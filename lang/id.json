@@ -952,5 +952,8 @@
     "Deselect all": "Batalkan semua",
     "Check all": "Centang semua",
     "Used by roles": "Dipakai oleh peran",
-    "Signed in via": "Masuk melalui"
+    "Signed in via": "Masuk melalui",
+    "View permissions": "Lihat izin",
+    "This role has no permissions.": "Peran ini belum memiliki izin.",
+    "Show all": "Lihat semua"
 }

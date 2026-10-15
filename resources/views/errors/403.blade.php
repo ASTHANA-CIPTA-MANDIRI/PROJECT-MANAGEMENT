@@ -6,28 +6,23 @@
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>@if($pending){{ __('Awaiting approval') }}@else{{ __('Forbidden') }}@endif</title>
     <style>
-        :root { color-scheme: light dark; }
+        :root { color-scheme: light; }
         * { box-sizing: border-box; }
         body {
             margin: 0; min-height: 100vh; display: flex; align-items: center; justify-content: center;
-            padding: 1.5rem; background: #f3f4f6; color: #111827;
+            padding: 1.5rem; background: #f8fafc; color: #111827;
             font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
         }
         .card {
-            background: #fff; max-width: 30rem; width: 100%; border-radius: 14px; padding: 2.25rem;
-            box-shadow: 0 10px 30px -12px rgba(0,0,0,.25); text-align: center;
+            background: #fff; max-width: 30rem; width: 100%; border-radius: 28px; padding: 2.5rem 2.25rem;
+            box-shadow: 0 2px 14px rgba(15,23,42,.06); text-align: center;
         }
         .icon { font-size: 2.5rem; line-height: 1; }
         h1 { font-size: 1.4rem; margin: 1rem 0 .5rem; }
         p { color: #4b5563; line-height: 1.6; margin: .5rem 0; }
         a.btn {
-            display: inline-block; margin-top: 1.4rem; padding: .6rem 1.2rem; border-radius: 8px;
-            background: #2563eb; color: #fff; text-decoration: none; font-weight: 600;
-        }
-        @media (prefers-color-scheme: dark) {
-            body { background: #0f1319; color: #e7ebf1; }
-            .card { background: #161b23; box-shadow: 0 12px 32px -18px rgba(0,0,0,.7); }
-            p { color: #a9b2bf; }
+            display: inline-block; margin-top: 1.4rem; padding: 0 1.4rem; height: 2.5rem; line-height: 2.5rem; border-radius: 9999px;
+            background: #3b82d6; color: #fff; text-decoration: none; font-weight: 400;
         }
     </style>
 </head>

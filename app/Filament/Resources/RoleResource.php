@@ -101,10 +101,13 @@ class RoleResource extends Resource
                     ->sortable()
                     ->searchable(),
 
-                Tables\Columns\TextColumn::make('permissions_count')
+                // Same chips + clickable "+N" popup as the roles column of the users table.
+                Tables\Columns\TextColumn::make('permissions.name')
                     ->label(__('Permissions'))
-                    ->counts('permissions')
-                    ->sortable(),
+                    ->view('partials.filament.resources.chips-popup-cell')
+                    ->sortable(query: fn (Builder $query, string $direction) => $query
+                        ->withCount('permissions')
+                        ->orderBy('permissions_count', $direction)),
 
                 Tables\Columns\TextColumn::make('users_count')
                     ->label(__('Users'))

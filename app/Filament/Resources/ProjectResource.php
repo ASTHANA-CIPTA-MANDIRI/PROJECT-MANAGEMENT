@@ -142,7 +142,7 @@ class ProjectResource extends Resource
                     ->multiple()
                     ->options(fn () => ProjectStatus::query()->visibleTo(auth()->user())->pluck('name', 'id')->toArray()),
 
-                Tables\Filters\TrashedFilter::make(),
+                Tables\Filters\TrashedFilter::make()->searchable(),
             ])
             ->actions([
                 // Row actions as a row of small round icon buttons (tooltip =

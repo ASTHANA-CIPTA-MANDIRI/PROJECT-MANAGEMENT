@@ -96,7 +96,7 @@ class SprintsRelationManager extends RelationManager
                     ->limit(),
             ])
             ->filters([
-                Tables\Filters\TrashedFilter::make(),
+                Tables\Filters\TrashedFilter::make()->searchable(),
             ])
             ->headerActions([
                 Tables\Actions\CreateAction::make(),

@@ -316,7 +316,7 @@ class TicketResource extends Resource
                     ->multiple()
                     ->options(fn () => TicketPriority::query()->visibleTo(auth()->user())->pluck('name', 'id')->toArray()),
 
-                Tables\Filters\TrashedFilter::make(),
+                Tables\Filters\TrashedFilter::make()->searchable(),
             ])
             ->actions([
                 Tables\Actions\ViewAction::make(),

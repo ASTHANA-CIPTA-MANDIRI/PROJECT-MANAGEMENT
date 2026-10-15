@@ -886,6 +886,7 @@ class OrganizationSettings extends AuthorizedPage implements HasForms, HasTable
                     // Organization-role dropdown next to it.
                     Select::make('access_role_id')
                         ->label(__('Role'))
+                        ->searchable()
                         ->required()
                         ->helperText(__('Feature permissions for this member, managed by a Super Admin under Roles.'))
                         // Whatever Role this member already holds takes

@@ -132,7 +132,7 @@ class TicketStatusResource extends Resource
                     ->searchable(),
             ])
             ->filters([
-                Tables\Filters\TrashedFilter::make(),
+                Tables\Filters\TrashedFilter::make()->searchable(),
             ])
             ->actions([
                 Tables\Actions\ViewAction::make(),

@@ -148,9 +148,9 @@ class UserResource extends Resource
                         ->where('name', 'like', "%{$search}%")
                         ->orWhere('email', 'like', "%{$search}%")),
 
-                Tables\Columns\TagsColumn::make('roles.name')
+                Tables\Columns\TextColumn::make('roles.name')
                     ->label(__('Roles'))
-                    ->limit(2),
+                    ->view('partials.filament.resources.chips-popup-cell'),
 
                 Tables\Columns\IconColumn::make('is_super_admin')
                     ->label(__('Super Admin'))
@@ -191,7 +191,7 @@ class UserResource extends Resource
                             : $q->where('name', 'Super Admin'));
                     }),
 
-                Tables\Filters\TrashedFilter::make(),
+                Tables\Filters\TrashedFilter::make()->searchable(),
             ])
             ->actions([
                 Tables\Actions\ViewAction::make(),
