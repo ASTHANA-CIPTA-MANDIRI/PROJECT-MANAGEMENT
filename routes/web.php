@@ -2,6 +2,7 @@
 
 use App\Http\Controllers\MediaController;
 use App\Http\Controllers\RoadMap\DataController;
+use App\Http\Controllers\SubscriptionCheckoutController;
 use App\Models\Ticket;
 use App\Models\User;
 use Filament\Http\Middleware\DispatchServingFilamentEvent;
@@ -84,6 +85,15 @@ Route::get('/media/{media}', [MediaController::class, 'show'])
 Route::get('/chat/attachments/{attachment}', [MediaController::class, 'chat'])
     ->middleware('auth')
     ->name('chat.attachment');
+
+// Fase 8 - start a DOKU Checkout for the caller's own current Organization
+// (App\Support\OrganizationContext::current(), never a posted organization
+// id - see SubscriptionCheckoutController's own docblock). Ordinary 'web'
+// group (session auth + CSRF), same as every other authenticated
+// Organization-management action in this app.
+Route::post('/organizations/subscribe', [SubscriptionCheckoutController::class, 'store'])
+    ->middleware(['auth', 'verified'])
+    ->name('organizations.subscribe');
 
 Route::get('/email/verify/{id}/{hash}', function (EmailVerificationRequest $request) {
     $request->fulfill(); // menandai email sebagai terverifikasi

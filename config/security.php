@@ -10,6 +10,13 @@ $csp = trim((string) env('CONTENT_SECURITY_POLICY', ''));
 // (string) false is "" — which would be indistinguishable from a blank value.
 $cspEnabled = env('CSP_ENABLED', true);
 
+// Hosts of the DOKU checkout page, allowed in `form-action` only (see
+// config/doku.php). 'doku' sorts before 'security', so it is already loaded.
+$formActionHosts = implode(' ', array_map(
+    fn ($host) => 'https://'.$host,
+    (array) config('doku.checkout_hosts', [])
+));
+
 return [
 
     /*
@@ -33,7 +40,7 @@ return [
     'csp' => $csp !== '' ? $csp : implode('; ', [
         "default-src 'self'",
         "base-uri 'self'",
-        "form-action 'self'",
+        trim("form-action 'self' ".$formActionHosts),
         "frame-ancestors 'self'",
         "img-src 'self' data: https:",
         "font-src 'self' data:",

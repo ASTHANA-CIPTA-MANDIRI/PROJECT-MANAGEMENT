@@ -69,6 +69,85 @@ class SecurityHeadersTest extends TestCase
         $this->assertSame("'self' 'unsafe-inline' 'unsafe-eval'", $directives['script-src']);
     }
 
+    /** @return array<string, string> directive name => sources */
+    private function directives(string $csp): array
+    {
+        return collect(explode(';', $csp))
+            ->mapWithKeys(function (string $directive) {
+                [$name, $sources] = array_pad(explode(' ', trim($directive), 2), 2, '');
+
+                return [$name => $sources];
+            })->all();
+    }
+
+    /**
+     * Chrome applies form-action to the redirect after a form submit, so the
+     * checkout POST that redirects to DOKU is blocked unless the DOKU host is
+     * allowed - in form-action only, never with a wildcard.
+     */
+    public function test_form_action_allows_self_and_the_sandbox_doku_checkout_host_only(): void
+    {
+        config(['doku.checkout_hosts' => ['staging.doku.com']]);
+
+        $config = require config_path('security.php');
+        $directives = $this->directives($config['csp']);
+
+        $this->assertSame("'self' https://staging.doku.com", $directives['form-action']);
+        $this->assertStringNotContainsString('*', $config['csp']);
+        $this->assertStringNotContainsString('staging.doku.com', $directives['script-src']);
+        $this->assertStringNotContainsString('staging.doku.com', $directives['default-src']);
+        $this->assertSame("'self'", $directives['default-src']);
+    }
+
+    public function test_form_action_is_self_only_when_no_checkout_host_is_configured(): void
+    {
+        config(['doku.checkout_hosts' => []]);
+
+        $this->assertSame("'self'", $this->directives((require config_path('security.php'))['csp'])['form-action']);
+    }
+
+    public function test_doku_checkout_hosts_default_follows_environment_and_rejects_unsafe_values(): void
+    {
+        $resolve = fn () => require config_path('doku.php');
+
+        $sandbox = $this->withEnv('DOKU_PRODUCTION', 'false', fn () => $this->withEnv('DOKU_CHECKOUT_HOSTS', null, $resolve));
+        $this->assertSame(['staging.doku.com'], $sandbox['checkout_hosts']);
+
+        $production = $this->withEnv('DOKU_PRODUCTION', 'true', fn () => $this->withEnv('DOKU_CHECKOUT_HOSTS', null, $resolve));
+        $this->assertSame([], $production['checkout_hosts']);
+        $this->assertNotContains('staging.doku.com', $production['checkout_hosts']);
+
+        $override = $this->withEnv('DOKU_PRODUCTION', 'true', fn () => $this->withEnv(
+            'DOKU_CHECKOUT_HOSTS',
+            'pay.example.com, *.evil.com, https://x.com, a.com;b, PAY.example.com',
+            $resolve
+        ));
+        $this->assertSame(['pay.example.com'], $override['checkout_hosts']);
+    }
+
+    private function withEnv(string $name, ?string $value, \Closure $callback): mixed
+    {
+        $repository = Env::getRepository();
+        $previous = $repository->get($name);
+
+        $repository->clear($name);
+        if ($value !== null) {
+            $repository->set($name, $value);
+        }
+        if ($repository->get($name) !== $value) {
+            $this->markTestSkipped("{$name} is fixed in this machine's environment.");
+        }
+
+        try {
+            return $callback();
+        } finally {
+            $repository->clear($name);
+            if ($previous !== null) {
+                $repository->set($name, $previous);
+            }
+        }
+    }
+
     /**
      * Re-resolve config/security.php with $value in the environment, so these
      * assertions describe the shipped defaults rather than whatever the machine
