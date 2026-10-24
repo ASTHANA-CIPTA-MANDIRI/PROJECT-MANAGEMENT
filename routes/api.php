@@ -6,6 +6,7 @@ use App\Http\Controllers\Api\V1\SearchController;
 use App\Http\Controllers\Api\V1\SprintController;
 use App\Http\Controllers\Api\V1\TicketCommentController;
 use App\Http\Controllers\Api\V1\TicketController;
+use App\Http\Controllers\DokuWebhookController;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Route;
 
@@ -28,6 +29,15 @@ Route::middleware('internal')->prefix('internal')->group(function () {
         'time' => now()->toIso8601String(),
     ]));
 });
+
+// Fase 9 - DOKU Checkout payment notifications. Not Sanctum-authenticated
+// (DOKU is not one of our users and sends no bearer token); authenticity is
+// instead entirely on the HMAC-SHA256 signature verified inside the
+// controller itself (verified spec section C) - resolves to
+// /api/doku/notifications, which must be the exact URL registered as this
+// merchant's notification endpoint in the DOKU Back Office, since
+// DokuWebhookController signs against this request's own path.
+Route::post('doku/notifications', DokuWebhookController::class)->name('doku.notifications');
 
 Route::middleware('auth:sanctum')->group(function () {
     Route::get('/user', fn (Request $request) => $request->user());
