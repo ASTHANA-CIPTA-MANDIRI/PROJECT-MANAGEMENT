@@ -62,6 +62,19 @@ class PolicyRegistrationTest extends TestCase
      * make themselves subscribed regardless of whether a Policy exists —
      * see this table's own migration docblock and Organization::isSubscribed().
      *
+     * Invoice (Fase 8-9) is exempt for the identical reason once more: no
+     * Filament Resource exposes it, and the only writers are
+     * App\Services\SubscriptionCheckoutService (which re-resolves the
+     * Organization from App\Support\OrganizationContext and the amount
+     * from config('subscriptions.plans'), never from client input) and
+     * App\Services\SubscriptionActivationService (which only ever runs
+     * from a signature-verified DOKU webhook), plus the scheduled
+     * ExpirePendingInvoices command (pending -> expired, no user input). Authorization for
+     * *starting* a checkout is enforced by OrganizationPolicy::update()
+     * in App\Http\Controllers\SubscriptionCheckoutController, exactly the
+     * same "authorize against the parent, not the child row" shape
+     * OrganizationInvitation already uses above.
+     *
      * The profile feed (ProfilePost, ProfilePostComment) and the Inbox chat
      * (Conversation, Message, MessageAttachment) are exempt for the same
      * shape of reason: no Filament Resource exposes them, and they are only
@@ -77,6 +90,7 @@ class PolicyRegistrationTest extends TestCase
      */
     private const UNGUARDED_MODELS = [
         \App\Models\Conversation::class,
+        \App\Models\Invoice::class,
         \App\Models\Message::class,
         \App\Models\MessageAttachment::class,
         \App\Models\OrganizationInvitation::class,
