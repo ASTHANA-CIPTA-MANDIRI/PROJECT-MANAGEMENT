@@ -31,6 +31,12 @@ class SubscriptionCheckoutController extends Controller
 {
     public function store(Request $request, SubscriptionCheckoutService $service): RedirectResponse
     {
+        // The same switch that hides the buy buttons (config/subscriptions.php):
+        // the UI being hidden is not enough, the endpoint itself must not create
+        // an invoice or call DOKU while checkout is off (e.g. placeholder prices
+        // in production). First thing, before validation or any lookup.
+        abort_unless(config('subscriptions.checkout_enabled'), 404);
+
         $data = $request->validate([
             'plan' => ['required', 'string', Rule::in(SubscriptionPlans::codes())],
         ]);
