@@ -974,5 +974,14 @@
     ":count day|:count days": ":count hari|:count hari",
     "Continue payment": "Lanjutkan pembayaran",
     "Failed to reach DOKU, please try again.": "Gagal menghubungi DOKU, silakan coba lagi.",
-    "You have an unfinished payment": "Ada pembayaran yang belum selesai"
+    "You have an unfinished payment": "Ada pembayaran yang belum selesai",
+    "Ask an organization owner or admin to subscribe or renew.": "Minta Owner atau Admin organisasi untuk berlangganan atau memperpanjang.",
+    "Payment is being processed, usually 5 minutes at most.": "Pembayaran sedang diproses, biasanya paling lama 5 menit.",
+    "/month": "/bulan",
+    "/year": "/tahun",
+    "Billing period": "Periode tagihan",
+    "Save :percent%": "Hemat :percent%",
+    "Full access to the organization's projects, tickets, sprints and epics": "Akses penuh ke proyek, tugas, sprint, dan epik organisasi",
+    "Every member of the organization can keep working": "Seluruh anggota organisasi tetap dapat bekerja",
+    "View plans": "Lihat paket"
 }

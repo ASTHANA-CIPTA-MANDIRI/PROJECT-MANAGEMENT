@@ -41,6 +41,12 @@
         <section class="rk-og__panel">
             <div class="rk-og__panel-head">
                 <h3>{{ __('Subscription') }}</h3>
+
+                @if ($sub['checkoutEnabled'])
+                    <x-filament::button tag="a" size="sm" color="secondary" :href="route('filament.pages.organization/billing')">
+                        {{ __('View plans') }}
+                    </x-filament::button>
+                @endif
             </div>
 
             @if ($sub['locked'])
