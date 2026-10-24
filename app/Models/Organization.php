@@ -46,6 +46,19 @@ class Organization extends Model
     }
 
     /**
+     * Fase 8-9 — every DOKU Checkout payment attempt (invoice) this
+     * organization has ever started, in any status. A plain hasMany scoped
+     * through the FK like subscriptions()/invitations(), so reading it can
+     * never reach another Organization's invoices. Deliberately no ordering
+     * or status filter here: callers decide (the Organization Settings
+     * "Subscription" panel takes the latest few).
+     */
+    public function invoices(): HasMany
+    {
+        return $this->hasMany(Invoice::class);
+    }
+
+    /**
      * Phase 5.4 — every invitation ever created for this organization,
      * pending or not. The Organization Settings "Invitations" list filters
      * this down with OrganizationInvitation::scopePending().
