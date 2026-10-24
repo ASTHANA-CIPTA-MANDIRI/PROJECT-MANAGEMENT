@@ -49,6 +49,20 @@ class Kernel extends ConsoleKernel
         $schedule->call(fn () => \App\Models\MessageAttachment::purgeExpired())
             ->name('chat:purge-attachments')
             ->dailyAt('03:45');
+
+        // Fase 9 - close out DOKU Checkout invoices nobody paid before their
+        // local due-date clock ran out (see ExpirePendingInvoices's own
+        // docblock for why this is handled locally rather than from a DOKU
+        // notification field).
+        $schedule->command('subscriptions:expire-invoices')
+            ->hourly()
+            ->withoutOverlapping();
+
+        // Fase 9 fallback - poll DOKU Check Status for pending invoices in
+        // case the (public-HTTPS-only) notification never reached us.
+        $schedule->command('subscriptions:sync-pending-invoices')
+            ->everyFiveMinutes()
+            ->withoutOverlapping();
     }
 
     /**
