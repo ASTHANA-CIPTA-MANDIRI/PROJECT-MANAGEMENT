@@ -318,6 +318,7 @@ return [
             Authenticate::class,
             'verified',
             \App\Http\Middleware\RequireTwoFactorForSuperAdmins::class,
+            \App\Http\Middleware\RedirectLockedOrganizationToBilling::class,
         ],
         'base' => [
             EncryptCookies::class,

@@ -27,6 +27,19 @@ return [
      */
     'checkout_enabled' => (bool) env('SUBSCRIPTIONS_CHECKOUT_ENABLED', env('APP_ENV') !== 'production'),
 
+    /*
+     * Paywall: when on, a signed-in member of an Organization whose trial has
+     * ended (and that has no active subscription) is redirected from every
+     * full-page panel navigation to the billing page
+     * (App\Http\Middleware\RedirectLockedOrganizationToBilling). Same default
+     * as checkout_enabled (on outside production, explicit opt-in in
+     * production). It only takes effect together with checkout_enabled:
+     * redirecting people to a page that cannot sell them anything would trap
+     * them, so with checkout off the paywall counts as off and behaviour is
+     * the pre-paywall one. The combined check lives in RedirectLockedOrganizationToBilling::paywallActive().
+     */
+    'paywall_enabled' => (bool) env('SUBSCRIPTIONS_PAYWALL_ENABLED', env('APP_ENV') !== 'production'),
+
     'plans' => [
 
         'monthly' => [
