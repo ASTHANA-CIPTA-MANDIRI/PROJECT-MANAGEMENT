@@ -18,6 +18,15 @@
  */
 return [
 
+    /*
+     * Whether the Organization Settings "Subscription" panel offers plans,
+     * prices and buy buttons at all. The prices below are placeholders, so
+     * the default is ON everywhere except production; production only turns
+     * it on when SUBSCRIPTIONS_CHECKOUT_ENABLED=true is set explicitly.
+     * UI-only switch: POST /organizations/subscribe itself is not gated by it.
+     */
+    'checkout_enabled' => (bool) env('SUBSCRIPTIONS_CHECKOUT_ENABLED', env('APP_ENV') !== 'production'),
+
     'plans' => [
 
         'monthly' => [

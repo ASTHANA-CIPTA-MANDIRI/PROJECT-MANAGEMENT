@@ -2,6 +2,7 @@
 
 namespace App\Filament\Pages;
 
+use App\Models\Invoice;
 use App\Models\Organization;
 use App\Models\OrganizationInvitation;
 use App\Models\OrganizationSupportAccessGrant;
@@ -11,6 +12,7 @@ use App\Notifications\OrganizationInvitationCreated;
 use App\Notifications\OrganizationMemberAdded;
 use App\Support\OrganizationContext;
 use App\Support\SupportSessionContext;
+use App\Support\TrialGate;
 use Filament\Forms\Components\Placeholder;
 use Filament\Forms\Components\Section;
 use Filament\Forms\Components\Select;
@@ -147,17 +149,10 @@ class OrganizationSettings extends AuthorizedPage implements HasForms, HasTable
         abort_unless($organization !== null, 404);
 
         $user = auth()->user();
-        $trialEnds = $organization->trial_ends_at;
 
-        $trial = match (true) {
-            $organization->isSubscribed() => ['label' => __('Subscribed'), 'tone' => 'blue'],
-            $trialEnds === null => ['label' => __('No time limit'), 'tone' => 'green'],
-            $trialEnds->isFuture() => [
-                'label' => trans_choice(':count day left|:count days left', max(1, (int) ceil(now()->floatDiffInDays($trialEnds))), ['count' => max(1, (int) ceil(now()->floatDiffInDays($trialEnds)))]),
-                'tone' => 'yellow',
-            ],
-            default => ['label' => __('Trial ended'), 'tone' => 'red'],
-        };
+        $trial = $organization->isSubscribed()
+            ? ['label' => __('Subscribed'), 'tone' => 'blue']
+            : $this->trialStatus($organization);
 
         return [
             'name' => $organization->name,
@@ -166,6 +161,92 @@ class OrganizationSettings extends AuthorizedPage implements HasForms, HasTable
             'pending' => $this->canManageOrganization() ? $organization->invitations()->pending()->count() : null,
             'trial' => $trial,
         ];
+    }
+
+    /**
+     * The trial clock on its own, ignoring any paid subscription - the one
+     * place both the summary card (which layers "Subscribed" on top) and the
+     * "Subscription" panel (which shows trial and paid as separate facts)
+     * read it from, so the two can never disagree about it.
+     *
+     * @return array{label: string, tone: string}
+     */
+    private function trialStatus(Organization $organization): array
+    {
+        $trialEnds = $organization->trial_ends_at;
+
+        return match (true) {
+            $trialEnds === null => ['label' => __('No time limit'), 'tone' => 'green'],
+            $trialEnds->isFuture() => [
+                'label' => trans_choice(':count day left|:count days left', max(1, (int) ceil(now()->floatDiffInDays($trialEnds))), ['count' => max(1, (int) ceil(now()->floatDiffInDays($trialEnds)))]),
+                'tone' => 'yellow',
+            ],
+            default => ['label' => __('Trial ended'), 'tone' => 'red'],
+        };
+    }
+
+    /**
+     * Everything the "Subscription" panel renders, from the user's own
+     * current Organization only. Read-only; two small queries beyond the
+     * summary card (active subscriptions, one unfinished invoice). Plans, prices
+     * and the "continue payment" link are Owner/Admin only and also need
+     * subscriptions.checkout_enabled - a plain Member gets the status rows
+     * and nothing else.
+     *
+     * @return array{
+     *     paid: bool,
+     *     paidUntil: ?\Illuminate\Support\Carbon,
+     *     unlimited: bool,
+     *     trial: array{label: string, tone: string},
+     *     trialEndsAt: ?\Illuminate\Support\Carbon,
+     *     locked: bool,
+     *     canManage: bool,
+     *     checkoutEnabled: bool,
+     *     plans: array<string, array{name: string, amount: int, duration_days: int}>,
+     *     pendingInvoice: ?Invoice
+     * }
+     */
+    public function subscriptionPanel(): array
+    {
+        $organization = $this->organization();
+
+        abort_unless($organization !== null, 404);
+
+        $canManage = $this->canManageOrganization();
+        $checkoutEnabled = $canManage && (bool) config('subscriptions.checkout_enabled');
+
+        $active = $organization->subscriptions()->active()->get(['id', 'ends_at']);
+        $paid = $active->isNotEmpty();
+        // An open-ended period anywhere among the active ones means there is
+        // nothing to renew; otherwise renewal continues from the latest end.
+        $unlimited = $active->contains(fn ($subscription) => $subscription->ends_at === null);
+
+        return [
+            'paid' => $paid,
+            'paidUntil' => $paid && ! $unlimited ? $active->max('ends_at') : null,
+            'unlimited' => $paid && $unlimited,
+            'trial' => $this->trialStatus($organization),
+            'trialEndsAt' => $organization->trial_ends_at,
+            'locked' => ! $paid && ! TrialGate::active($organization),
+            'canManage' => $canManage,
+            'checkoutEnabled' => $checkoutEnabled,
+            'plans' => $checkoutEnabled ? config('subscriptions.plans', []) : [],
+            'pendingInvoice' => $checkoutEnabled
+                ? $organization->invoices()
+                    ->where('status', Invoice::STATUS_PENDING)
+                    ->where(fn ($query) => $query->whereNull('expires_at')->orWhere('expires_at', '>', now()))
+                    ->whereNotNull('doku_payment_url')
+                    ->where('doku_payment_url', '!=', '')
+                    ->latest('id')
+                    ->first()
+                : null,
+        ];
+    }
+
+    /** IDR, no decimals - the same unit DOKU's order.amount and invoices.amount use. */
+    public function formatRupiah(int $amount): string
+    {
+        return 'Rp'.number_format($amount, 0, ',', '.');
     }
 
     // ------------------------------------------------------------- settings
