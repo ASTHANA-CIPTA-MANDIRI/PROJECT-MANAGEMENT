@@ -90,7 +90,7 @@
                             <div class="rk-og__row-main">
                                 <b>{{ __($plan['name']) }}</b>
                                 <small>
-                                    {{ $this->formatRupiah($plan['amount']) }}
+                                    {{ \App\Support\SubscriptionPanel::formatRupiah($plan['amount']) }}
                                     &middot;
                                     {{ trans_choice(':count day|:count days', $plan['duration_days'], ['count' => $plan['duration_days']]) }}
                                     @if ($sub['paidUntil'])
@@ -117,7 +117,7 @@
                         <b>{{ __('You have an unfinished payment') }}</b>
                         <small>
                             {{ ($planName = \App\Support\SubscriptionPlans::find($sub['pendingInvoice']->plan_code)['name'] ?? null) ? __($planName) : $sub['pendingInvoice']->plan_code }}
-                            &middot; {{ $this->formatRupiah($sub['pendingInvoice']->amount) }}
+                            &middot; {{ \App\Support\SubscriptionPanel::formatRupiah($sub['pendingInvoice']->amount) }}
                         </small>
                     </div>
                     <x-filament::button tag="a" size="sm" :href="$sub['pendingInvoice']->doku_payment_url" rel="noopener">
