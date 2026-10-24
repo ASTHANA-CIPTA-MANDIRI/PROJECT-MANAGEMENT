@@ -973,5 +973,6 @@
     "Yearly": "Tahunan",
     ":count day|:count days": ":count hari|:count hari",
     "Continue payment": "Lanjutkan pembayaran",
+    "Failed to reach DOKU, please try again.": "Gagal menghubungi DOKU, silakan coba lagi.",
     "You have an unfinished payment": "Ada pembayaran yang belum selesai"
 }

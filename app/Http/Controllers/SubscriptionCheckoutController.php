@@ -45,7 +45,7 @@ class SubscriptionCheckoutController extends Controller
             $invoice = $service->checkout($organization, $data['plan']);
         } catch (DokuPaymentException $e) {
             return back()->withErrors([
-                'plan' => 'Gagal menghubungi DOKU, silakan coba lagi.',
+                'plan' => __('Failed to reach DOKU, please try again.'),
             ]);
         }
 
