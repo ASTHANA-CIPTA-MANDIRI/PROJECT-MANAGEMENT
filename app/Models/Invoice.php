@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
@@ -103,5 +104,60 @@ class Invoice extends Model
         return $this->status === self::STATUS_PENDING
             && $this->expires_at !== null
             && $this->expires_at->isPast();
+    }
+
+    /**
+     * Pending invoices whose local due-date clock (expires_at) has already
+     * passed: the expire/polling commands have not closed them (yet), so a
+     * human may want to look. Same condition as {@see isPastDue()}, as a
+     * query; shared by the Super Admin payments summary cards and its
+     * "needs attention" filter.
+     */
+    public function scopePendingPastDue(Builder $query): Builder
+    {
+        return $query->where('status', self::STATUS_PENDING)
+            ->whereNotNull('expires_at')
+            ->where('expires_at', '<', now());
+    }
+
+    /**
+     * Paid but never linked to a Subscription. SubscriptionActivationService
+     * sets paid_at and subscription_id in one transaction, so this should
+     * never happen: a row matching it is money received without access
+     * granted.
+     */
+    public function scopePaidWithoutSubscription(Builder $query): Builder
+    {
+        return $query->where('status', self::STATUS_PAID)->whereNull('subscription_id');
+    }
+
+    /**
+     * Anything a Super Admin should look at: {@see scopePendingPastDue()} or
+     * {@see scopePaidWithoutSubscription()}. Single definition for the
+     * "needs attention" filter and the per-row indicator
+     * ({@see attentionReason()}); keep the two in sync.
+     */
+    public function scopeNeedsAttention(Builder $query): Builder
+    {
+        return $query->where(function (Builder $inner) {
+            $inner->scopes(['pendingPastDue'])->orWhere(fn (Builder $q) => $q->scopes(['paidWithoutSubscription']));
+        });
+    }
+
+    /**
+     * Per-row twin of {@see scopeNeedsAttention()}: 'past_due',
+     * 'paid_without_subscription' or null.
+     */
+    public function attentionReason(): ?string
+    {
+        if ($this->isPastDue()) {
+            return 'past_due';
+        }
+
+        if ($this->status === self::STATUS_PAID && $this->subscription_id === null) {
+            return 'paid_without_subscription';
+        }
+
+        return null;
     }
 }
