@@ -96,7 +96,21 @@ class SyncPendingInvoices extends Command
                 continue;
             }
 
-            $result = $activation->process($payload);
+            // A failure while applying one invoice (e.g. a DB error during
+            // activation) rolls that invoice's transaction back - it stays
+            // pending and is retried on the next run - and must not abort
+            // the invoices after it.
+            try {
+                $result = $activation->process($payload);
+            } catch (\Throwable $e) {
+                Log::error('DOKU sync: failed to apply status, invoice left unchanged', [
+                    'invoice_number' => $invoice->invoice_number,
+                    'exception' => $e->getMessage(),
+                ]);
+                $errors++;
+
+                continue;
+            }
 
             if (in_array($result, [
                 SubscriptionActivationService::RESULT_PAID,
