@@ -3,9 +3,8 @@
 namespace App\Console\Commands;
 
 use App\Models\Invoice;
-use App\Services\Doku\DokuClient;
-use App\Services\Doku\DokuPaymentException;
-use App\Services\SubscriptionActivationService;
+use App\Services\InvoiceSyncer;
+use App\Services\SyncOutcome;
 use Illuminate\Console\Command;
 use Illuminate\Support\Facades\Log;
 
@@ -15,8 +14,8 @@ use Illuminate\Support\Facades\Log;
  * would leave a paid invoice pending forever. This asks DOKU's Check Status
  * API about each pending invoice instead.
  *
- * This command NEVER writes an Invoice itself: whatever DOKU answers is
- * handed to SubscriptionActivationService::process(), the same single door
+ * This command NEVER writes an Invoice itself: it asks App\Services\InvoiceSyncer,
+ * which hands whatever DOKU answers to SubscriptionActivationService::process(), the same single door
  * the webhook uses (amount check, original_request_id check when present,
  * lockForUpdate, isFinal idempotency). Only terminal DOKU statuses are
  * forwarded (SUCCESS, EXPIRED); FAILED (ignorable for Checkout, the customer
@@ -30,15 +29,26 @@ use Illuminate\Support\Facades\Log;
  */
 class SyncPendingInvoices extends Command
 {
-    private const MIN_AGE_SECONDS = 60;
+    private const MIN_AGE_SECONDS = InvoiceSyncer::MIN_AGE_SECONDS;
 
-    private const FORWARDED_STATUSES = ['SUCCESS', 'EXPIRED'];
+    /**
+     * Outcomes counted in the "error(s)" figure: DOKU unreachable, a
+     * response about another invoice, or a failure while applying. Every
+     * other non-changing outcome (still pending at DOKU, rejected by the
+     * activation service, already processed) is not an error here - the
+     * syncer has logged the rejected ones.
+     */
+    private const ERROR_OUTCOMES = [
+        SyncOutcome::DOKU_UNREACHABLE,
+        SyncOutcome::INVOICE_MISMATCH,
+        SyncOutcome::APPLY_FAILED,
+    ];
 
     protected $signature = 'subscriptions:sync-pending-invoices {--invoice= : Sync only this invoice number (skips the age/expiry window)}';
 
     protected $description = 'Poll DOKU Check Status for pending invoices and apply final results';
 
-    public function handle(DokuClient $client, SubscriptionActivationService $activation): int
+    public function handle(InvoiceSyncer $syncer): int
     {
         $query = Invoice::where('status', Invoice::STATUS_PENDING);
 
@@ -64,15 +74,13 @@ class SyncPendingInvoices extends Command
         $errors = 0;
 
         foreach ($invoices as $invoice) {
+            // The candidate query above already applied the age window;
+            // `--invoice=` deliberately skips it (and so skips the syncer's
+            // own age check too).
             try {
-                $payload = $client->checkStatus($invoice->invoice_number);
-            } catch (DokuPaymentException $e) {
-                // Already logged by DokuClient; one bad invoice must not
-                // stop the rest.
-                $errors++;
-
-                continue;
+                $outcome = $syncer->syncAsSystem($invoice, enforceMinAge: ! $number);
             } catch (\Throwable $e) {
+                // One bad invoice must not stop the rest.
                 Log::error('DOKU sync: unexpected error', [
                     'invoice_number' => $invoice->invoice_number,
                     'exception' => $e->getMessage(),
@@ -82,46 +90,10 @@ class SyncPendingInvoices extends Command
                 continue;
             }
 
-            if (! in_array($payload['transaction']['status'] ?? null, self::FORWARDED_STATUSES, true)) {
-                continue;
-            }
-
-            // The response must be about the invoice we asked for.
-            if (($payload['order']['invoice_number'] ?? null) !== $invoice->invoice_number) {
-                Log::warning('DOKU sync: status response for a different invoice', [
-                    'invoice_number' => $invoice->invoice_number,
-                ]);
-                $errors++;
-
-                continue;
-            }
-
-            // A failure while applying one invoice (e.g. a DB error during
-            // activation) rolls that invoice's transaction back - it stays
-            // pending and is retried on the next run - and must not abort
-            // the invoices after it.
-            try {
-                $result = $activation->process($payload);
-            } catch (\Throwable $e) {
-                Log::error('DOKU sync: failed to apply status, invoice left unchanged', [
-                    'invoice_number' => $invoice->invoice_number,
-                    'exception' => $e->getMessage(),
-                ]);
-                $errors++;
-
-                continue;
-            }
-
-            if (in_array($result, [
-                SubscriptionActivationService::RESULT_PAID,
-                SubscriptionActivationService::RESULT_EXPIRED,
-            ], true)) {
+            if ($outcome->changedInvoice()) {
                 $changed++;
-            } elseif ($result !== SubscriptionActivationService::RESULT_ALREADY_PROCESSED) {
-                Log::warning('DOKU sync: status rejected by activation service', [
-                    'invoice_number' => $invoice->invoice_number,
-                    'result' => $result,
-                ]);
+            } elseif (in_array($outcome->result, self::ERROR_OUTCOMES, true)) {
+                $errors++;
             }
         }
 
