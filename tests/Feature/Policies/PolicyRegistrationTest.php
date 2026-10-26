@@ -75,6 +75,12 @@ class PolicyRegistrationTest extends TestCase
      * same "authorize against the parent, not the child row" shape
      * OrganizationInvitation already uses above.
      *
+     * BillingAuditLog is exempt as well: an append-only trail written solely
+     * by BillingAuditLog::record() (called from App\Services\InvoiceSyncer
+     * for an already-authorized Super Admin action), never exposed through a
+     * Filament Resource and never created from user input. Whoever may read
+     * it is decided by the Super Admin page that displays it, like Invoice.
+     *
      * The profile feed (ProfilePost, ProfilePostComment) and the Inbox chat
      * (Conversation, Message, MessageAttachment) are exempt for the same
      * shape of reason: no Filament Resource exposes them, and they are only
@@ -89,6 +95,7 @@ class PolicyRegistrationTest extends TestCase
      * @var array<int, string>
      */
     private const UNGUARDED_MODELS = [
+        \App\Models\BillingAuditLog::class,
         \App\Models\Conversation::class,
         \App\Models\Invoice::class,
         \App\Models\Message::class,
