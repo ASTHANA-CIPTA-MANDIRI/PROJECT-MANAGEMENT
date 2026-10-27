@@ -100,6 +100,20 @@ before and after).
 
 **Resolved by:** a `braces` release newer than 3.0.3, picked up by `npm audit fix`.
 
+### 1c. npm — Vite / `launch-editor` dev-server advisories (added 2026-10-27)
+
+`GHSA-698v-4r3x-3vcv`, `GHSA-r825-w8mm-5pxw`, `GHSA-587h-7wmj-h5pm`
+(`launch-editor`) and `GHSA-9jrq-w75r-8gcw`, `GHSA-rq7h-c2jc-7f22` (Vite custom
+middleware / `server.fs.allow`) all affect `vite <=6.4.3` and are fixed only
+from Vite 8 (`npm audit` offers a semver-major jump). They are the same class
+as Advisory 1: **dev-server only**. `launch-editor` is the "open in editor"
+helper of `npm run dev`, and the Vite middleware/`fs.allow` issues only exist
+while the dev server runs. Production serves the prebuilt `public/build`, and
+`vite.config.js` sets no `server.host`, so the dev server stays on
+localhost. Resolved by the same Laravel 11 + Vite 6+ upgrade as Advisory 1;
+`follow-redirects` (also reported on 2026-10-27) was fixed by `npm audit fix`
+instead of being accepted.
+
 ## 2. composer — abandoned transitive packages (not vulnerable)
 
 | Package | Comes from | Replacement (later) |
@@ -310,6 +324,28 @@ a visitor, so there is nothing to inject into in production.
 **Interim mitigation:** keep `APP_DEBUG=false` everywhere that is reachable by
 anyone other than the developer; never run a shared/staging instance with
 debug on.
+
+**Resolved by:** the Laravel 12+ upgrade already tracked in Advisory 0.
+
+### 7c. `PKSA-b41t-wbzk-9q51` — TokenGuard authentication bypass (added 2026-10-27)
+
+| | |
+|---|---|
+| Advisory | `PKSA-b41t-wbzk-9q51` / CVE-2026-114509 (GHSA-f9x3-7vq9-cph6) — "Laravel TokenGuard authentication bypass through non-string API credentials" |
+| Affected | `<12.68.0` and 13.x `<13.29.0`, no lower bound, so **no 9.x release carries a fix** — same EOL situation as 7 / 7b |
+| Installed | v9.52.20 (`composer update laravel/framework --dry-run` offers nothing newer) |
+
+**Exposure check (2026-10-27):** the bypass is in Laravel's own
+`Illuminate\Auth\TokenGuard`, the guard behind the `token` driver. This
+app never uses it: `config/auth.php` declares a single guard, `web`
+(`session` driver), and every API route sits behind `auth:sanctum`
+(`routes/api.php`), which authenticates through Sanctum's own guard and
+hashed `personal_access_tokens`, not `TokenGuard`. No `driver => token` guard
+is configured anywhere (grepped `config/` and `app/`), so there is no code
+path on which a non-string credential reaches the vulnerable comparison.
+
+**Interim mitigation:** do not add a `token`-driver guard; keep API
+authentication on Sanctum.
 
 **Resolved by:** the Laravel 12+ upgrade already tracked in Advisory 0.
 
