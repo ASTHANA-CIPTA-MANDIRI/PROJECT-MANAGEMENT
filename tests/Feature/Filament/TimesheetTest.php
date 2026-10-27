@@ -8,12 +8,15 @@ use App\Filament\Widgets\Timesheet\ActivitiesReport;
 use App\Filament\Widgets\Timesheet\MonthlyReport;
 use App\Filament\Widgets\Timesheet\WeeklyReport;
 use App\Models\Activity;
+use App\Models\Organization;
 use App\Models\Permission;
 use App\Models\Project;
 use App\Models\Role;
+use App\Models\Subscription;
 use App\Models\Ticket;
 use App\Models\TicketHour;
 use App\Models\User;
+use App\Support\OrganizationContext;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Notification;
 use Livewire\Livewire;
@@ -295,6 +298,147 @@ class TimesheetTest extends TestCase
 
         $this->assertSame(0.0, $summary['year']);
         $this->assertNull($summary['topActivity']);
+    }
+
+    // ------------------------------------------------- trial lock (full lock)
+
+    /**
+     * Put the acting user in an Organization with the given attributes and make
+     * it their current context, then log some hours for today.
+     */
+    private function userInOrganization(array $attributes): Organization
+    {
+        $organization = Organization::factory()->create($attributes);
+        $organization->users()->attach($this->user->id, ['role' => 'owner']);
+        OrganizationContext::switch($this->user, $organization->id);
+
+        $this->logHoursOn(now(), 2);
+        $this->logHoursOn(now(), 3);
+
+        return $organization;
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    private function everyTimesheetNumber(): array
+    {
+        $summary = Livewire::test(TimesheetDashboard::class)->instance()->summary();
+
+        return [
+            'summary' => $summary,
+            'weekly' => array_sum($this->widgetData(new WeeklyReport)['datasets'][0]['data']),
+            'monthly' => array_sum(array_merge(...array_map(
+                fn ($set) => array_map(fn ($v) => is_array($v) ? array_sum($v) : (float) $v, $set['data']),
+                $this->widgetData(new MonthlyReport)['datasets']
+            ))),
+            'activities' => array_sum($this->widgetData(new ActivitiesReport)['datasets'][0]['data']),
+        ];
+    }
+
+    /**
+     * Product decision: an expired, unsubscribed trial is a full lock, read as
+     * well as write, on every TRIAL_GATED model including TicketHour. The
+     * dashboard and its widgets only check the flat 'View timesheet dashboard'
+     * permission, which Gate::before() never sees, so they used to keep showing
+     * the user's own hours.
+     */
+    public function test_a_locked_organization_sees_no_hours_on_the_dashboard_or_its_widgets(): void
+    {
+        $this->userInOrganization(['trial_ends_at' => now()->subDay()]);
+
+        $numbers = $this->everyTimesheetNumber();
+
+        $this->assertSame(0.0, $numbers['summary']['week']);
+        $this->assertSame(0.0, $numbers['summary']['month']);
+        $this->assertSame(0.0, $numbers['summary']['year']);
+        $this->assertNull($numbers['summary']['topActivity']);
+        $this->assertSame(0.0, $numbers['summary']['topActivityHours']);
+        $this->assertEqualsWithDelta(0.0, $numbers['weekly'], 0.001);
+        $this->assertEqualsWithDelta(0.0, $numbers['monthly'], 0.001);
+        $this->assertEqualsWithDelta(0.0, $numbers['activities'], 0.001);
+    }
+
+    public function test_a_locked_organization_never_even_queries_ticket_hours_for_the_summary(): void
+    {
+        $this->userInOrganization(['trial_ends_at' => now()->subDay()]);
+
+        $livewire = Livewire::test(TimesheetDashboard::class);
+        \Illuminate\Support\Facades\DB::enableQueryLog();
+        $livewire->instance()->summary();
+        $queries = \Illuminate\Support\Facades\DB::getQueryLog();
+        \Illuminate\Support\Facades\DB::disableQueryLog();
+
+        // The statement may still run, but must be forced empty (1 = 0), so no
+        // ticket_hours row is ever read.
+        foreach ($queries as $query) {
+            if (str_contains($query['query'], 'ticket_hours')) {
+                $this->assertStringContainsString('0 = 1', $query['query']);
+            }
+        }
+    }
+
+    public function test_an_organization_on_an_active_trial_still_sees_its_hours(): void
+    {
+        $this->userInOrganization(['trial_ends_at' => now()->addDays(3)]);
+
+        $numbers = $this->everyTimesheetNumber();
+
+        $this->assertEqualsWithDelta(5.0, $numbers['summary']['year'], 0.001);
+        $this->assertEqualsWithDelta(5.0, $numbers['weekly'], 0.001);
+        $this->assertEqualsWithDelta(5.0, $numbers['activities'], 0.001);
+    }
+
+    public function test_a_grandfathered_organization_still_sees_its_hours(): void
+    {
+        $this->userInOrganization(['trial_ends_at' => null]);
+
+        $numbers = $this->everyTimesheetNumber();
+
+        $this->assertEqualsWithDelta(5.0, $numbers['summary']['year'], 0.001);
+        $this->assertEqualsWithDelta(5.0, $numbers['monthly'], 0.001);
+    }
+
+    public function test_an_expired_trial_with_an_active_subscription_still_sees_its_hours(): void
+    {
+        $organization = $this->userInOrganization(['trial_ends_at' => now()->subDay()]);
+        Subscription::factory()->for($organization)->active()->create();
+
+        $numbers = $this->everyTimesheetNumber();
+
+        $this->assertEqualsWithDelta(5.0, $numbers['summary']['year'], 0.001);
+        $this->assertEqualsWithDelta(5.0, $numbers['weekly'], 0.001);
+    }
+
+    /**
+     * A user without any Organization (legacy/grandfathered install) is not
+     * gated at all - the same "nothing to gate" rule Gate::before() applies.
+     */
+    public function test_a_user_without_an_organization_still_sees_their_hours(): void
+    {
+        $this->logHoursOn(now(), 4);
+
+        $this->assertEqualsWithDelta(4.0, $this->everyTimesheetNumber()['summary']['year'], 0.001);
+    }
+
+    /**
+     * Only the acting user's CURRENT organization decides: another, locked
+     * organization the user is not acting in does not blank this one, and
+     * the lock never exposes or hides anyone else's hours.
+     */
+    public function test_only_the_current_organizations_lock_applies(): void
+    {
+        $locked = Organization::factory()->create(['trial_ends_at' => now()->subDay()]);
+        $open = Organization::factory()->create(['trial_ends_at' => now()->addDays(5)]);
+        $locked->users()->attach($this->user->id, ['role' => 'member']);
+        $open->users()->attach($this->user->id, ['role' => 'member']);
+        $this->logHoursOn(now(), 2);
+
+        OrganizationContext::switch($this->user, $open->id);
+        $this->assertEqualsWithDelta(2.0, $this->everyTimesheetNumber()['summary']['year'], 0.001);
+
+        OrganizationContext::switch($this->user, $locked->id);
+        $this->assertEqualsWithDelta(0.0, $this->everyTimesheetNumber()['summary']['year'], 0.001);
     }
 
     public function test_report_labels_are_translated_and_still_complete(): void

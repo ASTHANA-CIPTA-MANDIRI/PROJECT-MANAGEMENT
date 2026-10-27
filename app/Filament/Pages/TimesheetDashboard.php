@@ -67,12 +67,16 @@ class TimesheetDashboard extends AuthorizedPage
         $userId = auth()->id();
         $now = Carbon::now();
 
+        $user = auth()->user();
+
         $sum = fn (Carbon $from, Carbon $to): float => (float) TicketHour::query()
+            ->unlessOrganizationLocked($user)
             ->where('user_id', $userId)
             ->whereBetween('created_at', [$from, $to])
             ->sum('value');
 
         $top = TicketHour::query()
+            ->unlessOrganizationLocked($user)
             ->with('activity')
             ->where('user_id', $userId)
             ->whereBetween('created_at', [$now->copy()->startOfYear(), $now->copy()->endOfYear()])

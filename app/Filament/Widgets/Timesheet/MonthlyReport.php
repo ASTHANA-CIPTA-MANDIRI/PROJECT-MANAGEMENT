@@ -126,6 +126,7 @@ class MonthlyReport extends BarChartWidget
         $year = (int) ($year ?: Carbon::now()->year);
 
         return TicketHour::query()
+            ->unlessOrganizationLocked($user)
             ->where('user_id', $user->id)
             ->whereBetween('created_at', [
                 Carbon::create($year, 1, 1)->startOfDay(),

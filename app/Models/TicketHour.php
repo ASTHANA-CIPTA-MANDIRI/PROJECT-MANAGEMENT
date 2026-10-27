@@ -2,8 +2,11 @@
 
 namespace App\Models;
 
+use App\Support\OrganizationContext;
+use App\Support\TrialGate;
 use App\Support\WidgetDataCache;
 use Carbon\CarbonInterval;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Casts\Attribute;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
@@ -30,6 +33,30 @@ class TicketHour extends Model
         static::created($forget);
         static::updated($forget);
         static::deleted($forget);
+    }
+
+    /**
+     * Full-lock read gate for pages that aggregate a user's own hours
+     * (timesheet dashboard + report widgets). They are only guarded by the
+     * flat 'View timesheet dashboard' permission, which Gate::before()'s
+     * model-class matching never sees, so an expired, unsubscribed trial
+     * (TicketHour is in AuthServiceProvider::TRIAL_GATED_MODELS: read AND
+     * write locked) would otherwise still read the numbers.
+     *
+     * Same rule as Gate::before(): no Organization in play (no membership,
+     * Super Admin outside any Organization) or an active/grandfathered/
+     * subscribed one changes nothing; only a locked current Organization
+     * forces an empty result (not an error) so the page still renders.
+     */
+    public function scopeUnlessOrganizationLocked(Builder $query, User $user): Builder
+    {
+        $organization = OrganizationContext::current($user);
+
+        if ($organization === null || TrialGate::active($organization)) {
+            return $query;
+        }
+
+        return $query->whereRaw('0 = 1');
     }
 
     public function user(): BelongsTo

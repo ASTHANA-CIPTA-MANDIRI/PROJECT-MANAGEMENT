@@ -122,6 +122,7 @@ class WeeklyReport extends BarChartWidget
     protected function filter(User $user, string $weekStart, string $weekEnd): Collection
     {
         return TicketHour::query()
+            ->unlessOrganizationLocked($user)
             ->where('user_id', $user->id)
             ->whereBetween('created_at', [
                 Carbon::parse($weekStart)->startOfDay(),

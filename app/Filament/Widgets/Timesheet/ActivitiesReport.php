@@ -117,6 +117,7 @@ class ActivitiesReport extends DoughnutChartWidget
         $year = (int) ($year ?: Carbon::now()->year);
 
         return TicketHour::with('activity')
+            ->unlessOrganizationLocked($user)
             ->where('user_id', $user->id)
             ->whereBetween('created_at', [
                 Carbon::create($year, 1, 1)->startOfDay(),
