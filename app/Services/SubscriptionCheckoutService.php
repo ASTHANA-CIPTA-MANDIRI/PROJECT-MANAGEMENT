@@ -47,6 +47,11 @@ class SubscriptionCheckoutService
                 'subscription_id' => null,
                 'invoice_number' => self::generateInvoiceNumber(),
                 'plan_code' => $planCode,
+                // Frozen from the same server-side plan as `amount`, so a
+                // later config change/removal cannot alter what this
+                // invoice grants once it is paid.
+                'duration_days' => $plan['duration_days'],
+                'plan_name' => $plan['name'],
                 // Server-authoritative amount, read straight out of
                 // config('subscriptions.plans') above - never anything the
                 // caller passed in.

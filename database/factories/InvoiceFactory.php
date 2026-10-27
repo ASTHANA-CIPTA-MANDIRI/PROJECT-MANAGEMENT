@@ -28,6 +28,10 @@ class InvoiceFactory extends Factory
             'subscription_id' => null,
             'invoice_number' => 'INV-'.now()->format('Ymd').'-'.strtoupper(Str::random(10)),
             'plan_code' => 'monthly',
+            // Snapshot columns follow plan_code (resolved lazily so
+            // ->create(['plan_code' => 'yearly']) gets the yearly snapshot).
+            'duration_days' => fn (array $attributes) => config("subscriptions.plans.{$attributes['plan_code']}.duration_days"),
+            'plan_name' => fn (array $attributes) => config("subscriptions.plans.{$attributes['plan_code']}.name"),
             'amount' => 150000,
             'currency' => 'IDR',
             'status' => Invoice::STATUS_PENDING,
@@ -38,6 +42,18 @@ class InvoiceFactory extends Factory
             'expires_at' => now()->addHour(),
             'paid_at' => null,
         ];
+    }
+
+    /**
+     * A row from before the snapshot columns existed: activation must fall
+     * back to the config lookup for it.
+     */
+    public function withoutPlanSnapshot(): static
+    {
+        return $this->state(fn () => [
+            'duration_days' => null,
+            'plan_name' => null,
+        ]);
     }
 
     public function paid(): static

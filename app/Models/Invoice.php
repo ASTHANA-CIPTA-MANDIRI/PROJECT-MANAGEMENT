@@ -51,6 +51,8 @@ class Invoice extends Model
         'subscription_id',
         'invoice_number',
         'plan_code',
+        'duration_days',
+        'plan_name',
         'amount',
         'currency',
         'status',
@@ -64,6 +66,7 @@ class Invoice extends Model
 
     protected $casts = [
         'amount' => 'integer',
+        'duration_days' => 'integer',
         'expires_at' => 'datetime',
         'paid_at' => 'datetime',
     ];

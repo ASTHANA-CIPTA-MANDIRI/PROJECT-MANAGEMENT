@@ -179,16 +179,21 @@ class SubscriptionActivationService
      */
     private function activateSubscription(Invoice $invoice): void
     {
-        $plan = SubscriptionPlans::find($invoice->plan_code);
-        $durationDays = $plan['duration_days'] ?? null;
+        // The duration frozen at checkout wins; the plan config is only
+        // consulted for legacy invoices that have no snapshot, so a plan
+        // that was changed or removed after checkout cannot alter or block
+        // what the customer paid for.
+        $durationDays = $invoice->duration_days
+            ?? SubscriptionPlans::find($invoice->plan_code)['duration_days']
+            ?? null;
 
         if ($durationDays === null) {
-            // The plan config changed/removed the plan_code between
-            // checkout and payment - cannot know how long to grant. Leave
-            // the invoice PAID (the money was genuinely received) but do
-            // not fabricate a duration; this is logged for manual handling
-            // rather than silently guessing.
-            Log::error('DOKU webhook: paid invoice references an unknown plan_code, subscription not extended', [
+            // Legacy invoice (no snapshot) whose plan_code is no longer in
+            // the config - cannot know how long to grant. Leave the invoice
+            // PAID (the money was genuinely received) but do not fabricate
+            // a duration; this is logged for manual handling rather than
+            // silently guessing.
+            Log::error('DOKU webhook: paid invoice has no duration snapshot and its plan_code is not in the plan config, subscription not extended', [
                 'invoice_id' => $invoice->id,
                 'plan_code' => $invoice->plan_code,
             ]);
