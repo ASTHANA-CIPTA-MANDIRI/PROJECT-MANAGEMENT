@@ -48,8 +48,6 @@ class InvoiceSyncer
      */
     public const FORWARDED_STATUSES = ['SUCCESS', 'EXPIRED'];
 
-    public const REASON_MIN_LENGTH = 10;
-
     public const REASON_MAX_LENGTH = 500;
 
     /**
@@ -103,11 +101,11 @@ class InvoiceSyncer
     /**
      * Apply whatever DOKU says, through process() and nothing else.
      *
-     * $reason is validated (10-500 characters) only when an admin $actor
+     * $reason is validated (required, at most 500 characters) only when an admin $actor
      * is given: an attributed action must say why. A null $actor is the
      * system (scheduler/command) context, which has no reason to give.
      *
-     * @throws InvalidArgumentException when an actor is given with a missing/too short/too long reason
+     * @throws InvalidArgumentException when an actor is given with a empty (after trim) or too long reason
      */
     public function sync(Invoice $invoice, ?User $actor = null, ?string $reason = null): SyncOutcome
     {
@@ -143,7 +141,7 @@ class InvoiceSyncer
      * Same machinery as {@see sync()} (one DOKU Check Status, one
      * process() call with late recovery allowed, audit in the same
      * transaction as the mutation) with stricter gates, all decided BEFORE
-     * DOKU is contacted where possible: Super Admin actor, a 10-500 character
+     * DOKU is contacted where possible: Super Admin actor, a required reason (at most 500 characters)
      * reason, invoice `expired` (an already `paid` one answers
      * already_processed, anything else not_recoverable), old enough (60 s),
      * not older than subscriptions.late_recovery_max_days, and only DOKU
@@ -151,7 +149,7 @@ class InvoiceSyncer
      * when the customer paid at DOKU. Audited as invoice.late_recovery.
      *
      * @throws AuthorizationException when $actor is not a Super Admin
-     * @throws InvalidArgumentException when the reason is missing/too short/too long
+     * @throws InvalidArgumentException when the reason is empty (after trim) or too long
      */
     public function recoverLate(Invoice $invoice, User $actor, string $reason): SyncOutcome
     {
@@ -294,14 +292,9 @@ class InvoiceSyncer
     public static function validatedReason(?string $reason): string
     {
         $reason = trim((string) $reason);
-        $length = mb_strlen($reason);
 
-        if ($length < self::REASON_MIN_LENGTH || $length > self::REASON_MAX_LENGTH) {
-            throw new InvalidArgumentException(sprintf(
-                'A sync reason must be %d-%d characters.',
-                self::REASON_MIN_LENGTH,
-                self::REASON_MAX_LENGTH
-            ));
+        if ($reason === '' || mb_strlen($reason) > self::REASON_MAX_LENGTH) {
+            throw new InvalidArgumentException(sprintf('A sync reason is required and at most %d characters.', self::REASON_MAX_LENGTH));
         }
 
         return $reason;

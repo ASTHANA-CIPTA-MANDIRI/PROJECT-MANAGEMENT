@@ -338,7 +338,7 @@ class InvoiceSyncerTest extends TestCase
     /**
      * @dataProvider badReasons
      */
-    public function test_sync_with_an_actor_requires_a_reason_of_10_to_500_characters(?string $reason): void
+    public function test_sync_with_an_actor_requires_a_non_blank_reason_of_at_most_500_characters(?string $reason): void
     {
         Http::fake();
         $invoice = $this->pendingInvoice();
@@ -360,10 +360,18 @@ class InvoiceSyncerTest extends TestCase
             'null' => [null],
             'empty' => [''],
             'blank' => ['            '],
-            'short' => ['terlalu'],
-            'padded short' => ['   pendek   '],
             'too long' => [str_repeat('a', 501)],
         ];
+    }
+
+    public function test_a_one_character_reason_and_a_500_character_reason_are_accepted(): void
+    {
+        foreach (['x', '  x  ', str_repeat('a', 500)] as $reason) {
+            $invoice = $this->pendingInvoice();
+            $this->fakeStatus($invoice, 'SUCCESS');
+
+            $this->assertSame(SyncOutcome::PAID, $this->syncer()->sync($invoice, $this->actor(), $reason)->result);
+        }
     }
 
     public function test_sync_without_an_actor_needs_no_reason(): void

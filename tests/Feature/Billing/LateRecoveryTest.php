@@ -261,7 +261,7 @@ class LateRecoveryTest extends TestCase
     /**
      * @dataProvider badReasons
      */
-    public function test_a_missing_or_wrong_sized_reason_is_refused_before_any_http(string $reason): void
+    public function test_a_blank_or_too_long_reason_is_refused_before_any_http(string $reason): void
     {
         $invoice = $this->expiredInvoice();
         Http::fake();
@@ -279,7 +279,16 @@ class LateRecoveryTest extends TestCase
     /** @return array<string, array<int, string>> */
     public static function badReasons(): array
     {
-        return ['empty' => [''], 'short' => ['terlalu'], 'padded short' => ['      x         '], 'too long' => [str_repeat('a', 501)]];
+        return ['empty' => [''], 'blank' => ['            '], 'too long' => [str_repeat('a', 501)]];
+    }
+
+    public function test_a_one_character_reason_is_accepted(): void
+    {
+        $invoice = $this->expiredInvoice();
+        $this->fakeStatus($invoice);
+
+        $this->assertSame(SyncOutcome::RECOVERED, $this->syncer()->recoverLate($invoice, $this->superAdmin(), 'x')->result);
+        $this->assertSame('x', BillingAuditLog::sole()->reason);
     }
 
     public function test_recovery_pays_the_invoice_activates_once_and_audits_everything_needed(): void

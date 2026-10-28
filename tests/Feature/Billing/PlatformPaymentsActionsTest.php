@@ -383,7 +383,7 @@ class PlatformPaymentsActionsTest extends TestCase
     /**
      * @dataProvider badReasons
      */
-    public function test_the_reason_is_required_and_between_10_and_500_characters(string $reason, string $rule): void
+    public function test_the_reason_is_required_and_at_most_500_characters(string $reason, string $rule): void
     {
         $invoice = $this->invoice();
         Http::fake();
@@ -401,10 +401,21 @@ class PlatformPaymentsActionsTest extends TestCase
     {
         return [
             'empty' => ['', 'required'],
-            'short' => ['terlalu', 'min'],
-            'padded short' => ['      x         ', 'min'],
+            'blank' => ['            ', 'required'],
             'too long' => [str_repeat('a', 501), 'max'],
         ];
+    }
+
+    public function test_a_one_character_reason_is_accepted(): void
+    {
+        $invoice = $this->invoice();
+        $this->fakeStatus($invoice, 'SUCCESS');
+
+        $this->sync(Livewire::actingAs($this->superAdmin())->test(PlatformPayments::class), $invoice, 'x')
+            ->assertHasNoTableActionErrors();
+
+        $this->assertSame(Invoice::STATUS_PAID, $invoice->fresh()->status);
+        $this->assertSame('x', BillingAuditLog::sole()->reason);
     }
 
     public function test_sync_expired_closes_the_invoice(): void

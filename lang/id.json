@@ -1012,8 +1012,6 @@
     "Sync": "Sinkronkan",
     "Sync invoice with DOKU": "Sinkronkan invoice dengan DOKU",
     "Asks DOKU for the payment status and applies it: a paid invoice activates the subscription, an expired one is closed. This action is recorded in the audit history.": "Menanyakan status pembayaran ke DOKU lalu menerapkannya: invoice yang sudah dibayar mengaktifkan langganan, yang kedaluwarsa ditutup. Tindakan ini dicatat di riwayat audit.",
-    "Why are you syncing this invoice by hand? 10-500 characters.": "Mengapa invoice ini disinkronkan manual? 10-500 karakter.",
-    "The reason must be at least :min characters.": "Alasan minimal :min karakter.",
     "History": "Riwayat",
     "Billing history": "Riwayat penagihan",
     "Invoice not found or no longer eligible": "Invoice tidak ditemukan atau tidak lagi dapat diproses",
@@ -1021,7 +1019,6 @@
     "DOKU could not be reached, try again in a moment.": "DOKU tidak dapat dihubungi, coba lagi beberapa saat.",
     "Something went wrong, nothing was changed. Try again later.": "Terjadi kesalahan, tidak ada yang diubah. Coba lagi nanti.",
     "Nothing was synced.": "Tidak ada yang disinkronkan.",
-    "The reason must be between :min and :max characters.": "Alasan harus antara :min dan :max karakter.",
     "Payment confirmed, subscription activated.": "Pembayaran dikonfirmasi, langganan diaktifkan.",
     "DOKU says the invoice has expired, it was closed.": "DOKU menyatakan invoice kedaluwarsa, invoice ditutup.",
     "Already processed, nothing changed.": "Sudah diproses, tidak ada perubahan.",
@@ -1121,12 +1118,14 @@
     "Recover late payment": "Pulihkan pembayaran terlambat",
     "Recover payment (expired only)": "Pulihkan pembayaran (hanya kedaluwarsa)",
     "Recover only if DOKU confirms SUCCESS. The subscription starts from now. This action is recorded in the audit history.": "Pulihkan hanya jika DOKU mengonfirmasi SUCCESS. Langganan dimulai dari sekarang. Aksi ini tercatat di riwayat audit.",
-    "Why are you recovering this payment by hand? 10-500 characters.": "Mengapa Anda memulihkan pembayaran ini secara manual? 10-500 karakter.",
     "Payment recovered, subscription activated.": "Pembayaran dipulihkan, langganan diaktifkan.",
     "DOKU has not reported this payment as successful, nothing was changed.": "DOKU belum menyatakan pembayaran ini sukses, tidak ada yang diubah.",
     "The invoice expired more than :days days ago and can no longer be recovered.": "Invoice sudah kedaluwarsa lebih dari :days hari, tidak bisa dipulihkan.",
     "Only an expired invoice can be recovered, nothing was changed.": "Hanya invoice yang kedaluwarsa yang bisa dipulihkan, tidak ada yang diubah.",
     "Payment recovered": "Pembayaran dipulihkan",
     "Too old to recover": "Terlalu lama untuk dipulihkan",
-    "Not recoverable": "Tidak bisa dipulihkan"
+    "Not recoverable": "Tidak bisa dipulihkan",
+    "Why are you syncing this invoice by hand? Required, maximum 500 characters.": "Mengapa invoice ini disinkronkan manual? Wajib diisi, maksimal 500 karakter.",
+    "Why are you recovering this payment by hand? Required, maximum 500 characters.": "Mengapa Anda memulihkan pembayaran ini secara manual? Wajib diisi, maksimal 500 karakter.",
+    "The reason is required and at most :max characters.": "Alasan wajib diisi dan maksimal :max karakter."
 }

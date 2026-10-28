@@ -158,7 +158,7 @@ class PlatformPaymentsRecoveryTest extends TestCase
         $this->assertStringContainsString('Langganan dimulai dari sekarang', $html);
         $this->assertStringContainsString('tercatat di riwayat audit', $html);
 
-        foreach (['', 'terlalu', '      x         ', str_repeat('a', 501)] as $reason) {
+        foreach (['', '            ', str_repeat('a', 501)] as $reason) {
             $this->recover(Livewire::actingAs($this->superAdmin())->test(PlatformPayments::class), $invoice, $reason)
                 ->assertHasTableActionErrors(['reason']);
         }
@@ -166,6 +166,17 @@ class PlatformPaymentsRecoveryTest extends TestCase
         Http::assertNothingSent();
         $this->assertSame(0, BillingAuditLog::count());
         $this->assertSame(Invoice::STATUS_EXPIRED, $invoice->fresh()->status);
+    }
+
+    public function test_a_one_character_reason_is_accepted(): void
+    {
+        $invoice = $this->expired();
+        $this->fakeStatus($invoice, 'SUCCESS');
+
+        $this->recover(Livewire::actingAs($this->superAdmin())->test(PlatformPayments::class), $invoice, 'x')
+            ->assertHasNoTableActionErrors();
+
+        $this->assertSame(Invoice::STATUS_PAID, $invoice->fresh()->status);
     }
 
     public function test_a_successful_recovery_activates_audits_and_says_so(): void

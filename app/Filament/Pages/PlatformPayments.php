@@ -258,18 +258,10 @@ class PlatformPayments extends AuthorizedPage implements HasForms, Tables\Contra
                 ->form([
                     Textarea::make('reason')
                         ->label(__('Reason'))
-                        ->helperText(__('Why are you syncing this invoice by hand? 10-500 characters.'))
+                        ->helperText(__('Why are you syncing this invoice by hand? Required, maximum 500 characters.'))
                         ->required()
-                        ->minLength(InvoiceSyncer::REASON_MIN_LENGTH)
                         ->maxLength(InvoiceSyncer::REASON_MAX_LENGTH)
-                        ->rows(3)
-                        ->rules([
-                            fn () => function (string $attribute, $value, Closure $fail) {
-                                if (mb_strlen(trim((string) $value)) < InvoiceSyncer::REASON_MIN_LENGTH) {
-                                    $fail(__('The reason must be at least :min characters.', ['min' => InvoiceSyncer::REASON_MIN_LENGTH]));
-                                }
-                            },
-                        ]),
+                        ->rows(3),
                 ])
                 ->action(fn (Invoice $record, array $data) => $this->runSync($record, (string) ($data['reason'] ?? ''))),
 
@@ -289,18 +281,10 @@ class PlatformPayments extends AuthorizedPage implements HasForms, Tables\Contra
                 ->form([
                     Textarea::make('reason')
                         ->label(__('Reason'))
-                        ->helperText(__('Why are you recovering this payment by hand? 10-500 characters.'))
+                        ->helperText(__('Why are you recovering this payment by hand? Required, maximum 500 characters.'))
                         ->required()
-                        ->minLength(InvoiceSyncer::REASON_MIN_LENGTH)
                         ->maxLength(InvoiceSyncer::REASON_MAX_LENGTH)
-                        ->rows(3)
-                        ->rules([
-                            fn () => function (string $attribute, $value, Closure $fail) {
-                                if (mb_strlen(trim((string) $value)) < InvoiceSyncer::REASON_MIN_LENGTH) {
-                                    $fail(__('The reason must be at least :min characters.', ['min' => InvoiceSyncer::REASON_MIN_LENGTH]));
-                                }
-                            },
-                        ]),
+                        ->rows(3),
                 ])
                 ->action(fn (Invoice $record, array $data) => $this->runRecoverLate($record, (string) ($data['reason'] ?? ''))),
 
@@ -423,9 +407,7 @@ class PlatformPayments extends AuthorizedPage implements HasForms, Tables\Contra
         try {
             $outcome = app(InvoiceSyncer::class)->sync($invoice, $user, $reason);
         } catch (InvalidArgumentException) {
-            $this->notifyBilling(__('Sync'), __('The reason must be between :min and :max characters.', [
-                'min' => InvoiceSyncer::REASON_MIN_LENGTH, 'max' => InvoiceSyncer::REASON_MAX_LENGTH,
-            ]), 'danger');
+            $this->notifyBilling(__('Sync'), __('The reason is required and at most :max characters.', ['max' => InvoiceSyncer::REASON_MAX_LENGTH]), 'danger');
 
             return;
         } catch (\Throwable $e) {
@@ -462,9 +444,7 @@ class PlatformPayments extends AuthorizedPage implements HasForms, Tables\Contra
         try {
             $outcome = app(InvoiceSyncer::class)->recoverLate($invoice, $user, $reason);
         } catch (InvalidArgumentException) {
-            $this->notifyBilling(__('Recover late payment'), __('The reason must be between :min and :max characters.', [
-                'min' => InvoiceSyncer::REASON_MIN_LENGTH, 'max' => InvoiceSyncer::REASON_MAX_LENGTH,
-            ]), 'danger');
+            $this->notifyBilling(__('Recover late payment'), __('The reason is required and at most :max characters.', ['max' => InvoiceSyncer::REASON_MAX_LENGTH]), 'danger');
 
             return;
         } catch (\Throwable $e) {
