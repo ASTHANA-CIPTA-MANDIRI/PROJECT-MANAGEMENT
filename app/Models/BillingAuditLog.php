@@ -37,6 +37,11 @@ class BillingAuditLog extends Model
 
     public const ACTION_PLAN_TOGGLE = 'plan.toggle';
 
+    // A Super Admin set or changed organizations.trial_ends_at, the column that
+    // decides whether an organization is locked out (App\Services\OrganizationTrialManager).
+    // Carries subject "organization:<id>" and organization_id, no invoice.
+    public const ACTION_ORGANIZATION_TRIAL_UPDATE = 'organization.trial_update';
+
     public const PLAN_ACTIONS = [
         self::ACTION_PLAN_CREATE,
         self::ACTION_PLAN_UPDATE,
@@ -45,11 +50,14 @@ class BillingAuditLog extends Model
 
     /**
      * Retention per action: a sync changes money/access so its trail is
-     * kept a year; a status check and a plan change are kept 90 days. An action
+     * kept a year, and so is a trial change (it decides whether an organization
+     * can use the product at all); a status check and a plan change are kept 90
+     * days. An action
      * not listed here (a future one) is never pruned until it is added.
      */
     public const RETENTION_DAYS = [
         self::ACTION_SYNC => 365,
+        self::ACTION_ORGANIZATION_TRIAL_UPDATE => 365,
         self::ACTION_PLAN_CREATE => 90,
         self::ACTION_PLAN_UPDATE => 90,
         self::ACTION_PLAN_TOGGLE => 90,
@@ -97,6 +105,9 @@ class BillingAuditLog extends Model
      * free-form values the table holds, so callers must never put a secret,
      * payload or message in them.
      *
+     * A row about an organization but no invoice (a trial change) passes
+     * $organizationId; with an $invoice it is read from the invoice instead.
+     *
      * $invoiceNumber is only needed when there is no $invoice model (the
      * row it pointed at no longer exists); otherwise it is read from it.
      */
@@ -112,11 +123,12 @@ class BillingAuditLog extends Model
         ?string $subject = null,
         ?string $oldValue = null,
         ?string $newValue = null,
+        ?int $organizationId = null,
     ): self {
         return static::create([
             'actor_user_id' => $actor?->getKey(),
             'invoice_id' => $invoice?->getKey(),
-            'organization_id' => $invoice?->organization_id,
+            'organization_id' => $invoice?->organization_id ?? $organizationId,
             'invoice_number' => $invoice?->invoice_number ?? $invoiceNumber,
             'subject' => $subject,
             'action' => $action,

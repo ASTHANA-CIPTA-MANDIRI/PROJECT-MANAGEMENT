@@ -2,6 +2,7 @@
 
 namespace App\Filament\Pages;
 
+use App\Models\BillingAuditLog;
 use App\Models\Organization;
 use App\Models\OrganizationInvitation;
 use App\Models\OrganizationSupportAccessGrant;
@@ -12,6 +13,8 @@ use App\Models\Subscription;
 use App\Models\Ticket;
 use App\Models\User;
 use App\Notifications\OrganizationInvitationCreated;
+use App\Services\OrganizationTrialManager;
+use App\Services\TrialChangeException;
 use App\Support\OrganizationDefaults;
 use App\Support\SupportSessionContext;
 use App\Support\TrialGate;
@@ -492,7 +495,41 @@ class PlatformOrganizations extends AuthorizedPage implements HasForms, Tables\C
                 'tone' => 'purple',
             ]));
 
+        BillingAuditLog::query()->with('actor')
+            ->where('organization_id', $organization->id)
+            ->where('action', BillingAuditLog::ACTION_ORGANIZATION_TRIAL_UPDATE)
+            ->latest('created_at')->limit(3)->get()
+            ->each(fn (BillingAuditLog $log) => $events->push([
+                'title' => __('Trial period changed'),
+                'text' => __(':from to :to, by :name', [
+                    'from' => $this->trialAuditValueLabel($log->old_value),
+                    'to' => $this->trialAuditValueLabel($log->new_value),
+                    'name' => $log->actor?->name ?? '-',
+                ]),
+                'at' => $log->created_at,
+                'icon' => 'clock',
+                'tone' => 'yellow',
+            ]));
+
         return $events->filter(fn (array $event) => $event['at'] !== null)->sortByDesc('at')->take(8)->values()->all();
+    }
+
+    /** A trial audit value (ISO 8601 UTC, "unlimited" or none) as a short label. */
+    private function trialAuditValueLabel(?string $value): string
+    {
+        if ($value === null) {
+            return '-';
+        }
+
+        if ($value === OrganizationTrialManager::UNLIMITED) {
+            return __('No time limit');
+        }
+
+        try {
+            return Carbon::parse($value)->timezone(config('app.display_timezone'))->translatedFormat('d M Y');
+        } catch (\Throwable) {
+            return '-';
+        }
     }
 
     protected function getTableRecordActionUsing(): ?Closure
@@ -769,6 +806,7 @@ class PlatformOrganizations extends AuthorizedPage implements HasForms, Tables\C
                 'name' => $name,
                 'trial_ends_at' => $data['trial_ends_at'] ?? null,
             ]);
+            app(OrganizationTrialManager::class)->recordInitial(auth()->user(), $organization);
             $organization->users()->attach($owner->id, ['role' => 'owner']);
             OrganizationDefaults::seed($organization);
             $this->assignOwnerAccessRoleIfNone($owner);
@@ -825,6 +863,7 @@ class PlatformOrganizations extends AuthorizedPage implements HasForms, Tables\C
                     'name' => $name,
                     'trial_ends_at' => $data['trial_ends_at'] ?? null,
                 ]);
+                app(OrganizationTrialManager::class)->recordInitial(auth()->user(), $organization);
                 $organization->users()->attach($existingUser->id, ['role' => 'owner']);
                 OrganizationDefaults::seed($organization);
                 $this->assignOwnerAccessRoleIfNone($existingUser);
@@ -847,6 +886,7 @@ class PlatformOrganizations extends AuthorizedPage implements HasForms, Tables\C
                 'name' => $name,
                 'trial_ends_at' => $data['trial_ends_at'] ?? null,
             ]);
+            app(OrganizationTrialManager::class)->recordInitial(auth()->user(), $organization);
             OrganizationDefaults::seed($organization);
 
             return OrganizationInvitation::create([
@@ -907,6 +947,14 @@ class PlatformOrganizations extends AuthorizedPage implements HasForms, Tables\C
                         ->label(__('Trial ends at'))
                         ->helperText(__('Leave blank for an unlimited (grandfathered) organization.'))
                         ->default(fn (Organization $record) => $record->trial_ends_at),
+
+                    // Not a column: stored on the trial-change audit row (only
+                    // when the trial date actually changes).
+                    Textarea::make('reason')
+                        ->label(__('Reason (optional)'))
+                        ->helperText(__('Optional, up to 500 characters. Shown in the organization history when the trial date changes.'))
+                        ->maxLength(OrganizationTrialManager::REASON_MAX_LENGTH)
+                        ->rows(3),
                 ])
                 ->action(function (Organization $record, array $data): void {
                     $name = trim((string) $data['name']);
@@ -924,10 +972,27 @@ class PlatformOrganizations extends AuthorizedPage implements HasForms, Tables\C
                     }
 
                     try {
-                        $record->update([
-                            'name' => $name,
-                            'trial_ends_at' => $data['trial_ends_at'] ?? null,
-                        ]);
+                        // One transaction: the rename and the audited trial change
+                        // stand or fall together (no audit row = no change).
+                        DB::transaction(function () use ($record, $name, $data) {
+                            $record->update(['name' => $name]);
+
+                            app(OrganizationTrialManager::class)->change(
+                                auth()->user(),
+                                $record,
+                                $data['trial_ends_at'] ?? null,
+                                $data['reason'] ?? null,
+                            );
+                        });
+                    } catch (TrialChangeException $exception) {
+                        Notification::make()
+                            ->title(__('Organization not updated'))
+                            ->body($exception->getMessage())
+                            ->danger()
+                            ->persistent()
+                            ->send();
+
+                        return;
                     } catch (QueryException $exception) {
                         if ($exception->getCode() !== '23000') {
                             throw $exception;

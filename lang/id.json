@@ -1109,5 +1109,12 @@
     "The reason may be at most :max characters.": "Alasan maksimal :max karakter.",
     "Back to plans": "Kembali ke paket",
     "Change note": "Catatan perubahan",
-    "Small numbers are shown first (1, 2, 3, ...).": "Angka kecil tampil lebih dulu (1, 2, 3, ...)."
+    "Small numbers are shown first (1, 2, 3, ...).": "Angka kecil tampil lebih dulu (1, 2, 3, ...).",
+    "Optional, up to 500 characters. Shown in the organization history when the trial date changes.": "Opsional, maksimal 500 karakter. Tampil di riwayat organisasi bila tanggal trial berubah.",
+    "Organization not updated": "Organisasi tidak diperbarui",
+    "The trial could not be changed. Nothing was saved, please try again.": "Masa trial tidak dapat diubah. Tidak ada yang tersimpan, silakan coba lagi.",
+    "The trial end date is not a valid date.": "Tanggal berakhir trial bukan tanggal yang valid.",
+    "This organization no longer exists.": "Organisasi ini sudah tidak ada.",
+    "Trial period changed": "Masa trial diubah",
+    ":from to :to, by :name": ":from menjadi :to, oleh :name"
 }
