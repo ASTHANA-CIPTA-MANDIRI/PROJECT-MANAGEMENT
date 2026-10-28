@@ -301,7 +301,12 @@ return [
     |
     */
 
-    'google_fonts' => 'https://fonts.googleapis.com/css2?family=DM+Sans:ital,wght@0,400;0,500;0,700;1,400;1,500;1,700&display=swap',
+    // Disabled: the app's Content-Security-Policy (config/security.php) only allows
+    // same-origin styles and fonts, so the Google Fonts stylesheet was blocked on every
+    // page (and logged a CSP error in the console) while the UI already rendered with
+    // the system sans-serif fallback. Setting null keeps the look and removes the error.
+    // To use DM Sans for real, self-host it rather than loosening the CSP.
+    'google_fonts' => null,
 
     /*
     |--------------------------------------------------------------------------
