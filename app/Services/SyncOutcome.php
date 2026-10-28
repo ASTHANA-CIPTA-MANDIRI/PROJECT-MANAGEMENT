@@ -5,7 +5,7 @@ namespace App\Services;
 /**
  * What {@see InvoiceSyncer::sync()} did, as a plain string constant - the
  * same convention as SubscriptionActivationService::RESULT_*, whose values
- * the first seven mirror 1:1 so the two vocabularies never drift.
+ * the first seven (plus RECOVERED / RECOVERY_TOO_OLD) mirror 1:1 so the two vocabularies never drift.
  */
 final class SyncOutcome
 {
@@ -24,6 +24,15 @@ final class SyncOutcome
 
     public const UNKNOWN_INVOICE = 'unknown_invoice';
 
+    /** An expired invoice reopened as paid by InvoiceSyncer::recoverLate(). */
+    public const RECOVERED = 'recovered';
+
+    /** Expired longer ago than subscriptions.late_recovery_max_days; nothing changed. */
+    public const RECOVERY_TOO_OLD = 'recovery_too_old';
+
+    /** recoverLate() on an invoice that is not `expired` (and not already paid); DOKU was not called. */
+    public const NOT_RECOVERABLE = 'not_recoverable';
+
     // Decided before process() is ever reached.
     /** DOKU answered with a status we never forward (PENDING, FAILED, REDIRECT, TIMEOUT, ...). */
     public const NOT_FORWARDED = 'not_forwarded';
@@ -40,7 +49,7 @@ final class SyncOutcome
     public const TOO_EARLY = 'too_early';
 
     /** Only these two actually change an invoice. */
-    public const CHANGED = [self::PAID, self::EXPIRED];
+    public const CHANGED = [self::PAID, self::EXPIRED, self::RECOVERED];
 
     public function __construct(
         public readonly string $result,

@@ -32,6 +32,13 @@ return [
     'checkout_enabled' => (bool) env('SUBSCRIPTIONS_CHECKOUT_ENABLED', env('APP_ENV') !== 'production'),
 
     /*
+     * How long after an invoice expired (measured from its expires_at) a Super
+     * Admin may still recover a payment DOKU later confirmed
+     * (InvoiceSyncer::recoverLate). Beyond it the money is a manual matter.
+     */
+    'late_recovery_max_days' => (int) env('SUBSCRIPTIONS_LATE_RECOVERY_MAX_DAYS', 30),
+
+    /*
      * Paywall: when on, a signed-in member of an Organization whose trial has
      * ended (and that has no active subscription) is redirected from every
      * full-page panel navigation to the billing page

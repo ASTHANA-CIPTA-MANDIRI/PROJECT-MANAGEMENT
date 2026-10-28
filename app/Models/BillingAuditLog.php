@@ -29,6 +29,10 @@ class BillingAuditLog extends Model
 
     public const ACTION_SYNC = 'invoice.sync';
 
+    // An expired invoice reopened as paid after DOKU confirmed a late payment
+    // (InvoiceSyncer::recoverLate). Money + access, so kept as long as a sync.
+    public const ACTION_LATE_RECOVERY = 'invoice.late_recovery';
+
     // Changes to a subscription plan (App\Services\PlanManager). They carry a
     // `subject` ("plan:<code>") and old_value/new_value instead of an invoice.
     public const ACTION_PLAN_CREATE = 'plan.create';
@@ -50,13 +54,14 @@ class BillingAuditLog extends Model
 
     /**
      * Retention per action: a sync changes money/access so its trail is
-     * kept a year, and so is a trial change (it decides whether an organization
+     * kept a year (a late recovery likewise), and so is a trial change (it decides whether an organization
      * can use the product at all); a status check and a plan change are kept 90
      * days. An action
      * not listed here (a future one) is never pruned until it is added.
      */
     public const RETENTION_DAYS = [
         self::ACTION_SYNC => 365,
+        self::ACTION_LATE_RECOVERY => 365,
         self::ACTION_ORGANIZATION_TRIAL_UPDATE => 365,
         self::ACTION_PLAN_CREATE => 90,
         self::ACTION_PLAN_UPDATE => 90,

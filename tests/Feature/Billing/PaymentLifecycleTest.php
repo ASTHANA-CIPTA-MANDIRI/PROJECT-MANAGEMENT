@@ -20,10 +20,12 @@ use Tests\TestCase;
  * status tidak berurutan, pembayaran terlambat, kegagalan DB, dan
  * jadwal scheduler.
  *
- * Test bertanda "CHARACTERIZATION" mendokumentasikan perilaku SAAT INI
- * yang kebijakan bisnisnya belum diputuskan (bayar terlambat setelah
- * invoice ditutup lokal). Itu BUKAN pernyataan bahwa perilakunya benar;
- * jika keputusan bisnis berubah, test itu yang harus diubah bersamaan.
+ * Test bertanda "CHARACTERIZATION" mendokumentasikan perilaku webhook dan
+ * polling untuk bayar terlambat (SUCCESS setelah invoice ditutup lokal):
+ * keputusan bisnis (Tahap B) = keduanya TETAP tidak memulihkan secara
+ * otomatis; pemulihan hanya lewat aksi admin eksplisit "Pulihkan
+ * pembayaran" (InvoiceSyncer::recoverLate, diuji di LateRecoveryTest).
+ * Jika keputusan itu berubah, test-test ini yang harus diubah bersamaan.
  */
 class PaymentLifecycleTest extends TestCase
 {
@@ -373,11 +375,13 @@ class PaymentLifecycleTest extends TestCase
     }
 
     /**
-     * CHARACTERIZATION (kebijakan bayar-terlambat BELUM diputuskan).
+     * CHARACTERIZATION (keputusan: webhook/polling tidak memulihkan otomatis;
+     * pemulihan hanya lewat aksi admin, lihat LateRecoveryTest).
      * Setelah masa tenggang, expire command menutup invoice lokal sebagai
      * expired. Jika DOKU ternyata SUKSES menerima uang sesudahnya, webhook
      * dijawab already_processed, polling tidak lagi memeriksa invoice itu,
-     * dan tidak ada Subscription/jejak DB: uang masuk tanpa akses.
+     * dan tidak ada Subscription/jejak DB: uang masuk tanpa akses sampai admin
+     * memulihkannya secara manual.
      */
     public function test_characterization_success_after_the_invoice_was_closed_locally_is_dropped(): void
     {

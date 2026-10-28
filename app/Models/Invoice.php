@@ -96,6 +96,22 @@ class Invoice extends Model
     }
 
     /**
+     * Whether an `expired` invoice is past the window in which an admin may
+     * still recover a late payment (config subscriptions.late_recovery_max_days).
+     * Measured from expires_at, the moment the payment page stopped being
+     * valid (updated_at only if that is missing); with neither, it is refused.
+     * The one definition shared by App\Services\InvoiceSyncer (cheap pre-check,
+     * no DOKU call) and SubscriptionActivationService (authoritative, under lock).
+     */
+    public function isTooOldToRecover(): bool
+    {
+        $since = $this->expires_at ?? $this->updated_at;
+        $maxDays = max(1, (int) config('subscriptions.late_recovery_max_days', 30));
+
+        return $since === null || $since->lt(now()->subDays($maxDays));
+    }
+
+    /**
      * Whether this pending invoice's DOKU Checkout payment page has passed
      * its local due-date clock (expires_at) - the app-side "pending ->
      * expired by timeout" transition the DOKU spec recommends instead of

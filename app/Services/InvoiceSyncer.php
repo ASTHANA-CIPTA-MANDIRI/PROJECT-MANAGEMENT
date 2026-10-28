@@ -8,6 +8,7 @@ use App\Models\User;
 use App\Services\Doku\DokuClient;
 use App\Services\Doku\DokuPaymentException;
 use Carbon\CarbonImmutable;
+use Illuminate\Auth\Access\AuthorizationException;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Str;
@@ -132,44 +133,91 @@ class InvoiceSyncer
         return $this->apply($invoice, null, null, $enforceMinAge);
     }
 
-    private function apply(Invoice $invoice, ?User $actor, ?string $reason, bool $enforceMinAge): SyncOutcome
+    /**
+     * Reopen an `expired` invoice that DOKU now reports as paid (a payment that
+     * arrived after the local expiry closed it). The one deliberate exception
+     * to "a final invoice never transitions again", and only through this
+     * explicit, attributed call - the webhook and the polling command can
+     * never do it.
+     *
+     * Same machinery as {@see sync()} (one DOKU Check Status, one
+     * process() call with late recovery allowed, audit in the same
+     * transaction as the mutation) with stricter gates, all decided BEFORE
+     * DOKU is contacted where possible: Super Admin actor, a 10-500 character
+     * reason, invoice `expired` (an already `paid` one answers
+     * already_processed, anything else not_recoverable), old enough (60 s),
+     * not older than subscriptions.late_recovery_max_days, and only DOKU
+     * SUCCESS is forwarded. The subscription period starts from now, not from
+     * when the customer paid at DOKU. Audited as invoice.late_recovery.
+     *
+     * @throws AuthorizationException when $actor is not a Super Admin
+     * @throws InvalidArgumentException when the reason is missing/too short/too long
+     */
+    public function recoverLate(Invoice $invoice, User $actor, string $reason): SyncOutcome
     {
+        if (! $actor->isSuperAdmin()) {
+            throw new AuthorizationException('Only a Super Admin may recover a late payment.');
+        }
+
+        return $this->apply($invoice, $actor, self::validatedReason($reason), true, true);
+    }
+
+    private function apply(Invoice $invoice, ?User $actor, ?string $reason, bool $enforceMinAge, bool $recovery = false): SyncOutcome
+    {
+        $action = $recovery ? BillingAuditLog::ACTION_LATE_RECOVERY : BillingAuditLog::ACTION_SYNC;
+
         // The caller's model may be a column-restricted table record; the
         // decision below must be made on the real, current row.
         $current = Invoice::query()->whereKey($invoice->getKey())->first();
 
         if ($current === null) {
-            return $this->finish($actor, $reason, new SyncOutcome(SyncOutcome::UNKNOWN_INVOICE), null, $invoice->invoice_number);
+            return $this->finish($actor, $reason, new SyncOutcome(SyncOutcome::UNKNOWN_INVOICE), null, $invoice->invoice_number, $action);
         }
 
         $old = $current->status;
 
-        if ($current->status !== Invoice::STATUS_PENDING) {
-            return $this->finish($actor, $reason, new SyncOutcome(SyncOutcome::ALREADY_PROCESSED, $old, $old), $current);
+        $eligibleStatus = $recovery ? Invoice::STATUS_EXPIRED : Invoice::STATUS_PENDING;
+
+        if ($current->status !== $eligibleStatus) {
+            // A second recovery click (or a webhook that won the race) finds
+            // the invoice paid: that is "already processed", not an error.
+            $result = ! $recovery || $current->status === Invoice::STATUS_PAID
+                ? SyncOutcome::ALREADY_PROCESSED
+                : SyncOutcome::NOT_RECOVERABLE;
+
+            return $this->finish($actor, $reason, new SyncOutcome($result, $old, $old), $current, null, $action);
         }
 
         if ($enforceMinAge && ($current->created_at === null || $current->created_at->gt(now()->subSeconds(self::MIN_AGE_SECONDS)))) {
-            return $this->finish($actor, $reason, new SyncOutcome(SyncOutcome::TOO_EARLY, $old, $old), $current);
+            return $this->finish($actor, $reason, new SyncOutcome(SyncOutcome::TOO_EARLY, $old, $old), $current, null, $action);
+        }
+
+        if ($recovery && $current->isTooOldToRecover()) {
+            return $this->finish($actor, $reason, new SyncOutcome(SyncOutcome::RECOVERY_TOO_OLD, $old, $old), $current, null, $action);
         }
 
         try {
             $payload = $this->client->checkStatus($current->invoice_number);
         } catch (DokuPaymentException $e) {
             // Already logged by DokuClient.
-            return $this->finish($actor, $reason, new SyncOutcome(SyncOutcome::DOKU_UNREACHABLE, $old, $old), $current);
+            return $this->finish($actor, $reason, new SyncOutcome(SyncOutcome::DOKU_UNREACHABLE, $old, $old), $current, null, $action);
         } catch (\Throwable $e) {
             Log::error('DOKU sync: unexpected error', [
                 'invoice_number' => $current->invoice_number,
                 'exception' => $e->getMessage(),
             ]);
 
-            return $this->finish($actor, $reason, new SyncOutcome(SyncOutcome::DOKU_UNREACHABLE, $old, $old), $current);
+            return $this->finish($actor, $reason, new SyncOutcome(SyncOutcome::DOKU_UNREACHABLE, $old, $old), $current, null, $action);
         }
 
         $dokuStatus = (string) ($payload['transaction']['status'] ?? '');
 
-        if (! in_array($dokuStatus, self::FORWARDED_STATUSES, true)) {
-            return $this->finish($actor, $reason, new SyncOutcome(SyncOutcome::NOT_FORWARDED, $old, $old, $dokuStatus), $current);
+        // A recovery only ever acts on SUCCESS; DOKU's EXPIRED for an
+        // already expired invoice is not news and must not be "applied".
+        $forwarded = $recovery ? ['SUCCESS'] : self::FORWARDED_STATUSES;
+
+        if (! in_array($dokuStatus, $forwarded, true)) {
+            return $this->finish($actor, $reason, new SyncOutcome(SyncOutcome::NOT_FORWARDED, $old, $old, $dokuStatus), $current, null, $action);
         }
 
         if (($payload['order']['invoice_number'] ?? null) !== $current->invoice_number) {
@@ -177,7 +225,7 @@ class InvoiceSyncer
                 'invoice_number' => $current->invoice_number,
             ]);
 
-            return $this->finish($actor, $reason, new SyncOutcome(SyncOutcome::INVOICE_MISMATCH, $old, $old, $dokuStatus), $current);
+            return $this->finish($actor, $reason, new SyncOutcome(SyncOutcome::INVOICE_MISMATCH, $old, $old, $dokuStatus), $current, null, $action);
         }
 
         // process() opens its own transaction (a savepoint inside this one).
@@ -186,10 +234,12 @@ class InvoiceSyncer
         // throws, everything rolls back and the failure is audited below,
         // OUTSIDE the rolled-back transaction, so it is not lost with it.
         try {
-            return DB::transaction(function () use ($payload, $current, $old, $dokuStatus, $actor, $reason) {
-                $result = $this->activation->process($payload);
+            return DB::transaction(function () use ($payload, $current, $old, $dokuStatus, $actor, $reason, $recovery, $action) {
+                $result = $recovery
+                    ? $this->activation->process($payload, true)
+                    : $this->activation->process($payload);
 
-                if (! in_array($result, [SubscriptionActivationService::RESULT_PAID, SubscriptionActivationService::RESULT_EXPIRED], true)) {
+                if (! in_array($result, [SubscriptionActivationService::RESULT_PAID, SubscriptionActivationService::RESULT_EXPIRED, SubscriptionActivationService::RESULT_RECOVERED], true)) {
                     Log::warning('DOKU sync: status rejected by activation service', [
                         'invoice_number' => $current->invoice_number,
                         'result' => $result,
@@ -198,7 +248,7 @@ class InvoiceSyncer
 
                 $new = (string) Invoice::query()->whereKey($current->getKey())->value('status');
 
-                return $this->finish($actor, $reason, new SyncOutcome($this->mapResult($result), $old, $new, $dokuStatus), $current);
+                return $this->finish($actor, $reason, new SyncOutcome($this->mapResult($result), $old, $new, $dokuStatus), $current, null, $action);
             });
         } catch (\Throwable $e) {
             Log::error('DOKU sync: failed to apply status, invoice left unchanged', [
@@ -209,7 +259,7 @@ class InvoiceSyncer
             $outcome = new SyncOutcome(SyncOutcome::APPLY_FAILED, $old, $old, $dokuStatus);
 
             try {
-                $this->finish($actor, $reason, $outcome, $current);
+                $this->finish($actor, $reason, $outcome, $current, null, $action);
             } catch (\Throwable $auditFailure) {
                 // Never let a broken audit write hide the real outcome.
                 Log::error('DOKU sync: could not write audit row for a failed apply', [
@@ -225,9 +275,9 @@ class InvoiceSyncer
     /**
      * Audits a sync outcome (when attributed) and hands it back.
      */
-    private function finish(?User $actor, ?string $reason, SyncOutcome $outcome, ?Invoice $invoice, ?string $invoiceNumber = null): SyncOutcome
+    private function finish(?User $actor, ?string $reason, SyncOutcome $outcome, ?Invoice $invoice, ?string $invoiceNumber = null, string $action = BillingAuditLog::ACTION_SYNC): SyncOutcome
     {
-        $this->audit($actor, BillingAuditLog::ACTION_SYNC, $outcome->result, $invoice, $reason, $outcome->oldStatus, $outcome->newStatus, $invoiceNumber);
+        $this->audit($actor, $action, $outcome->result, $invoice, $reason, $outcome->oldStatus, $outcome->newStatus, $invoiceNumber);
 
         return $outcome;
     }
@@ -266,6 +316,8 @@ class InvoiceSyncer
         return match ($result) {
             SubscriptionActivationService::RESULT_PAID => SyncOutcome::PAID,
             SubscriptionActivationService::RESULT_EXPIRED => SyncOutcome::EXPIRED,
+            SubscriptionActivationService::RESULT_RECOVERED => SyncOutcome::RECOVERED,
+            SubscriptionActivationService::RESULT_RECOVERY_TOO_OLD => SyncOutcome::RECOVERY_TOO_OLD,
             SubscriptionActivationService::RESULT_ALREADY_PROCESSED => SyncOutcome::ALREADY_PROCESSED,
             SubscriptionActivationService::RESULT_AMOUNT_MISMATCH => SyncOutcome::AMOUNT_MISMATCH,
             SubscriptionActivationService::RESULT_REFERENCE_MISMATCH => SyncOutcome::REFERENCE_MISMATCH,

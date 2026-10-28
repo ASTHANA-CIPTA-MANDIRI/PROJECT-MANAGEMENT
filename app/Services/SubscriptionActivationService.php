@@ -56,6 +56,17 @@ class SubscriptionActivationService
     public const RESULT_AMOUNT_MISMATCH = 'amount_mismatch';
 
     /**
+     * An expired invoice that DOKU later confirmed as paid was reopened by an
+     * explicit admin recovery ({@see process()} with $allowLateRecovery). A
+     * result of its own, not RESULT_PAID, so the audit trail and the operator
+     * can tell "paid on time" from "recovered after it was closed here".
+     */
+    public const RESULT_RECOVERED = 'recovered';
+
+    /** Recovery was asked for, but the invoice expired longer ago than subscriptions.late_recovery_max_days. */
+    public const RESULT_RECOVERY_TOO_OLD = 'recovery_too_old';
+
+    /**
      * Single entry point for both the signature-verified webhook and the
      * Check Status polling fallback (subscriptions:sync-pending-invoices):
      * both feed a DOKU-shaped payload here, so the amount/reference/
@@ -65,9 +76,18 @@ class SubscriptionActivationService
      * transaction.original_request_id is optional (absent in QRIS
      * notifications) but, when present, must match the invoice.
      *
+     * $allowLateRecovery is false for the webhook and the polling command, so
+     * neither can ever reopen a closed invoice: a SUCCESS that arrives after
+     * the invoice expired locally is still dropped as already_processed. Only
+     * the explicit, audited Super Admin action (InvoiceSyncer::recoverLate)
+     * passes true, and even then only an `expired` invoice with a SUCCESS
+     * status is touched (failed/paid stay final) and only within
+     * subscriptions.late_recovery_max_days. Every guard above the final-state
+     * check (unknown invoice, reference, amount) applies to a recovery too.
+     *
      * @param  array<string, mixed>  $payload  the decoded, DOKU-originated payload (verified webhook body or Check Status response)
      */
-    public function process(array $payload): string
+    public function process(array $payload, bool $allowLateRecovery = false): string
     {
         $invoiceNumber = (string) ($payload['order']['invoice_number'] ?? '');
         $originalRequestId = isset($payload['transaction']['original_request_id'])
@@ -76,7 +96,7 @@ class SubscriptionActivationService
         $amount = (int) ($payload['order']['amount'] ?? 0);
         $status = (string) ($payload['transaction']['status'] ?? '');
 
-        return DB::transaction(function () use ($invoiceNumber, $originalRequestId, $amount, $status) {
+        return DB::transaction(function () use ($invoiceNumber, $originalRequestId, $amount, $status, $allowLateRecovery) {
             // order.invoice_number is the ONLY thing this notification is
             // trusted to identify an invoice by - never an organization_id
             // or amount taken from the payload at face value (CLAUDE.md:
@@ -123,8 +143,33 @@ class SubscriptionActivationService
             // Idempotency: an invoice that already reached a final state
             // never transitions again, regardless of what status this
             // (possibly duplicate/replayed) notification carries.
-            if ($invoice->isFinal()) {
+            $isLateRecovery = $allowLateRecovery
+                && $status === 'SUCCESS'
+                && $invoice->status === Invoice::STATUS_EXPIRED;
+
+            if ($invoice->isFinal() && ! $isLateRecovery) {
                 return self::RESULT_ALREADY_PROCESSED;
+            }
+
+            if ($isLateRecovery) {
+                // Judged on the locked row, so a recovery that raced another
+                // one sees `paid` above and never gets here twice.
+                if ($invoice->isTooOldToRecover()) {
+                    Log::warning('DOKU late recovery: invoice expired too long ago', ['invoice_id' => $invoice->id]);
+
+                    return self::RESULT_RECOVERY_TOO_OLD;
+                }
+
+                // The period is counted from NOW (activateSubscription), not
+                // from when the customer paid at DOKU.
+                $invoice->update([
+                    'status' => Invoice::STATUS_PAID,
+                    'paid_at' => now(),
+                ]);
+
+                $this->activateSubscription($invoice);
+
+                return self::RESULT_RECOVERED;
             }
 
             // Only SUCCESS ever activates a subscription; EXPIRED closes the
