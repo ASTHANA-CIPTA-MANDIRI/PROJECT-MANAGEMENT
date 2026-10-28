@@ -35,10 +35,13 @@ use InvalidArgumentException;
  * user belongs to"), but `isSuperAdmin()` via userCanAccessPage(), which
  * AuthorizesPageAccess::boot() re-runs on every Livewire request.
  *
- * Three row actions, all Super Admin only (each closure re-checks
+ * Four row actions, all Super Admin only (each closure re-checks
  * userCanAccessPage() on top of boot()): "Check status" (read-only look at
- * DOKU's answer), "Sync" (applies it) and "History" (the audit trail). This
- * page never writes an Invoice or Subscription itself: both DOKU actions go
+ * DOKU's answer), "Sync" (applies it, pending invoices), "Recover payment"
+ * (expired invoices that DOKU reports as paid; never automatic) and "History"
+ * (the audit trail). Sync and Recover are never offered on the same row, so a
+ * row shows at most three icons. This
+ * page never writes an Invoice or Subscription itself: the DOKU actions go
  * through {@see InvoiceSyncer}, whose only write path is
  * SubscriptionActivationService::process(), and every attributed call is
  * recorded in billing_audit_logs. A test greps this file to keep it so.
@@ -200,7 +203,7 @@ class PlatformPayments extends AuthorizedPage implements HasForms, Tables\Contra
 
     protected function getTableDescription(): ?string
     {
-        return __('Every subscription payment across all organizations. The cards and the list come from this application\'s own records; DOKU is contacted only when you press Check status or Sync.');
+        return __('Every subscription payment across all organizations. The cards and the list come from this application\'s own records; DOKU is contacted only when you press Check status, Sync or Recover payment.');
     }
 
     protected function getTableEmptyStateHeading(): ?string
@@ -269,6 +272,37 @@ class PlatformPayments extends AuthorizedPage implements HasForms, Tables\Contra
                         ]),
                 ])
                 ->action(fn (Invoice $record, array $data) => $this->runSync($record, (string) ($data['reason'] ?? ''))),
+
+            // Late payment (Stage B): only for an expired invoice, only on an
+            // explicit click, always with a reason. DOKU must confirm SUCCESS.
+            Tables\Actions\Action::make('recoverLatePayment')
+                ->label(__('Recover payment'))
+                ->iconButton()
+                ->icon('heroicon-o-reply')
+                ->tooltip(__('Recover late payment'))
+                ->extraAttributes(['class' => 'rk-pp__act rk-pp__act--recover', 'aria-label' => __('Recover payment')])
+                ->visible(fn (Invoice $record): bool => $record->status === Invoice::STATUS_EXPIRED)
+                ->requiresConfirmation()
+                ->modalHeading(__('Recover late payment'))
+                ->modalSubheading(__('Recover only if DOKU confirms SUCCESS. The subscription starts from now. This action is recorded in the audit history.'))
+                ->modalButton(__('Recover payment'))
+                ->form([
+                    Textarea::make('reason')
+                        ->label(__('Reason'))
+                        ->helperText(__('Why are you recovering this payment by hand? 10-500 characters.'))
+                        ->required()
+                        ->minLength(InvoiceSyncer::REASON_MIN_LENGTH)
+                        ->maxLength(InvoiceSyncer::REASON_MAX_LENGTH)
+                        ->rows(3)
+                        ->rules([
+                            fn () => function (string $attribute, $value, Closure $fail) {
+                                if (mb_strlen(trim((string) $value)) < InvoiceSyncer::REASON_MIN_LENGTH) {
+                                    $fail(__('The reason must be at least :min characters.', ['min' => InvoiceSyncer::REASON_MIN_LENGTH]));
+                                }
+                            },
+                        ]),
+                ])
+                ->action(fn (Invoice $record, array $data) => $this->runRecoverLate($record, (string) ($data['reason'] ?? ''))),
 
             Tables\Actions\Action::make('history')
                 ->label(__('History'))
@@ -406,6 +440,63 @@ class PlatformPayments extends AuthorizedPage implements HasForms, Tables\Contra
         $this->notifyBilling(__('Sync'), $message, $kind);
     }
 
+    private function runRecoverLate(Invoice $record, string $reason): void
+    {
+        abort_unless(static::userCanAccessPage(), 403);
+
+        $user = auth()->user();
+        $invoice = $this->resolveInvoice($record);
+
+        if ($invoice === null) {
+            $this->notifyBilling(__('Recover late payment'), __('Invoice not found or no longer eligible'), 'warning');
+
+            return;
+        }
+
+        if (($wait = $this->throttleRetryAfter('recover', $invoice, $user)) !== null) {
+            $this->notifyThrottled($wait);
+
+            return;
+        }
+
+        try {
+            $outcome = app(InvoiceSyncer::class)->recoverLate($invoice, $user, $reason);
+        } catch (InvalidArgumentException) {
+            $this->notifyBilling(__('Recover late payment'), __('The reason must be between :min and :max characters.', [
+                'min' => InvoiceSyncer::REASON_MIN_LENGTH, 'max' => InvoiceSyncer::REASON_MAX_LENGTH,
+            ]), 'danger');
+
+            return;
+        } catch (\Throwable $e) {
+            Log::error('Billing action failed: late recovery', ['invoice_id' => $invoice->getKey(), 'exception' => $e::class]);
+            $this->notifyBilling(__('Recover late payment'), __('Something went wrong, nothing was changed. Try again later.'), 'danger');
+
+            return;
+        }
+
+        [$message, $kind] = $this->recoveryMessage($outcome);
+
+        $this->notifyBilling(__('Recover late payment'), $message, $kind);
+    }
+
+    /**
+     * @return array{0: string, 1: string} operator-facing text and notification kind
+     */
+    private function recoveryMessage(SyncOutcome $outcome): array
+    {
+        return match ($outcome->result) {
+            SyncOutcome::RECOVERED => [__('Payment recovered, subscription activated.'), 'success'],
+            SyncOutcome::NOT_FORWARDED, SyncOutcome::IGNORED => [__('DOKU has not reported this payment as successful, nothing was changed.'), 'warning'],
+            SyncOutcome::RECOVERY_TOO_OLD => [__('The invoice expired more than :days days ago and can no longer be recovered.', ['days' => max(1, (int) config('subscriptions.late_recovery_max_days', 30))]), 'warning'],
+            SyncOutcome::ALREADY_PROCESSED => [__('Already processed, nothing changed.'), 'info'],
+            SyncOutcome::NOT_RECOVERABLE => [__('Only an expired invoice can be recovered, nothing was changed.'), 'warning'],
+            SyncOutcome::TOO_EARLY => [__('Too early, wait at least :seconds seconds after the invoice was created.', ['seconds' => InvoiceSyncer::MIN_AGE_SECONDS]), 'warning'],
+            SyncOutcome::AMOUNT_MISMATCH, SyncOutcome::REFERENCE_MISMATCH, SyncOutcome::INVOICE_MISMATCH, SyncOutcome::UNKNOWN_INVOICE => [__('DOKU data does not match the invoice, nothing was applied. Manual review needed.'), 'danger'],
+            SyncOutcome::DOKU_UNREACHABLE => [__('DOKU could not be reached, try again in a moment.'), 'danger'],
+            default => [__('Failed to apply, the invoice was not changed.'), 'danger'],
+        };
+    }
+
     /**
      * @return array{0: string, 1: string} operator-facing text and notification kind
      */
@@ -450,7 +541,7 @@ class PlatformPayments extends AuthorizedPage implements HasForms, Tables\Contra
         } elseif ($snapshot->dokuStatus === 'SUCCESS' && $invoice->status === Invoice::STATUS_EXPIRED) {
             // Information only: nothing is changed for an expired invoice.
             $kind = 'warning';
-            $lines[] = '**'.__('Paid at DOKU, but this invoice already expired here. Nothing was changed; handle it manually outside the system.').'**';
+            $lines[] = '**'.__('Paid at DOKU, but this invoice already expired here. Nothing was changed; use Recover payment if it should be honoured.').'**';
         } elseif ($snapshot->dokuStatus === 'SUCCESS') {
             $kind = 'warning';
             $lines[] = __('Paid at DOKU but still pending here. Use Sync to apply it.');
@@ -524,6 +615,7 @@ class PlatformPayments extends AuthorizedPage implements HasForms, Tables\Contra
                 'action' => match ($log->action) {
                     BillingAuditLog::ACTION_CHECK_STATUS => __('Check status'),
                     BillingAuditLog::ACTION_SYNC => __('Sync'),
+                    BillingAuditLog::ACTION_LATE_RECOVERY => __('Recover payment'),
                     default => $this->plain($log->action),
                 },
                 'result' => $this->historyResultLabel($log->result),
@@ -541,6 +633,9 @@ class PlatformPayments extends AuthorizedPage implements HasForms, Tables\Contra
     {
         return match ($result) {
             SyncOutcome::PAID => __('Payment confirmed'),
+            SyncOutcome::RECOVERED => __('Payment recovered'),
+            SyncOutcome::RECOVERY_TOO_OLD => __('Too old to recover'),
+            SyncOutcome::NOT_RECOVERABLE => __('Not recoverable'),
             SyncOutcome::EXPIRED => __('Closed as expired'),
             SyncOutcome::ALREADY_PROCESSED => __('Already processed'),
             SyncOutcome::NOT_FORWARDED, SyncOutcome::IGNORED => __('No final result yet'),

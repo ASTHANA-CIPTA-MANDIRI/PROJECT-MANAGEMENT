@@ -7016,6 +7016,17 @@ $rk-lang-flags: ('en': 'gb', 'fr': 'fr', 'ar': 'sa', 'az': 'az', 'be': 'by', 'bg
             }
         }
 
+        // Recover a late payment (expired rows only; shares the slot of "sync", which
+        // pending rows use, so a row never shows more than three icons).
+        &--recover {
+            color: #d99a2b;
+
+            &:hover,
+            &:focus-visible {
+                background: rgba(240, 195, 127, 0.22);
+            }
+        }
+
         &--history {
             color: #ee8f6a;
 
@@ -7058,6 +7069,15 @@ $rk-lang-flags: ('en': 'gb', 'fr': 'fr', 'ar': 'sa', 'az': 'az', 'be': 'by', 'bg
         svg {
             height: 1.125rem;
             width: 1.125rem;
+        }
+    }
+
+    &__legend-recover {
+        color: #d99a2b;
+
+        em {
+            font-style: normal;
+            color: #6b7280;
         }
     }
 }

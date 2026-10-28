@@ -21,6 +21,7 @@
             <div class="rk-pp__legend" aria-label="{{ __('Actions') }}">
                 <span style="color:#3b82d6"><x-heroicon-o-eye aria-hidden="true" /> <em style="font-style:normal;color:#6b7280">{{ __('Check status') }}</em></span>
                 <span style="color:#4fb87a"><x-heroicon-o-refresh aria-hidden="true" /> <em style="font-style:normal;color:#6b7280">{{ __('Sync') }} ({{ __('pending only') }})</em></span>
+                <span class="rk-pp__legend-recover"><x-heroicon-o-reply aria-hidden="true" /> <em>{{ __('Recover payment (expired only)') }}</em></span>
                 <span style="color:#ee8f6a"><x-heroicon-o-clock aria-hidden="true" /> <em style="font-style:normal;color:#6b7280">{{ __('History') }}</em></span>
             </div>
         </div>

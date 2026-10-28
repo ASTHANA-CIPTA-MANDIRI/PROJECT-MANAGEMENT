@@ -137,6 +137,7 @@ class PlatformPaymentsActionsTest extends TestCase
 
             $page->call('mountTableAction', 'checkStatus', (string) $invoice->id)->assertForbidden();
             $page->call('mountTableAction', 'syncInvoice', (string) $invoice->id)->assertForbidden();
+            $page->call('mountTableAction', 'recoverLatePayment', (string) $invoice->id)->assertForbidden();
             $page->call('mountTableAction', 'history', (string) $invoice->id)->assertForbidden();
             $page->call('callMountedTableAction')->assertForbidden();
         }
@@ -149,7 +150,7 @@ class PlatformPaymentsActionsTest extends TestCase
     {
         $source = file_get_contents(app_path('Filament/Pages/PlatformPayments.php'));
 
-        $this->assertSame(3, substr_count($source, 'abort_unless(static::userCanAccessPage(), 403);'), 'runCheckStatus, runSync and historyView each re-check.');
+        $this->assertSame(4, substr_count($source, 'abort_unless(static::userCanAccessPage(), 403);'), 'runCheckStatus, runSync, runRecoverLate and historyView each re-check.');
     }
 
     // ------------------------------------------------------ visible layout
@@ -186,8 +187,10 @@ class PlatformPaymentsActionsTest extends TestCase
         $this->assertStringNotContainsString('aria-label="Sinkronkan"', $paidRow);
         $this->assertStringNotContainsString('aria-label="Cek status"', $paidRow);
 
-        // A legend explains the three icons.
+        // A legend explains the icons (including the recover icon).
         $this->assertStringContainsString('rk-pp__legend', $html);
+        $this->assertStringContainsString('rk-pp__legend-recover', $html);
+        $this->assertStringContainsString('Pulihkan pembayaran (hanya kedaluwarsa)', $html);
 
         // The column is labelled and the description no longer claims "read-only".
         $this->assertStringContainsString('Aksi', $html);
@@ -282,6 +285,7 @@ class PlatformPaymentsActionsTest extends TestCase
             ->callTableAction('checkStatus', $invoice);
 
         $this->assertStringContainsString('sudah kedaluwarsa di sini', $this->lastNotification()['body']);
+        $this->assertStringContainsString('Pulihkan pembayaran', $this->lastNotification()['body']);
         $this->assertSame(Invoice::STATUS_EXPIRED, $invoice->fresh()->status);
         $this->assertSame(0, Subscription::count());
         $this->assertSame('SUCCESS', BillingAuditLog::sole()->result);

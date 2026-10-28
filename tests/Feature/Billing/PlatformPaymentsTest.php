@@ -262,11 +262,11 @@ class PlatformPaymentsTest extends TestCase
             ->filterTable('needs_attention', true)
             ->sortTable('amount');
 
-        // The row actions (check status / sync / history, covered in
+        // The row actions (check status / sync / recover late payment / history, covered in
         // PlatformPaymentsActionsTest) are the ONLY actions; merely browsing
         // never reaches DOKU nor writes.
         $this->assertSame(
-            ['checkStatus', 'syncInvoice', 'history'],
+            ['checkStatus', 'syncInvoice', 'recoverLatePayment', 'history'],
             array_keys($page->instance()->getCachedTableActions())
         );
         $this->assertSame([], array_merge(
