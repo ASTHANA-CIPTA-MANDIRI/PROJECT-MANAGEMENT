@@ -11,7 +11,7 @@ use Illuminate\Contracts\Support\Htmlable;
  * The page a locked Organization is sent to (see
  * App\Http\Middleware\RedirectLockedOrganizationToBilling), and also a plain
  * "plans" page anyone in an Organization may open: one product, two
- * durations (config('subscriptions.plans')), no tiers.
+ * durations (the active subscription_plans rows), no tiers.
  *
  * No page permission, same as OrganizationSettings: every member may open it
  * (they need somewhere to land when the trial ends), but only Owner/Admin

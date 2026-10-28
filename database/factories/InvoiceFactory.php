@@ -4,6 +4,7 @@ namespace Database\Factories;
 
 use App\Models\Invoice;
 use App\Models\Organization;
+use App\Support\SubscriptionPlans;
 use Illuminate\Database\Eloquent\Factories\Factory;
 use Illuminate\Support\Str;
 
@@ -30,8 +31,8 @@ class InvoiceFactory extends Factory
             'plan_code' => 'monthly',
             // Snapshot columns follow plan_code (resolved lazily so
             // ->create(['plan_code' => 'yearly']) gets the yearly snapshot).
-            'duration_days' => fn (array $attributes) => config("subscriptions.plans.{$attributes['plan_code']}.duration_days"),
-            'plan_name' => fn (array $attributes) => config("subscriptions.plans.{$attributes['plan_code']}.name"),
+            'duration_days' => fn (array $attributes) => SubscriptionPlans::find($attributes['plan_code'])['duration_days'] ?? null,
+            'plan_name' => fn (array $attributes) => SubscriptionPlans::find($attributes['plan_code'])['name'] ?? null,
             'amount' => 150000,
             'currency' => 'IDR',
             'status' => Invoice::STATUS_PENDING,

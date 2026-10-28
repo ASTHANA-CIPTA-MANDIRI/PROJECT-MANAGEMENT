@@ -55,7 +55,7 @@ class SubscriptionPanel
             'locked' => ! $paid && ! TrialGate::active($organization),
             'canManage' => $canManage,
             'checkoutEnabled' => $checkoutEnabled,
-            'plans' => $checkoutEnabled ? config('subscriptions.plans', []) : [],
+            'plans' => $checkoutEnabled ? SubscriptionPlans::sellable() : [],
             'pendingInvoice' => $checkoutEnabled
                 ? $organization->invoices()
                     ->where('status', Invoice::STATUS_PENDING)

@@ -6,6 +6,7 @@ use App\Models\Invoice;
 use App\Models\Organization;
 use App\Models\Role;
 use App\Models\Subscription;
+use App\Models\SubscriptionPlan;
 use App\Models\User;
 use App\Support\OrganizationContext;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -79,7 +80,7 @@ class BillingPageTest extends TestCase
         // 150000/30 = 5000 per day vs 1500000/365 = 4109.59 per day -> 18%.
         $this->actingAs($owner)->get(self::URL)->assertOk()->assertSee(__('Save :percent%', ['percent' => 18]));
 
-        config(['subscriptions.plans.yearly.amount' => 1900000]);
+        SubscriptionPlan::where('code', 'yearly')->update(['amount' => 1900000]);
         $this->actingAs($owner)->get(self::URL)->assertOk()->assertDontSee('Hemat');
     }
 

@@ -9,6 +9,7 @@ use App\Services\Doku\DokuPaymentException;
 use App\Services\InvoiceSyncer;
 use App\Services\StatusSnapshot;
 use App\Services\SyncOutcome;
+use App\Support\SubscriptionPlans;
 use Carbon\Carbon;
 use Closure;
 use Filament\Forms\Components\DatePicker;
@@ -61,6 +62,9 @@ class PlatformPayments extends AuthorizedPage implements HasForms, Tables\Contra
 {
     use InteractsWithForms;
     use Tables\Concerns\InteractsWithTable;
+
+    /** @var array<string, string>|null */
+    protected ?array $planNames = null;
 
     /** Unused: see {@see userCanAccessPage()}. */
     protected static ?string $permission = null;
@@ -648,7 +652,7 @@ class PlatformPayments extends AuthorizedPage implements HasForms, Tables\Contra
 
             Tables\Filters\SelectFilter::make('plan_code')
                 ->label(__('Plan'))
-                ->options(collect(array_keys((array) config('subscriptions.plans')))
+                ->options(collect(array_keys($this->planNames()))
                     ->mapWithKeys(fn (string $code) => [$code => $this->planLabel($code)])
                     ->all()),
 
@@ -690,8 +694,20 @@ class PlatformPayments extends AuthorizedPage implements HasForms, Tables\Contra
 
     private function planLabel(?string $code): string
     {
-        $name = $code === null ? null : config("subscriptions.plans.{$code}.name");
+        $name = $code === null ? null : ($this->planNames()[$code] ?? null);
 
         return $name === null ? (string) $code : __($name);
+    }
+
+    /**
+     * Every plan's name (inactive ones too: old invoices still point at them),
+     * read once per request so a page of rows costs one query, not one per row.
+     * Protected, not public: Livewire only serializes public properties.
+     *
+     * @return array<string, string>
+     */
+    private function planNames(): array
+    {
+        return $this->planNames ??= SubscriptionPlans::names();
     }
 }

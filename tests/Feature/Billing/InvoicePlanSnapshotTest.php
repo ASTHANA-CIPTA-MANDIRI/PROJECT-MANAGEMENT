@@ -5,6 +5,7 @@ namespace Tests\Feature\Billing;
 use App\Models\Invoice;
 use App\Models\Organization;
 use App\Models\Subscription;
+use App\Models\SubscriptionPlan;
 use App\Models\User;
 use App\Support\Doku\DokuSignature;
 use App\Support\OrganizationContext;
@@ -133,7 +134,7 @@ class InvoicePlanSnapshotTest extends TestCase
 
         $this->actingAs($user)->post('/organizations/subscribe', ['plan' => 'monthly'])->assertRedirect();
 
-        config(['subscriptions.plans.monthly.duration_days' => 90, 'subscriptions.plans.monthly.name' => 'Renamed']);
+        SubscriptionPlan::where('code', 'monthly')->update(['duration_days' => 90, 'name' => 'Renamed']);
 
         $invoice = Invoice::firstOrFail()->fresh();
         $this->assertSame(30, $invoice->duration_days);
@@ -145,7 +146,7 @@ class InvoicePlanSnapshotTest extends TestCase
     public function test_webhook_uses_the_snapshot_duration_when_the_plan_duration_changed(): void
     {
         $invoice = $this->pendingInvoice(['plan_code' => 'monthly', 'duration_days' => 30]);
-        config(['subscriptions.plans.monthly.duration_days' => 90]);
+        SubscriptionPlan::where('code', 'monthly')->update(['duration_days' => 90]);
 
         $this->payViaWebhook($invoice);
 
@@ -155,7 +156,7 @@ class InvoicePlanSnapshotTest extends TestCase
     public function test_polling_uses_the_snapshot_duration_when_the_plan_duration_changed(): void
     {
         $invoice = $this->pendingInvoice(['plan_code' => 'monthly', 'duration_days' => 30]);
-        config(['subscriptions.plans.monthly.duration_days' => 90]);
+        SubscriptionPlan::where('code', 'monthly')->update(['duration_days' => 90]);
 
         $this->payViaPolling($invoice);
 
@@ -166,7 +167,7 @@ class InvoicePlanSnapshotTest extends TestCase
     public function test_webhook_still_creates_the_subscription_when_the_plan_was_removed_after_checkout(): void
     {
         $invoice = $this->pendingInvoice(['plan_code' => 'monthly', 'duration_days' => 30]);
-        config(['subscriptions.plans' => ['yearly' => config('subscriptions.plans.yearly')]]);
+        SubscriptionPlan::where('code', 'monthly')->delete(); // query-builder delete: bypasses the model guard, simulating a legacy row that is gone
 
         $this->payViaWebhook($invoice);
 
@@ -179,7 +180,7 @@ class InvoicePlanSnapshotTest extends TestCase
     public function test_polling_still_creates_the_subscription_when_the_plan_was_removed_after_checkout(): void
     {
         $invoice = $this->pendingInvoice(['plan_code' => 'monthly', 'duration_days' => 30]);
-        config(['subscriptions.plans' => []]);
+        SubscriptionPlan::query()->delete(); // see above
 
         $this->payViaPolling($invoice);
 
@@ -195,7 +196,7 @@ class InvoicePlanSnapshotTest extends TestCase
         $existingEndsAt = now()->addDays(10);
         Subscription::factory()->for($organization)->create(['ends_at' => $existingEndsAt, 'cancelled_at' => null]);
         $invoice = $this->pendingInvoice(['plan_code' => 'monthly', 'duration_days' => 30], $organization);
-        config(['subscriptions.plans.monthly.duration_days' => 90]);
+        SubscriptionPlan::where('code', 'monthly')->update(['duration_days' => 90]);
 
         $this->payViaWebhook($invoice);
 
@@ -225,7 +226,7 @@ class InvoicePlanSnapshotTest extends TestCase
         Log::spy();
         $invoice = $this->pendingInvoice(['plan_code' => 'monthly']);
         $invoice->forceFill(['duration_days' => null, 'plan_name' => null])->save();
-        config(['subscriptions.plans' => []]);
+        SubscriptionPlan::query()->delete(); // see above
 
         $this->payViaWebhook($invoice);
 

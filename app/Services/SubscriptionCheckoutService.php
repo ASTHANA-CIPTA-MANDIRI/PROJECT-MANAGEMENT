@@ -35,7 +35,7 @@ class SubscriptionCheckoutService
      */
     public function checkout(Organization $organization, string $planCode): Invoice
     {
-        $plan = SubscriptionPlans::find($planCode);
+        $plan = SubscriptionPlans::findSellable($planCode);
 
         if ($plan === null) {
             throw new InvalidArgumentException("Unknown subscription plan [{$planCode}].");
@@ -53,7 +53,7 @@ class SubscriptionCheckoutService
                 'duration_days' => $plan['duration_days'],
                 'plan_name' => $plan['name'],
                 // Server-authoritative amount, read straight out of
-                // config('subscriptions.plans') above - never anything the
+                // the (active) subscription_plans row above - never anything the
                 // caller passed in.
                 'amount' => $plan['amount'],
                 'currency' => 'IDR',

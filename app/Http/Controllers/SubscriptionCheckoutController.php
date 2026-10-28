@@ -21,8 +21,8 @@ use Illuminate\Validation\Rule;
  *    posted organization_id (CLAUDE.md's "every client-supplied id is
  *    re-resolved through an access-scoped query" rule - here there isn't
  *    even a client-supplied id to begin with, by design).
- *  - Amount: App\Support\SubscriptionPlans::find($planCode), reading
- *    config('subscriptions.plans') - never anything from the request body.
+ *  - Amount: App\Support\SubscriptionPlans::findSellable($planCode), reading
+ *    the active subscription_plans row - never anything from the request body.
  *  - Authorization: OrganizationPolicy::update() (Owner/Admin only, the
  *    same "can manage this Organization" gate every other Organization-
  *    settings action in this app already uses - see OrganizationSettings.php).
