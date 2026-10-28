@@ -926,7 +926,7 @@ if (document.readyState === 'loading') {
 }
 
 // Resource list pages that share the dots-menu / pager / Create-button chrome.
-const RK_PROJECTS = ':is(.filament-resources-list-records-page:is(.filament-resources-projects, .filament-resources-tickets, .filament-resources-activities, .filament-resources-ticket-statuses, .filament-resources-ticket-types, .filament-resources-ticket-priorities, .filament-resources-project-statuses, .filament-resources-labels, .filament-resources-ticket-hours, .filament-resources-users, .filament-resources-roles, .filament-resources-permissions), .rk-path-api-tokens, .rk-path-organization, .rk-path-platform-organizations)';
+const RK_PROJECTS = ':is(.filament-resources-list-records-page:is(.filament-resources-projects, .filament-resources-tickets, .filament-resources-activities, .filament-resources-ticket-statuses, .filament-resources-ticket-types, .filament-resources-ticket-priorities, .filament-resources-project-statuses, .filament-resources-labels, .filament-resources-ticket-hours, .filament-resources-users, .filament-resources-roles, .filament-resources-permissions, .filament-resources-platform-plans), .rk-path-api-tokens, .rk-path-organization, .rk-path-platform-organizations, .rk-path-platform-payments)';
 let rkActiveRowKey = null;
 
 function rkActionLabel(el) {
@@ -1117,7 +1117,8 @@ document.addEventListener('click', (event) => {
     // Rows only: a table's header actions share this class (e.g. "Add member").
     const dots = event.target.closest(`${RK_PROJECTS} tbody .filament-tables-actions-container`);
 
-    if (dots) {
+    // `.rk-pp` (Super Admin > Pembayaran) shows its three row actions as real icons, not dots.
+    if (dots && !dots.closest('.rk-pp')) {
         // Selection wins: with ticked rows the dots do nothing.
         if (rkSelectedRows(root).length > 0) {
             return;

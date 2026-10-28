@@ -8,55 +8,6 @@
     @php($unitLabels = ['monthly' => __('/month'), 'yearly' => __('/year')])
     @php($showCard = $sub['checkoutEnabled'] && $plans !== [] && ! ($sub['paid'] && $sub['unlimited']))
 
-    {{-- Page-scoped styles: every selector starts with .rk-bl so nothing leaks to other
-         pages. Inline on purpose - this page must not touch the shared stylesheet. --}}
-    <style>
-        .rk-bl { display: flex; width: 100%; flex-direction: column; align-items: center; gap: 1.5rem; }
-        .rk-bl__sr { position: absolute; width: 1px; height: 1px; margin: -1px; padding: 0; overflow: hidden; clip: rect(0, 0, 0, 0); white-space: nowrap; border: 0; }
-        .rk-bl [x-cloak] { display: none !important; }
-        .rk-bl__status { display: flex; width: 100%; max-width: 40rem; flex-direction: column; gap: .75rem; border-radius: 1.5rem; background: #fff; padding: 1.25rem 1.5rem; box-shadow: 0 2px 14px rgba(15, 23, 42, .06); }
-        .rk-bl__row { display: flex; align-items: center; justify-content: space-between; gap: 1rem; }
-        .rk-bl__row b { display: block; font-size: .875rem; font-weight: 600; color: #111827; }
-        .rk-bl__row small { display: block; font-size: .75rem; color: #6b7280; }
-        .rk-bl__chip { flex-shrink: 0; border-radius: 9999px; padding: .25rem .75rem; font-size: .75rem; font-weight: 500; background: #eceef1; color: #6f767e; }
-        .rk-bl__chip--blue { background: #e7f0fb; color: #3b82d6; }
-        .rk-bl__chip--yellow { background: #fdf3de; color: #b8841f; }
-        .rk-bl__chip--red { background: #fcebe6; color: #d0644a; }
-        .rk-bl__chip--green { background: #e3f5ea; color: #3fae6a; }
-        .rk-bl__note { margin: 0; font-size: .875rem; color: #6b7280; }
-        .rk-bl__note--alert { color: #b8841f; }
-        .rk-bl__error { margin: 0; font-size: .875rem; color: #d0644a; }
-        .rk-bl__toggle { display: inline-flex; gap: .25rem; border-radius: 9999px; background: #eceef1; padding: .25rem; }
-        .rk-bl__toggle button { display: inline-flex; height: 2.5rem; align-items: center; gap: .5rem; border: 0; border-radius: 9999px; background: transparent; padding: 0 1.25rem; font-size: .875rem; color: #6f767e; cursor: pointer; transition: background-color .15s, color .15s; }
-        .rk-bl__toggle button[aria-pressed="true"] { background: #fff; color: #111827; box-shadow: 0 1px 4px rgba(15, 23, 42, .12); }
-        .rk-bl__save { border-radius: 9999px; background: #e3f5ea; padding: .125rem .5rem; font-size: .75rem; font-weight: 500; color: #3fae6a; }
-        .rk-bl__card { display: flex; width: 100%; max-width: 26rem; flex-direction: column; gap: 1.25rem; border-radius: 1.5rem; background: #fff; padding: 2rem; box-shadow: 0 2px 14px rgba(15, 23, 42, .06); }
-        .rk-bl__card h3 { margin: 0; font-size: 1.125rem; font-weight: 600; color: #111827; }
-        .rk-bl__price { display: flex; flex-wrap: wrap; align-items: baseline; gap: .375rem; }
-        .rk-bl__price b { font-size: 2.25rem; font-weight: 700; line-height: 1.1; color: #111827; }
-        .rk-bl__price span { font-size: .875rem; color: #6b7280; }
-        .rk-bl__duration { margin: 0; font-size: .75rem; color: #6b7280; }
-        .rk-bl__perks { display: flex; margin: 0; flex-direction: column; gap: .625rem; padding: 0; list-style: none; font-size: .875rem; color: #374151; }
-        .rk-bl__perks li { display: flex; align-items: flex-start; gap: .5rem; }
-        .rk-bl__perks svg { margin-top: .125rem; height: 1.125rem; width: 1.125rem; flex-shrink: 0; color: #72cc90; }
-        .rk-bl__form { margin: 0; }
-        .rk-bl__btn { display: inline-flex; height: 3rem; width: 100%; align-items: center; justify-content: center; gap: .5rem; border: 0; border-radius: 9999px; background: #3b82d6; padding: 0 1.5rem; font-size: .875rem; font-weight: 400; color: #fff; text-decoration: none; cursor: pointer; transition: filter .15s; }
-        .rk-bl__btn:hover:not(:disabled) { filter: brightness(.94); }
-        .rk-bl__btn:disabled { cursor: default; opacity: .6; }
-        .rk-bl__btn--ghost { box-sizing: border-box; height: 2.5rem; min-width: 0; width: auto; flex-shrink: 0; white-space: nowrap; line-height: 1; text-align: center; border: 1px solid #cfe0f6; background: #fff; padding: 0 1.25rem; color: #3b82d6; }
-        .rk-bl__btn--ghost:hover:not(:disabled) { background: #e7f0fb; filter: none; }
-        .rk-bl__pending { display: flex; flex-direction: column; align-items: center; gap: .75rem; border-top: 1px solid #eceef1; padding-top: 1rem; text-align: center; }
-        .rk-bl__pending-text { overflow-wrap: anywhere; }
-        .rk-bl__pending-text b { display: block; font-size: .875rem; font-weight: 600; color: #111827; }
-        .rk-bl__pending-text small { display: block; margin-top: .125rem; font-size: .75rem; color: #6b7280; }
-        .rk-bl__pending .rk-bl__note { text-align: center; }
-        @media (max-width: 639px) {
-            .rk-bl__card { padding: 1.5rem; }
-            .rk-bl__price b { font-size: 1.875rem; }
-            .rk-bl__row { align-items: flex-start; }
-        }
-    </style>
-
     <div class="rk-bl" @if ($showCard) x-data="{ period: @js($firstPlan) }" @endif>
 
         <h1 class="rk-bl__sr">{{ __('Subscription') }}</h1>

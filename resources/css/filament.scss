@@ -1185,7 +1185,7 @@ body.rk-header-crumbs .filament-main-topbar .filament-breadcrumbs ul {
 // Scoped to the Project list page only (list page class + resource slug);
 // other resource tables are untouched until the style is rolled out to them.
 // Presentation only: no markup, query or permission change.
-:is(.filament-resources-list-records-page:is(.filament-resources-projects, .filament-resources-tickets, .filament-resources-activities, .filament-resources-ticket-statuses, .filament-resources-ticket-types, .filament-resources-ticket-priorities, .filament-resources-project-statuses, .filament-resources-labels, .filament-resources-ticket-hours, .filament-resources-users, .filament-resources-roles, .filament-resources-permissions), .rk-path-api-tokens, .rk-path-organization, .rk-path-platform-organizations) {
+:is(.filament-resources-list-records-page:is(.filament-resources-projects, .filament-resources-tickets, .filament-resources-activities, .filament-resources-ticket-statuses, .filament-resources-ticket-types, .filament-resources-ticket-priorities, .filament-resources-project-statuses, .filament-resources-labels, .filament-resources-ticket-hours, .filament-resources-users, .filament-resources-roles, .filament-resources-permissions, .filament-resources-platform-plans), .rk-path-api-tokens, .rk-path-organization, .rk-path-platform-organizations, .rk-path-platform-payments) {
     // Big rounded white card holding toolbar + table.
     .filament-tables-container {
         @apply overflow-hidden rounded-3xl border-0 bg-white shadow-sm;
@@ -1565,7 +1565,7 @@ body.rk-header-crumbs .filament-main-topbar .filament-breadcrumbs ul {
 // card, pill inputs/selects, soft rounded rich-text editor, dashed-blue upload
 // dropzone and pill action buttons. The header actions on the edit page keep
 // the page-header card styling above.
-:is(:is(.filament-resources-create-record-page, .filament-resources-edit-record-page):is(.filament-resources-projects, .filament-resources-tickets, .filament-resources-activities, .filament-resources-ticket-statuses, .filament-resources-ticket-types, .filament-resources-ticket-priorities, .filament-resources-project-statuses, .filament-resources-labels, .filament-resources-ticket-hours, .filament-resources-users, .filament-resources-roles, .filament-resources-permissions), .filament-resources-view-record-page:is(.filament-resources-projects, .filament-resources-activities, .filament-resources-ticket-statuses, .filament-resources-ticket-types, .filament-resources-ticket-priorities, .filament-resources-project-statuses, .filament-resources-labels, .filament-resources-ticket-hours, .filament-resources-users, .filament-resources-roles, .filament-resources-permissions)),
+:is(:is(.filament-resources-create-record-page, .filament-resources-edit-record-page):is(.filament-resources-projects, .filament-resources-tickets, .filament-resources-activities, .filament-resources-ticket-statuses, .filament-resources-ticket-types, .filament-resources-ticket-priorities, .filament-resources-project-statuses, .filament-resources-labels, .filament-resources-ticket-hours, .filament-resources-users, .filament-resources-roles, .filament-resources-permissions, .filament-resources-platform-plans), .filament-resources-view-record-page:is(.filament-resources-projects, .filament-resources-activities, .filament-resources-ticket-statuses, .filament-resources-ticket-types, .filament-resources-ticket-priorities, .filament-resources-project-statuses, .filament-resources-labels, .filament-resources-ticket-hours, .filament-resources-users, .filament-resources-roles, .filament-resources-permissions)),
 :is(.filament-tables-filters-form, .rk-board-page, .rk-board-pick-page, .rk-roadmap-page, .rk-path-manage-general-settings, .rk-path-jira-import, .rk-path-my-profile, .rk-path-organization, .rk-path-create-organization, .rk-path-timesheet-export, .rk-path-api-tokens) {
     .filament-forms-card-component,
     .filament-forms-section-component {
@@ -2434,7 +2434,7 @@ body.rk-header-crumbs .filament-main-topbar .filament-breadcrumbs ul {
 // getActions() list, now with a Back button) drop to their own row below it:
 // Back on the left, the rest on the right, all in the soft pill button style.
 // Pure layout: a grid whose first row is painted by a ::before pill.
-.filament-page:is(.filament-resources-create-record-page, .filament-resources-edit-record-page):is(.filament-resources-projects, .filament-resources-tickets, .filament-resources-activities, .filament-resources-ticket-statuses, .filament-resources-ticket-types, .filament-resources-ticket-priorities, .filament-resources-project-statuses, .filament-resources-labels, .filament-resources-ticket-hours, .filament-resources-users, .filament-resources-roles, .filament-resources-permissions),
+.filament-page:is(.filament-resources-create-record-page, .filament-resources-edit-record-page):is(.filament-resources-projects, .filament-resources-tickets, .filament-resources-activities, .filament-resources-ticket-statuses, .filament-resources-ticket-types, .filament-resources-ticket-priorities, .filament-resources-project-statuses, .filament-resources-labels, .filament-resources-ticket-hours, .filament-resources-users, .filament-resources-roles, .filament-resources-permissions, .filament-resources-platform-plans),
 .filament-page.filament-resources-view-record-page:is(.filament-resources-projects, .filament-resources-activities, .filament-resources-ticket-statuses, .filament-resources-ticket-types, .filament-resources-ticket-priorities, .filament-resources-project-statuses, .filament-resources-labels, .filament-resources-ticket-hours, .filament-resources-users, .filament-resources-roles, .filament-resources-permissions),
 .filament-page.rk-board-page {
     > div > .filament-header {
@@ -5716,7 +5716,8 @@ $rk-lang-flags: ('en': 'gb', 'fr': 'fr', 'ar': 'sa', 'az': 'az', 'be': 'by', 'bg
 
 // Platform organizations table: tighter cells so every column fits next to the
 // activity column; long Full Access notes wrap instead of widening the table.
-.rk-path-platform-organizations .filament-tables-table {
+// Payments gets the same cell rhythm.
+:is(.rk-path-platform-organizations, .rk-path-platform-payments) .filament-tables-table {
     th,
     td {
         padding-left: 0.5rem;
@@ -6421,6 +6422,689 @@ $rk-lang-flags: ('en': 'gb', 'fr': 'fr', 'ar': 'sa', 'az': 'az', 'be': 'by', 'bg
 
 .rk-path-platform-organizations .filament-tables-header-description {
     @apply mt-0.5 text-sm font-normal text-gray-500;
+}
+
+// --- Billing page (Organization > Billing / subscription) -------------------------
+// Status card, monthly/yearly switch and the single price card. Plain CSS on
+// purpose (no @apply): the page-scoped prefix keeps it from touching other pages.
+.rk-bl {
+    display: flex;
+    width: 100%;
+    flex-direction: column;
+    align-items: center;
+    gap: 1.5rem;
+
+    // Page has no visible header, so this root is the first child of Filament's
+    // `space-y-6` wrapper. It used to sit after an inline <style> (which got the
+    // 1.5rem sibling margin instead); keep the same top spacing explicitly.
+    margin-top: 1.5rem;
+
+    // Screen-reader-only page heading.
+    &__sr {
+        position: absolute;
+        width: 1px;
+        height: 1px;
+        margin: -1px;
+        padding: 0;
+        overflow: hidden;
+        clip: rect(0, 0, 0, 0);
+        white-space: nowrap;
+        border: 0;
+    }
+
+    // !important on purpose: the component classes below set `display`, and an
+    // Alpine-hidden node must stay hidden until Alpine boots.
+    [x-cloak] {
+        display: none !important;
+    }
+
+    &__status {
+        display: flex;
+        width: 100%;
+        max-width: 40rem;
+        flex-direction: column;
+        gap: 0.75rem;
+        border-radius: 1.5rem;
+        background: #fff;
+        padding: 1.25rem 1.5rem;
+        box-shadow: 0 2px 14px rgba(15, 23, 42, 0.06);
+    }
+
+    &__row {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 1rem;
+
+        b {
+            display: block;
+            font-size: 0.875rem;
+            font-weight: 600;
+            color: #111827;
+        }
+
+        small {
+            display: block;
+            font-size: 0.75rem;
+            color: #6b7280;
+        }
+    }
+
+    &__chip {
+        flex-shrink: 0;
+        border-radius: 9999px;
+        padding: 0.25rem 0.75rem;
+        font-size: 0.75rem;
+        font-weight: 500;
+        background: #eceef1;
+        color: $rk-btn-secondary;
+
+        &--blue {
+            background: #e7f0fb;
+            color: $rk-btn-primary;
+        }
+
+        &--yellow {
+            background: #fdf3de;
+            color: #b8841f;
+        }
+
+        &--red {
+            background: #fcebe6;
+            color: #d0644a;
+        }
+
+        &--green {
+            background: #e3f5ea;
+            color: #3fae6a;
+        }
+    }
+
+    &__note {
+        margin: 0;
+        font-size: 0.875rem;
+        color: #6b7280;
+
+        &--alert {
+            color: #b8841f;
+        }
+    }
+
+    &__error {
+        margin: 0;
+        font-size: 0.875rem;
+        color: #d0644a;
+    }
+
+    // Monthly / yearly switch.
+    &__toggle {
+        display: inline-flex;
+        gap: 0.25rem;
+        border-radius: 9999px;
+        background: #eceef1;
+        padding: 0.25rem;
+
+        button {
+            display: inline-flex;
+            height: 2.5rem;
+            align-items: center;
+            gap: 0.5rem;
+            border: 0;
+            border-radius: 9999px;
+            background: transparent;
+            padding: 0 1.25rem;
+            font-size: 0.875rem;
+            color: $rk-btn-secondary;
+            cursor: pointer;
+            transition: background-color 0.15s, color 0.15s;
+
+            &[aria-pressed='true'] {
+                background: #fff;
+                color: #111827;
+                box-shadow: 0 1px 4px rgba(15, 23, 42, 0.12);
+            }
+        }
+    }
+
+    &__save {
+        border-radius: 9999px;
+        background: #e3f5ea;
+        padding: 0.125rem 0.5rem;
+        font-size: 0.75rem;
+        font-weight: 500;
+        color: #3fae6a;
+    }
+
+    &__card {
+        display: flex;
+        width: 100%;
+        max-width: 26rem;
+        flex-direction: column;
+        gap: 1.25rem;
+        border-radius: 1.5rem;
+        background: #fff;
+        padding: 2rem;
+        box-shadow: 0 2px 14px rgba(15, 23, 42, 0.06);
+
+        h3 {
+            margin: 0;
+            font-size: 1.125rem;
+            font-weight: 600;
+            color: #111827;
+        }
+    }
+
+    &__price {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: baseline;
+        gap: 0.375rem;
+
+        b {
+            font-size: 2.25rem;
+            font-weight: 700;
+            line-height: 1.1;
+            color: #111827;
+        }
+
+        span {
+            font-size: 0.875rem;
+            color: #6b7280;
+        }
+    }
+
+    &__duration {
+        margin: 0;
+        font-size: 0.75rem;
+        color: #6b7280;
+    }
+
+    &__perks {
+        display: flex;
+        margin: 0;
+        flex-direction: column;
+        gap: 0.625rem;
+        padding: 0;
+        list-style: none;
+        font-size: 0.875rem;
+        color: #374151;
+
+        li {
+            display: flex;
+            align-items: flex-start;
+            gap: 0.5rem;
+        }
+
+        svg {
+            margin-top: 0.125rem;
+            height: 1.125rem;
+            width: 1.125rem;
+            flex-shrink: 0;
+            color: $rk-btn-success;
+        }
+    }
+
+    &__form {
+        margin: 0;
+    }
+
+    // Pill button (same shape as the shared rk-btn, but full width and 48px high here).
+    &__btn {
+        display: inline-flex;
+        height: 3rem;
+        width: 100%;
+        align-items: center;
+        justify-content: center;
+        gap: 0.5rem;
+        border: 0;
+        border-radius: 9999px;
+        background: $rk-btn-primary;
+        padding: 0 1.5rem;
+        font-size: 0.875rem;
+        font-weight: 400;
+        color: #fff;
+        text-decoration: none;
+        cursor: pointer;
+        transition: filter 0.15s;
+
+        &:hover:not(:disabled) {
+            filter: brightness(0.94);
+        }
+
+        &:disabled {
+            cursor: default;
+            opacity: 0.6;
+        }
+
+        // Outline variant ("Check payment status").
+        &--ghost {
+            box-sizing: border-box;
+            height: 2.5rem;
+            min-width: 0;
+            width: auto;
+            flex-shrink: 0;
+            white-space: nowrap;
+            line-height: 1;
+            text-align: center;
+            border: 1px solid #cfe0f6;
+            background: #fff;
+            padding: 0 1.25rem;
+            color: $rk-btn-primary;
+
+            &:hover:not(:disabled) {
+                background: #e7f0fb;
+                filter: none;
+            }
+        }
+    }
+
+    &__pending {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        gap: 0.75rem;
+        border-top: 1px solid #eceef1;
+        padding-top: 1rem;
+        text-align: center;
+
+        .rk-bl__note {
+            text-align: center;
+        }
+    }
+
+    &__pending-text {
+        overflow-wrap: anywhere;
+
+        b {
+            display: block;
+            font-size: 0.875rem;
+            font-weight: 600;
+            color: #111827;
+        }
+
+        small {
+            display: block;
+            margin-top: 0.125rem;
+            font-size: 0.75rem;
+            color: #6b7280;
+        }
+    }
+
+    @media (max-width: 639px) {
+        &__card {
+            padding: 1.5rem;
+        }
+
+        &__price b {
+            font-size: 1.875rem;
+        }
+
+        &__row {
+            align-items: flex-start;
+        }
+    }
+}
+
+// --- Platform: payments page (Super Admin > Pembayaran) -----------------------------
+// Summary cards reuse .rk-pl__stat*; the table (card, toolbar, pager, rows) is the
+// shared list shell, so only what is specific to this page lives here: column
+// widths, the three icon actions and their legend.
+.rk-pp {
+    &__muted {
+        color: #9ca3af;
+    }
+
+    // Summary cards: 1 col, 2 cols, 3+2 (6-col grid, no orphan), then 5 across.
+    .rk-pl__stats {
+        grid-template-columns: minmax(0, 1fr);
+    }
+
+    .rk-pl__stat {
+        min-width: 0;
+
+        em {
+            line-height: 1.35;
+        }
+    }
+
+    @media (min-width: 640px) {
+        .rk-pl__stats {
+            grid-template-columns: repeat(2, minmax(0, 1fr));
+        }
+
+        .rk-pl__stat:last-child:nth-child(odd) {
+            grid-column: 1 / -1;
+        }
+    }
+
+    @media (min-width: 1024px) {
+        .rk-pl__stats {
+            grid-template-columns: repeat(6, minmax(0, 1fr));
+        }
+
+        .rk-pl__stat {
+            grid-column: span 2;
+        }
+
+        .rk-pl__stat:nth-child(n + 4) {
+            grid-column: span 3;
+        }
+
+        .rk-pl__stat:last-child:nth-child(odd) {
+            grid-column: span 3;
+        }
+    }
+
+    @media (min-width: 1536px) {
+        .rk-pl__stats {
+            grid-template-columns: repeat(5, minmax(0, 1fr));
+        }
+
+        .rk-pl__stat,
+        .rk-pl__stat:nth-child(n + 4),
+        .rk-pl__stat:last-child:nth-child(odd) {
+            grid-column: span 1;
+        }
+    }
+
+    // Card, search pill + filter icon, rounded table, header/row/cell styling, pager and
+    // empty state now come from the shared list shell (this page's slug is in its
+    // selector list and in RK_PROJECTS in filament.js), exactly like the other lists.
+    .filament-tables-header-description {
+        margin-top: 0.125rem;
+        font-size: 0.875rem;
+        font-weight: 400;
+        color: #6b7280;
+    }
+
+    // Columns keep their natural, readable width; a narrower screen scrolls the card
+    // sideways while the actions column (last) stays pinned to the right edge.
+    .filament-table-cell-invoice-number {
+        min-width: 10rem;
+        white-space: nowrap;
+        font-weight: 600;
+        color: #111827;
+
+        * {
+            font-weight: 600;
+            color: #111827;
+        }
+    }
+
+    .filament-table-cell-organization-name {
+        min-width: 8rem;
+    }
+
+    .filament-table-cell-plan-code {
+        min-width: 5rem;
+        white-space: nowrap;
+    }
+
+    .filament-table-cell-amount {
+        min-width: 7rem;
+        white-space: nowrap;
+    }
+
+    .filament-table-cell-status,
+    .filament-table-cell-attention {
+        min-width: 6rem;
+        white-space: nowrap;
+    }
+
+    .filament-table-cell-created-at,
+    .filament-table-cell-expires-at,
+    .filament-table-cell-paid-at {
+        min-width: 6rem;
+        white-space: nowrap;
+    }
+
+    // Actions column: the shared shell pins it right and turns the cell into a "three
+    // dots" stand-in (children hidden). This page keeps its three icons (explicit
+    // product request), so undo only the stand-in, scoped to this page.
+    .filament-tables-table th:last-child,
+    .filament-tables-table td.filament-tables-actions-cell {
+        text-align: center;
+    }
+
+    .filament-tables-table th:last-child > *,
+    .filament-tables-table th:last-child span {
+        justify-content: center;
+        text-align: center;
+    }
+
+    .rk-path-platform-payments & .filament-tables-actions-container {
+        display: flex;
+        height: auto;
+        width: auto;
+        min-width: 8.5rem;
+        flex-wrap: nowrap;
+        justify-content: center;
+        gap: 0.625rem;
+        cursor: default;
+        border-radius: 0;
+        background: transparent;
+
+        &:hover {
+            background: transparent;
+        }
+
+        &::before {
+            content: none;
+        }
+
+        > * {
+            display: inline-flex !important;
+        }
+    }
+
+    // Three outline icons, no button chrome (soft colours of the page's chips).
+    // 2.25rem hit area, 1.375rem icon.
+    .filament-tables-actions-container .rk-pp__act {
+        margin: 0;
+        height: 2.25rem;
+        width: 2.25rem;
+        background: transparent;
+        box-shadow: none;
+        transition: background-color 0.15s, color 0.15s;
+
+        svg {
+            height: 1.375rem;
+            width: 1.375rem;
+        }
+
+        &--check {
+            color: $rk-btn-primary;
+
+            &:hover,
+            &:focus-visible {
+                background: rgba(59, 130, 214, 0.1);
+            }
+        }
+
+        &--sync {
+            color: #4fb87a;
+
+            &:hover,
+            &:focus-visible {
+                background: rgba(79, 184, 122, 0.12);
+            }
+        }
+
+        &--history {
+            color: #ee8f6a;
+
+            &:hover,
+            &:focus-visible {
+                background: rgba(238, 143, 106, 0.12);
+            }
+        }
+    }
+
+    // The wrapper takes over the card (white, rounded) so the legend below the table
+    // sits INSIDE the same single card; the table's own container drops its shadow.
+    .rk-pl__table {
+        overflow: hidden;
+        border-radius: 1.5rem;
+        background: #fff;
+        box-shadow: 0 1px 2px rgba(15, 23, 42, 0.05);
+    }
+
+    .rk-pl__table .filament-tables-container {
+        box-shadow: none;
+    }
+
+    // Legend under the table: same icons, same colours, so nobody has to guess what
+    // a glyph does.
+    &__legend {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 0.5rem 1.25rem;
+        padding: 0.25rem 1.25rem 1.25rem;
+        font-size: 0.8125rem;
+        color: #6b7280;
+
+        span {
+            display: inline-flex;
+            align-items: center;
+            gap: 0.375rem;
+        }
+
+        svg {
+            height: 1.125rem;
+            width: 1.125rem;
+        }
+    }
+}
+
+// --- Platform: billing history modal (Pembayaran > Riwayat) -----------------------
+.rk-bah {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+    max-height: 60vh;
+    overflow-y: auto;
+
+    // Same reason as .rk-bl: the modal's `space-y-4` margin used to land on the
+    // inline <style> sibling; keep the spacing under the modal heading explicit.
+    margin-top: 1rem;
+
+    &__row {
+        border: 1px solid #e5e7eb;
+        border-radius: 1rem;
+        padding: 0.75rem 1rem;
+        font-size: 0.875rem;
+        color: #4b5563;
+    }
+
+    &__head {
+        display: flex;
+        flex-wrap: wrap;
+        justify-content: space-between;
+        gap: 0.25rem 0.75rem;
+
+        b {
+            color: #111827;
+            font-weight: 600;
+        }
+    }
+
+    &__meta {
+        margin-top: 0.25rem;
+        font-size: 0.75rem;
+        color: #6b7280;
+    }
+
+    &__reason {
+        margin-top: 0.375rem;
+        white-space: pre-wrap;
+        overflow-wrap: anywhere;
+        color: #374151;
+    }
+
+    &__empty {
+        padding: 1rem;
+        text-align: center;
+        font-size: 0.875rem;
+        color: #6b7280;
+    }
+}
+
+// --- Paket (riwayat) -----------------------------------------------------------
+// Plans resource, edit page: the live "old -> new" summary in the form and the audit
+// history card under it. The history rows reuse the .rk-bah row styles above.
+.rk-plans {
+    &__diff {
+        display: flex;
+        flex-direction: column;
+        gap: 0.375rem;
+        margin: 0;
+        padding: 0.75rem 1rem;
+        border-radius: 1rem;
+        background: #f8fafc;
+        list-style: none;
+        font-size: 0.875rem;
+        color: #374151;
+
+        li {
+            display: flex;
+            flex-wrap: wrap;
+            align-items: center;
+            gap: 0.5rem;
+        }
+
+        b {
+            min-width: 4.5rem;
+            font-weight: 500;
+            color: #111827;
+        }
+    }
+
+    &__old {
+        color: #9ca3af;
+        text-decoration: line-through;
+    }
+
+    &__arrow {
+        color: #9ca3af;
+    }
+
+    &__new {
+        font-weight: 600;
+        color: #1f5fae;
+    }
+
+    &__muted {
+        font-size: 0.875rem;
+        color: #9ca3af;
+    }
+
+    &__history {
+        margin-top: 1.5rem;
+        padding: 1.25rem 1.5rem;
+        border-radius: 1.5rem;
+        background: #fff;
+        box-shadow: 0 1px 2px rgba(15, 23, 42, 0.05);
+
+        h3 {
+            margin-bottom: 0.75rem;
+            font-size: 1.125rem;
+            font-weight: 600;
+            color: #111827;
+        }
+
+        .rk-bah {
+            margin-top: 0;
+        }
+    }
+}
+
+.rk-bah__changes {
+    display: flex;
+    flex-direction: column;
+    gap: 0.125rem;
+    margin-top: 0.375rem;
+    overflow-wrap: anywhere;
+    color: #374151;
 }
 
 // --- Users / Roles / Permissions (settings group) ---------------------------------
