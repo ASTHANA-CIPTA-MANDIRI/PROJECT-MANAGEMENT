@@ -29,13 +29,30 @@ class BillingAuditLog extends Model
 
     public const ACTION_SYNC = 'invoice.sync';
 
+    // Changes to a subscription plan (App\Services\PlanManager). They carry a
+    // `subject` ("plan:<code>") and old_value/new_value instead of an invoice.
+    public const ACTION_PLAN_CREATE = 'plan.create';
+
+    public const ACTION_PLAN_UPDATE = 'plan.update';
+
+    public const ACTION_PLAN_TOGGLE = 'plan.toggle';
+
+    public const PLAN_ACTIONS = [
+        self::ACTION_PLAN_CREATE,
+        self::ACTION_PLAN_UPDATE,
+        self::ACTION_PLAN_TOGGLE,
+    ];
+
     /**
      * Retention per action: a sync changes money/access so its trail is
-     * kept a year; a status check changes nothing, so 90 days. An action
+     * kept a year; a status check and a plan change are kept 90 days. An action
      * not listed here (a future one) is never pruned until it is added.
      */
     public const RETENTION_DAYS = [
         self::ACTION_SYNC => 365,
+        self::ACTION_PLAN_CREATE => 90,
+        self::ACTION_PLAN_UPDATE => 90,
+        self::ACTION_PLAN_TOGGLE => 90,
         self::ACTION_CHECK_STATUS => 90,
     ];
 
@@ -44,11 +61,14 @@ class BillingAuditLog extends Model
         'invoice_id',
         'organization_id',
         'invoice_number',
+        'subject',
         'action',
         'result',
         'reason',
         'old_status',
         'new_status',
+        'old_value',
+        'new_value',
     ];
 
     public function actor(): BelongsTo
@@ -71,6 +91,12 @@ class BillingAuditLog extends Model
      * table is allowed to hold - callers cannot pass a payload, a message
      * or an IP, because there is no parameter for them.
      *
+     * A plan change passes $subject ("plan:<code>") and the plan's before/after
+     * values as $oldValue / $newValue (compact JSON built by PlanManager)
+     * instead of an invoice; they are short, non-sensitive and are the only
+     * free-form values the table holds, so callers must never put a secret,
+     * payload or message in them.
+     *
      * $invoiceNumber is only needed when there is no $invoice model (the
      * row it pointed at no longer exists); otherwise it is read from it.
      */
@@ -83,17 +109,23 @@ class BillingAuditLog extends Model
         ?string $oldStatus = null,
         ?string $newStatus = null,
         ?string $invoiceNumber = null,
+        ?string $subject = null,
+        ?string $oldValue = null,
+        ?string $newValue = null,
     ): self {
         return static::create([
             'actor_user_id' => $actor?->getKey(),
             'invoice_id' => $invoice?->getKey(),
             'organization_id' => $invoice?->organization_id,
             'invoice_number' => $invoice?->invoice_number ?? $invoiceNumber,
+            'subject' => $subject,
             'action' => $action,
             'result' => $result,
             'reason' => $reason,
             'old_status' => $oldStatus,
             'new_status' => $newStatus,
+            'old_value' => $oldValue,
+            'new_value' => $newValue,
         ]);
     }
 

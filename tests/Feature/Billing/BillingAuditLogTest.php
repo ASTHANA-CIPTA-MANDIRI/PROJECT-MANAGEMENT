@@ -90,10 +90,11 @@ class BillingAuditLogTest extends TestCase
         $this->assertArrayNotHasKey('updated_at', $log->getAttributes());
     }
 
+    /** subject/old_value/new_value were added deliberately for plan changes; an invoice row leaves them null. */
     public function test_the_table_has_only_the_audited_columns(): void
     {
         $this->assertEqualsCanonicalizing(
-            ['id', 'actor_user_id', 'invoice_id', 'organization_id', 'invoice_number', 'action', 'result', 'reason', 'old_status', 'new_status', 'created_at'],
+            ['id', 'actor_user_id', 'invoice_id', 'organization_id', 'invoice_number', 'subject', 'action', 'result', 'reason', 'old_status', 'new_status', 'old_value', 'new_value', 'created_at'],
             Schema::getColumnListing('billing_audit_logs')
         );
     }
