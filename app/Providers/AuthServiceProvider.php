@@ -11,6 +11,7 @@ use App\Models\Project;
 use App\Models\ProjectStatus;
 use App\Models\Role;
 use App\Models\Sprint;
+use App\Models\SubscriptionPlan;
 use App\Models\Ticket;
 use App\Models\TicketComment;
 use App\Models\TicketHour;
@@ -27,6 +28,7 @@ use App\Policies\ProjectPolicy;
 use App\Policies\ProjectStatusPolicy;
 use App\Policies\RolePolicy;
 use App\Policies\SprintPolicy;
+use App\Policies\SubscriptionPlanPolicy;
 use App\Policies\TicketCommentPolicy;
 use App\Policies\TicketHourPolicy;
 use App\Policies\TicketPolicy;
@@ -65,6 +67,7 @@ class AuthServiceProvider extends ServiceProvider
         ProjectStatus::class => ProjectStatusPolicy::class,
         Role::class => RolePolicy::class,
         Sprint::class => SprintPolicy::class,
+        SubscriptionPlan::class => SubscriptionPlanPolicy::class,
         Ticket::class => TicketPolicy::class,
         TicketComment::class => TicketCommentPolicy::class,
         TicketHour::class => TicketHourPolicy::class,
