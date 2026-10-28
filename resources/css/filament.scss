@@ -4122,11 +4122,97 @@ $rk-lang-flags: ('en': 'gb', 'fr': 'fr', 'ar': 'sa', 'az': 'az', 'be': 'by', 'bg
         @apply hidden;
     }
 
-    form .filament-button.filament-button {
+    .filament-button.filament-button {
         @include rk-btn;
         @include rk-btn-color($rk-btn-primary);
         @apply h-10 min-h-0 rounded-full px-5;
         box-shadow: none;
+    }
+
+    // Settings tab: sections sit in a two-column grid like the other forms (personal
+    // info | password, then two-factor across the full width). Each section is one
+    // white card with its title inside, instead of three identical stacked boxes.
+    div:has(> .filament-breezy-grid-section) {
+        display: grid;
+        gap: 1.25rem;
+        grid-template-columns: minmax(0, 1fr);
+        margin-top: 1.5rem;
+
+        // Line up with the profile header card above.
+        @media (min-width: 768px) {
+            margin-left: 2rem;
+            margin-right: 2rem;
+        }
+
+        @media (min-width: 1024px) {
+            grid-template-columns: repeat(2, minmax(0, 1fr));
+
+            > .filament-breezy-grid-section:last-of-type {
+                grid-column: 1 / -1;
+            }
+        }
+    }
+
+    .filament-breezy-grid-section {
+        align-content: start;
+        background: #fff;
+        border-radius: 1.75rem;
+        box-shadow: 0 2px 14px rgba(15, 23, 42, 0.06);
+        margin: 0 !important;
+        padding: 1.5rem;
+
+        > div:first-child > div {
+            padding: 0;
+        }
+
+        > form > div[class~='rounded-xl'],
+        > div[class~='rounded-xl'] {
+            background: transparent;
+            border-radius: 0;
+            box-shadow: none;
+            padding: 0;
+        }
+
+        // Inner field blocks lose their own side padding (the card already has it).
+        div[class~='px-4'][class~='py-2'] {
+            padding-left: 0;
+            padding-right: 0;
+        }
+
+        .filament-breezy-grid-title {
+            font-size: 1.125rem;
+        }
+
+        .filament-breezy-grid-description {
+            color: #6f767e;
+            font-size: 0.875rem;
+        }
+
+        // Two-factor card copy.
+        p[class~='text-lg'] {
+            color: #111827;
+            font-size: 1rem;
+            font-weight: 600;
+            margin-bottom: 0.35rem;
+        }
+
+        div[class~='space-y-4'] {
+            color: #6f767e;
+            font-size: 0.875rem;
+            line-height: 1.6;
+        }
+
+        input,
+        textarea,
+        select {
+            color: #111827;
+            font-size: 0.875rem;
+        }
+
+        .filament-button svg {
+            height: 1rem;
+            width: 1rem;
+        }
     }
 }
 
