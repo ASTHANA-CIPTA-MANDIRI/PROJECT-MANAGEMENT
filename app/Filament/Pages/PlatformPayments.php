@@ -296,7 +296,10 @@ class PlatformPayments extends AuthorizedPage implements HasForms, Tables\Contra
                 ->extraAttributes(['class' => 'rk-pp__act rk-pp__act--history', 'aria-label' => __('History')])
                 ->modalHeading(fn (Invoice $record): string => __('Billing history').' - '.$record->invoice_number)
                 ->modalContent(fn (Invoice $record) => $this->historyView($record))
-                ->modalActions(fn (Tables\Actions\Action $action): array => [$action->getModalCancelAction()]),
+                ->modalActions(fn (Tables\Actions\Action $action): array => [$action->getModalCancelAction()])
+                // Filament 2 renders wire:click="mountTableAction(...)" only when the
+                // action has an ->action(); the modal itself comes from modalContent().
+                ->action(fn () => null),
         ];
     }
 

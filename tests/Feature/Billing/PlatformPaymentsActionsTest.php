@@ -155,6 +155,21 @@ class PlatformPaymentsActionsTest extends TestCase
 
     // ------------------------------------------------------ visible layout
 
+    /**
+     * Regression: an action with a modal but no ->action() renders in Filament 2
+     * without wire:click (action.blade.php), so the clock icon did nothing.
+     */
+    public function test_the_history_button_is_wired_to_its_action(): void
+    {
+        $invoice = $this->invoice(['invoice_number' => 'INV-HIST-1']);
+
+        $html = Livewire::actingAs($this->superAdmin())->test(PlatformPayments::class)->lastRenderedDom;
+        $row = collect(preg_split('/<tr\b/', $html))->first(fn ($r) => str_contains($r, 'INV-HIST-1'));
+
+        // Blade escapes the quotes inside the attribute (&#039;); both spellings are the same call.
+        $this->assertMatchesRegularExpression('/wire:click="mountTableAction\((?:\'|&#039;)history(?:\'|&#039;), (?:\'|&#039;)'.$invoice->id.'(?:\'|&#039;)\)"/', $row);
+    }
+
     public function test_the_three_actions_are_labelled_icons_in_the_last_column_and_the_page_has_a_title(): void
     {
         $pending = $this->invoice(['invoice_number' => 'INV-PENDING-1']);
