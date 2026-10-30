@@ -19,119 +19,123 @@
             </div>
         </section>
 
-        <form wire:submit.prevent="save">
-            {{ $this->form }}
+        <div class="rk-og__duo">
+            <form wire:submit.prevent="save" class="rk-og__panel rk-og__form">
+                {{ $this->form }}
 
-            @if ($this->canManageOrganization())
-                <x-filament::button type="submit" class="mt-4">
-                    {{ __('Save changes') }}
-                </x-filament::button>
-            @endif
-        </form>
-
-        {{ $this->table }}
-
-        {{-- Subscription: status rows for every member; plans, buy buttons and a
-             "continue payment" link only for Owner/Admin (canManage). Checkout is a plain
-             HTML form POST (not a Livewire call) so the browser follows the
-             redirect to DOKU's hosted page. --}}
-        @php($sub = $this->subscriptionPanel())
-        @php($tz = config('app.display_timezone'))
-
-        <section class="rk-og__panel">
-            <div class="rk-og__panel-head">
-                <h3>{{ __('Subscription') }}</h3>
-
-                @if ($sub['checkoutEnabled'])
-                    <x-filament::button tag="a" size="sm" color="secondary" :href="route('filament.pages.organization/billing')">
-                        {{ __('View plans') }}
-                    </x-filament::button>
+                @if ($this->canManageOrganization())
+                    <div class="rk-og__form-foot">
+                        <x-filament::button type="submit">
+                            {{ __('Save changes') }}
+                        </x-filament::button>
+                    </div>
                 @endif
-            </div>
+            </form>
 
-            @if ($sub['locked'])
-                <p class="rk-lead">
-                    {{ $sub['canManage'] ? __('Your trial has ended. Subscribe to keep using this organization.') : __('Your trial has ended. Ask an organization owner or admin to subscribe.') }}
-                </p>
-            @endif
+            {{-- Subscription: status rows for every member; plans, buy buttons and a
+                 "continue payment" link only for Owner/Admin (canManage). Checkout is a plain
+                 HTML form POST (not a Livewire call) so the browser follows the
+                 redirect to DOKU's hosted page. --}}
+            @php($sub = $this->subscriptionPanel())
+            @php($tz = config('app.display_timezone'))
 
-            <div class="rk-og__row">
-                <div class="rk-og__row-main">
-                    <b>{{ __('Paid subscription') }}</b>
-                    <small>
-                        @if ($sub['unlimited'])
-                            {{ __('No time limit') }}
-                        @elseif ($sub['paidUntil'])
-                            {{ __('Active until :date', ['date' => $sub['paidUntil']->timezone($tz)->format('d M Y H:i')]) }}
-                        @endif
-                    </small>
+            <section class="rk-og__panel">
+                <div class="rk-og__panel-head">
+                    <h3>{{ __('Subscription') }}</h3>
+
+                    @if ($sub['checkoutEnabled'])
+                        <x-filament::button tag="a" size="sm" color="secondary" :href="route('filament.pages.organization/billing')">
+                            {{ __('View plans') }}
+                        </x-filament::button>
+                    @endif
                 </div>
-                <span class="rk-og__chip rk-og__chip--{{ $sub['paid'] ? 'blue' : 'gray' }}">{{ $sub['paid'] ? __('Subscribed') : __('Not subscribed') }}</span>
-            </div>
 
-            <div class="rk-og__row">
-                <div class="rk-og__row-main">
-                    <b>{{ __('Trial period') }}</b>
-                    <small>
-                        @if ($sub['trialEndsAt'])
-                            {{ __('Trial until :date', ['date' => $sub['trialEndsAt']->timezone($tz)->format('d M Y H:i')]) }}
-                        @endif
-                    </small>
-                </div>
-                <span class="rk-og__chip rk-og__chip--{{ $sub['trial']['tone'] }}">{{ $sub['trial']['label'] }}</span>
-            </div>
-
-            @if ($sub['canManage'] && ! $sub['checkoutEnabled'])
-                <p class="rk-lead">{{ __('Payment is not available yet') }}</p>
-            @endif
-
-            @if ($sub['checkoutEnabled'])
-                @if ($sub['paid'] && $sub['unlimited'])
-                    <p class="rk-lead">{{ __('Your subscription has no end date, so there is nothing to renew.') }}</p>
-                @else
-                    @foreach ($sub['plans'] as $code => $plan)
-                        <form method="POST" action="{{ route('organizations.subscribe') }}" x-data="{}" x-on:submit="$el.querySelector('[type=submit]').disabled = true" x-on:pageshow.window="$el.querySelector('[type=submit]').disabled = false" class="rk-og__row" wire:key="plan-{{ $code }}">
-                            @csrf
-                            <input type="hidden" name="plan" value="{{ $code }}">
-                            <div class="rk-og__row-main">
-                                <b>{{ __($plan['name']) }}</b>
-                                <small>
-                                    {{ \App\Support\SubscriptionPanel::formatRupiah($plan['amount']) }}
-                                    &middot;
-                                    {{ trans_choice(':count day|:count days', $plan['duration_days'], ['count' => $plan['duration_days']]) }}
-                                    @if ($sub['paidUntil'])
-                                        &middot;
-                                        {{ __('Renews from :date', ['date' => $sub['paidUntil']->timezone($tz)->format('d M Y')]) }}
-                                    @endif
-                                </small>
-                            </div>
-                            <x-filament::button type="submit">
-                                {{ $sub['paid'] ? __('Renew') : __('Subscribe now') }}
-                            </x-filament::button>
-                        </form>
-                    @endforeach
+                @if ($sub['locked'])
+                    <p class="rk-lead">
+                        {{ $sub['canManage'] ? __('Your trial has ended. Subscribe to keep using this organization.') : __('Your trial has ended. Ask an organization owner or admin to subscribe.') }}
+                    </p>
                 @endif
 
-                @error('plan')
-                    <p class="rk-pf__error">{{ $message }}</p>
-                @enderror
-            @endif
-
-            @if ($sub['pendingInvoice'])
                 <div class="rk-og__row">
                     <div class="rk-og__row-main">
-                        <b>{{ __('You have an unfinished payment') }}</b>
+                        <b>{{ __('Paid subscription') }}</b>
                         <small>
-                            {{ ($planName = \App\Support\SubscriptionPlans::find($sub['pendingInvoice']->plan_code)['name'] ?? null) ? __($planName) : $sub['pendingInvoice']->plan_code }}
-                            &middot; {{ \App\Support\SubscriptionPanel::formatRupiah($sub['pendingInvoice']->amount) }}
+                            @if ($sub['unlimited'])
+                                {{ __('No time limit') }}
+                            @elseif ($sub['paidUntil'])
+                                {{ __('Active until :date', ['date' => $sub['paidUntil']->timezone($tz)->format('d M Y H:i')]) }}
+                            @endif
                         </small>
                     </div>
-                    <x-filament::button tag="a" size="sm" :href="$sub['pendingInvoice']->doku_payment_url" rel="noopener">
-                        {{ __('Continue payment') }}
-                    </x-filament::button>
+                    <span class="rk-og__chip rk-og__chip--{{ $sub['paid'] ? 'blue' : 'gray' }}">{{ $sub['paid'] ? __('Subscribed') : __('Not subscribed') }}</span>
                 </div>
-            @endif
-        </section>
+
+                <div class="rk-og__row">
+                    <div class="rk-og__row-main">
+                        <b>{{ __('Trial period') }}</b>
+                        <small>
+                            @if ($sub['trialEndsAt'])
+                                {{ __('Trial until :date', ['date' => $sub['trialEndsAt']->timezone($tz)->format('d M Y H:i')]) }}
+                            @endif
+                        </small>
+                    </div>
+                    <span class="rk-og__chip rk-og__chip--{{ $sub['trial']['tone'] }}">{{ $sub['trial']['label'] }}</span>
+                </div>
+
+                @if ($sub['canManage'] && ! $sub['checkoutEnabled'])
+                    <p class="rk-lead">{{ __('Payment is not available yet') }}</p>
+                @endif
+
+                @if ($sub['checkoutEnabled'])
+                    @if ($sub['paid'] && $sub['unlimited'])
+                        <p class="rk-lead">{{ __('Your subscription has no end date, so there is nothing to renew.') }}</p>
+                    @else
+                        @foreach ($sub['plans'] as $code => $plan)
+                            <form method="POST" action="{{ route('organizations.subscribe') }}" x-data="{}" x-on:submit="$el.querySelector('[type=submit]').disabled = true" x-on:pageshow.window="$el.querySelector('[type=submit]').disabled = false" class="rk-og__row" wire:key="plan-{{ $code }}">
+                                @csrf
+                                <input type="hidden" name="plan" value="{{ $code }}">
+                                <div class="rk-og__row-main">
+                                    <b>{{ __($plan['name']) }}</b>
+                                    <small>
+                                        {{ \App\Support\SubscriptionPanel::formatRupiah($plan['amount']) }}
+                                        &middot;
+                                        {{ trans_choice(':count day|:count days', $plan['duration_days'], ['count' => $plan['duration_days']]) }}
+                                        @if ($sub['paidUntil'])
+                                            &middot;
+                                            {{ __('Renews from :date', ['date' => $sub['paidUntil']->timezone($tz)->format('d M Y')]) }}
+                                        @endif
+                                    </small>
+                                </div>
+                                <x-filament::button type="submit">
+                                    {{ $sub['paid'] ? __('Renew') : __('Subscribe now') }}
+                                </x-filament::button>
+                            </form>
+                        @endforeach
+                    @endif
+
+                    @error('plan')
+                        <p class="rk-pf__error">{{ $message }}</p>
+                    @enderror
+                @endif
+
+                @if ($sub['pendingInvoice'])
+                    <div class="rk-og__row">
+                        <div class="rk-og__row-main">
+                            <b>{{ __('You have an unfinished payment') }}</b>
+                            <small>
+                                {{ ($planName = \App\Support\SubscriptionPlans::find($sub['pendingInvoice']->plan_code)['name'] ?? null) ? __($planName) : $sub['pendingInvoice']->plan_code }}
+                                &middot; {{ \App\Support\SubscriptionPanel::formatRupiah($sub['pendingInvoice']->amount) }}
+                            </small>
+                        </div>
+                        <x-filament::button tag="a" size="sm" :href="$sub['pendingInvoice']->doku_payment_url" rel="noopener">
+                            {{ __('Continue payment') }}
+                        </x-filament::button>
+                    </div>
+                @endif
+            </section>
+        </div>
+
+        {{ $this->table }}
 
         @if ($this->canManageOrganization())
             @php($pendingInvitations = $this->pendingInvitations())
