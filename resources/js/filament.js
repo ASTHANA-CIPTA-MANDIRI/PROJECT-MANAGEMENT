@@ -495,7 +495,182 @@ function rkToast({ severity = 'success', title, text, timer = 5000 } = {}) {
     return rkToastChain;
 }
 
-window.RencanakanAlert = { confirm: rkConfirm, toast: rkToast, Swal };
+// Waits for any open popup, then shows `fire()`; used for notices that must
+// not replace a dialog the user is working in.
+function rkQueued(fire) {
+    rkToastChain = rkToastChain
+        .then(async () => {
+            while (Swal.isVisible()) {
+                await new Promise((resolve) => setTimeout(resolve, 300));
+            }
+
+            return fire();
+        })
+        .catch(() => {});
+
+    return rkToastChain;
+}
+
+// Plain text -> DOM text (never innerHTML) for texts that are not meant as HTML.
+const rkTextNode = (value) => {
+    const node = document.createElement('div');
+    node.textContent = value;
+
+    return node;
+};
+
+// RencanakanAlert.prompt: a SweetAlert asking for one value (textarea or text
+// input), validated inline (empty / whitespace-only and over-long are refused)
+// before `submit(value)` runs. Resolves with the trimmed value once `submit`
+// succeeded, or null when cancelled. `submit` should call the Livewire method;
+// the server re-validates, this is UX only.
+function rkPrompt({
+    severity = 'warning',
+    title,
+    text,
+    label,
+    placeholder,
+    confirmText,
+    cancelText,
+    input = 'textarea',
+    maxLength = 500,
+    validate,
+    submit,
+} = {}) {
+    return Swal.fire({
+        icon: rkIsDanger(severity) ? 'warning' : severity,
+        title: title || undefined,
+        text: text || undefined,
+        input,
+        inputLabel: label || undefined,
+        inputPlaceholder: placeholder || undefined,
+        showCancelButton: true,
+        reverseButtons: true,
+        showLoaderOnConfirm: true,
+        allowOutsideClick: () => !Swal.isLoading(),
+        confirmButtonText: confirmText || rkText('confirm', 'Yes, continue'),
+        cancelButtonText: cancelText || rkText('cancel', 'Cancel'),
+        customClass: {
+            popup: 'rk-swal-popup rk-swal-prompt' + (rkIsDanger(severity) ? ' rk-swal-danger' : ''),
+            input: 'rk-swal-input',
+            inputLabel: 'rk-swal-label',
+        },
+        inputValidator: (value) => {
+            const trimmed = (value || '').trim();
+
+            if (trimmed === '') {
+                return rkText('valueRequired', 'This field is required.');
+            }
+
+            if (maxLength && [...trimmed].length > maxLength) {
+                return rkText('tooLong', 'Maximum :max characters.').replace(':max', maxLength);
+            }
+
+            return validate ? validate(trimmed) : undefined;
+        },
+        preConfirm: async (value) => {
+            const trimmed = (value || '').trim();
+
+            if (!submit) {
+                return trimmed;
+            }
+
+            try {
+                await submit(trimmed);
+
+                return trimmed;
+            } catch (e) {
+                Swal.showValidationMessage(rkText('failed', 'Something went wrong. Try again later.'));
+
+                return false;
+            }
+        },
+    }).then((result) => (result.isConfirmed ? result.value : null));
+}
+
+// RencanakanAlert.modal: an information dialog with one close button. `html`
+// must already be safe (server-escaped Blade output); `text` is plain text.
+function rkModal({ severity, title, text, html, confirmText, load } = {}) {
+    return Swal.fire({
+        icon: severity ? rkIcon(severity) : undefined,
+        title: title || undefined,
+        text: html ? undefined : text || undefined,
+        html: html || undefined,
+        confirmButtonText: confirmText || rkText('close', 'Close'),
+        customClass: { popup: 'rk-swal-popup rk-swal-modal' },
+        didOpen: load
+            ? async () => {
+                  Swal.showLoading();
+
+                  try {
+                      const loaded = await load();
+                      Swal.hideLoading();
+                      Swal.update({ html: loaded });
+                  } catch (e) {
+                      Swal.hideLoading();
+                      Swal.update({ html: rkTextNode(rkText('failed', 'Something went wrong. Try again later.')) });
+                  }
+              }
+            : undefined,
+    });
+}
+
+window.RencanakanAlert = { confirm: rkConfirm, toast: rkToast, prompt: rkPrompt, modal: rkModal, Swal };
+
+// --- data-swal-prompt / data-swal-modal: Livewire-backed dialogs ----------
+// A button with data-swal-prompt="method" asks for a reason in a SweetAlert and
+// then calls $wire.method(data-swal-arg, reason) on the nearest Livewire
+// component; data-swal-modal="method" shows the HTML that method returns.
+// The click is intercepted in the capture phase (before wire:click), so the
+// button's own Filament action never mounts; the server re-checks everything.
+function rkWire(el) {
+    const root = el.closest('[wire\\:id]');
+
+    return root && window.Livewire ? window.Livewire.find(root.getAttribute('wire:id')) : null;
+}
+
+document.addEventListener(
+    'click',
+    (event) => {
+        const el = event.target instanceof Element ? event.target.closest('[data-swal-prompt], [data-swal-modal]') : null;
+
+        if (!el || el.disabled || el.getAttribute('aria-disabled') === 'true') {
+            return;
+        }
+
+        event.preventDefault();
+        event.stopImmediatePropagation();
+
+        const component = rkWire(el);
+
+        if (!component || Swal.isVisible()) {
+            return;
+        }
+
+        const arg = el.dataset.swalArg;
+        const data = el.dataset;
+
+        if (data.swalPrompt) {
+            rkPrompt({
+                severity: data.swalSeverity || 'warning',
+                title: data.swalTitle,
+                text: data.swalText,
+                label: data.swalLabel,
+                placeholder: data.swalPlaceholder,
+                confirmText: data.swalConfirmText,
+                maxLength: parseInt(data.swalMax || '500', 10),
+                submit: (value) => component.call(data.swalPrompt, arg, value),
+            });
+        } else {
+            rkModal({
+                title: data.swalTitle,
+                confirmText: data.swalConfirmText,
+                load: () => component.call(data.swalModal, arg),
+            });
+        }
+    },
+    true,
+);
 
 // --- data-swal-confirm: opt-in confirmation for any button or form --------
 // Buttons rendered by vendor views we do not edit (filament-breezy's 2FA
@@ -717,13 +892,14 @@ function rkHandleNotification(el) {
         !payload ||
         payload.view !== 'notifications::notification' ||
         (payload.actions || []).length > 0 ||
-        typeof payload.duration !== 'number'
+        (typeof payload.duration !== 'number' && payload.duration !== 'persistent')
     ) {
         return;
     }
 
     const title = el.querySelector('.filament-notifications-title')?.textContent.trim();
-    const text = el.querySelector('.filament-notifications-body')?.textContent.trim();
+    const bodyEl = el.querySelector('.filament-notifications-body');
+    const text = bodyEl?.textContent.trim();
 
     if (!title && !text) {
         return;
@@ -732,8 +908,23 @@ function rkHandleNotification(el) {
     rkHandledNotifications.add(key);
     el.classList.add('rk-swal-handled');
 
+    const severity = { success: 'success', warning: 'warning', danger: 'error' }[payload.iconColor] || 'info';
+
+    // persistent() = the operator must read it: a modal with a close button
+    // instead of a toast. The body is Filament's own rendered (sanitized)
+    // markdown, so its formatting is kept.
+    if (payload.duration === 'persistent') {
+        const html = bodyEl ? bodyEl.innerHTML : '';
+
+        rkQueued(() =>
+            rkModal({ severity, title, html: html || undefined, text, confirmText: rkText('ok', 'OK') }),
+        );
+
+        return;
+    }
+
     rkToast({
-        severity: { success: 'success', warning: 'warning', danger: 'error' }[payload.iconColor] || 'info',
+        severity,
         title,
         text,
         timer: payload.duration,

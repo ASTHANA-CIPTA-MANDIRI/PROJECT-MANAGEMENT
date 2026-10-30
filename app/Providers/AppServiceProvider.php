@@ -259,6 +259,11 @@ class AppServiceProvider extends ServiceProvider
                 'newBadge' => __('new'),
                 'rowsPerPage' => __('Rows per page'),
                 'of' => __('of'),
+                'valueRequired' => __('This field is required.'),
+                'tooLong' => __('Maximum :max characters.'),
+                'failed' => __('Something went wrong, nothing was changed. Try again later.'),
+                'close' => __('Close'),
+                'ok' => __('OK'),
                 'disableTwoFactor' => __('Disable two-factor authentication? Your account will be less protected.'),
             ];
 

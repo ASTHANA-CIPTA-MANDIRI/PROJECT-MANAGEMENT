@@ -120,8 +120,18 @@
                             this.sync();
                         },
                         link() {
-                            const u = prompt('URL (https://...)');
-                            if (u && /^https?:\/\//i.test(u)) { this.box().setRangeText(u, this.box().selectionStart, this.box().selectionEnd, 'end'); this.sync(); }
+                            const box = this.box(), s = box.selectionStart, e = box.selectionEnd;
+                            window.RencanakanAlert.prompt({
+                                severity: 'info',
+                                input: 'text',
+                                title: @js(__('Link')),
+                                label: 'URL',
+                                placeholder: 'https://...',
+                                confirmText: @js(__('Add link')),
+                                cancelText: @js(__('No, cancel')),
+                                maxLength: 500,
+                                validate: (v) => /^https?:\/\//i.test(v) ? undefined : @js(__('Enter a URL starting with http:// or https://')),
+                            }).then((u) => { if (u) { box.setRangeText(u, s, e, 'end'); this.sync(); } });
                         },
                         put(c) { this.box().setRangeText(c, this.box().selectionStart, this.box().selectionEnd, 'end'); this.emoji = false; this.sync(); },
                     }">

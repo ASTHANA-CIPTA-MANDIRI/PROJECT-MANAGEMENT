@@ -1085,6 +1085,65 @@ html:root {
     display: none !important;
 }
 
+// --- Swal prompt/modal ---
+// RencanakanAlert.prompt (reason / URL input) and .modal (billing history,
+// persistent notices). Buttons come from the shared pill rules above.
+.swal2-popup.rk-swal-prompt {
+    width: 28rem;
+    padding: 1.5rem 1.5rem 1.25rem;
+
+    // Compact: the default 5em icon / 3em title dwarf a one-field dialog.
+    .swal2-icon {
+        width: 3.5em;
+        height: 3.5em;
+        margin: 0.25rem auto 0.75rem;
+        font-size: 0.85rem;
+    }
+
+    .swal2-title {
+        @apply p-0 text-lg font-semibold text-gray-900;
+    }
+
+    .swal2-html-container {
+        @apply mx-0 mt-2 mb-3 p-0 text-sm text-gray-600;
+    }
+
+    .swal2-actions {
+        @apply mt-4;
+    }
+
+    .rk-swal-label {
+        @apply m-0 mb-1 w-full justify-start px-1 text-left text-sm font-medium text-gray-700;
+    }
+
+    .rk-swal-input {
+        @apply m-0 w-full rounded-xl border border-gray-300 bg-white px-3 py-2 text-sm text-gray-800 shadow-none;
+        min-height: 5rem;
+        height: 5rem;
+
+        &:focus {
+            border-color: #3b82d6;
+            box-shadow: 0 0 0 3px rgba(59, 130, 214, 0.2);
+        }
+    }
+
+    .swal2-validation-message {
+        @apply mx-0 mt-3 rounded-2xl bg-rose-50 text-sm text-rose-700;
+    }
+}
+
+.swal2-popup.rk-swal-modal {
+    .swal2-html-container {
+        @apply text-left text-sm;
+        max-height: 60vh;
+        overflow-y: auto;
+    }
+
+    .swal2-title {
+        @apply text-lg;
+    }
+}
+
 // Page header card (all panel pages, incl. the dashboard): title on the left,
 // "Home • Group • Page" breadcrumb (mirrored by resources/js/filament.js) and
 // the header actions on the right, all inside one fully-rounded white pill.

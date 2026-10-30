@@ -1127,5 +1127,10 @@
     "Not recoverable": "Tidak bisa dipulihkan",
     "Why are you syncing this invoice by hand? Required, maximum 500 characters.": "Mengapa invoice ini disinkronkan manual? Wajib diisi, maksimal 500 karakter.",
     "Why are you recovering this payment by hand? Required, maximum 500 characters.": "Mengapa Anda memulihkan pembayaran ini secara manual? Wajib diisi, maksimal 500 karakter.",
-    "The reason is required and at most :max characters.": "Alasan wajib diisi dan maksimal :max karakter."
+    "The reason is required and at most :max characters.": "Alasan wajib diisi dan maksimal :max karakter.",
+    "This field is required.": "Kolom ini wajib diisi.",
+    "Maximum :max characters.": "Maksimal :max karakter.",
+    "Enter a URL starting with http:// or https://": "Masukkan URL yang diawali http:// atau https://",
+    "Add link": "Tambah tautan",
+    "OK": "OK"
 }
