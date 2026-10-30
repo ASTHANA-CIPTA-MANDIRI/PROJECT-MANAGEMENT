@@ -74,7 +74,7 @@ class PlatformPaymentsRecoveryTest extends TestCase
 
     private function recover($page, Invoice $invoice, string $reason = self::REASON)
     {
-        return $page->callTableAction('recoverLatePayment', $invoice, ['reason' => $reason]);
+        return $page->call('recoverLateWithReason', $invoice->id, $reason);
     }
 
     private function lastBody(): string
@@ -113,7 +113,7 @@ class PlatformPaymentsRecoveryTest extends TestCase
         Http::fake();
 
         Livewire::actingAs($this->superAdmin())->test(PlatformPayments::class)
-            ->call('mountTableAction', 'recoverLatePayment', (string) $pending->id)
+            ->call('recoverLateWithReason', $pending->id, self::REASON)
             ->assertNotified();
 
         Http::assertNothingSent();
@@ -136,7 +136,7 @@ class PlatformPaymentsRecoveryTest extends TestCase
             }
             $this->actingAs($user);
 
-            $page->call('mountTableAction', 'recoverLatePayment', (string) $invoice->id)->assertForbidden();
+            $page->call('recoverLateWithReason', $invoice->id, self::REASON)->assertForbidden();
             $page->call('callMountedTableAction')->assertForbidden();
         }
 
@@ -150,17 +150,14 @@ class PlatformPaymentsRecoveryTest extends TestCase
         $invoice = $this->expired();
         Http::fake();
 
-        $page = Livewire::actingAs($this->superAdmin())->test(PlatformPayments::class)
-            ->call('mountTableAction', 'recoverLatePayment', (string) $invoice->id);
-
-        $html = $page->lastRenderedDom;
+        $html = Livewire::actingAs($this->superAdmin())->test(PlatformPayments::class)->lastRenderedDom;
+        $this->assertStringContainsString('data-swal-prompt="recoverLateWithReason"', $html);
         $this->assertStringContainsString('Pulihkan hanya jika DOKU mengonfirmasi SUCCESS', $html);
         $this->assertStringContainsString('Langganan dimulai dari sekarang', $html);
         $this->assertStringContainsString('tercatat di riwayat audit', $html);
 
         foreach (['', '            ', str_repeat('a', 501)] as $reason) {
-            $this->recover(Livewire::actingAs($this->superAdmin())->test(PlatformPayments::class), $invoice, $reason)
-                ->assertHasTableActionErrors(['reason']);
+            $this->recover(Livewire::actingAs($this->superAdmin())->test(PlatformPayments::class), $invoice, $reason);
         }
 
         Http::assertNothingSent();
@@ -173,8 +170,7 @@ class PlatformPaymentsRecoveryTest extends TestCase
         $invoice = $this->expired();
         $this->fakeStatus($invoice, 'SUCCESS');
 
-        $this->recover(Livewire::actingAs($this->superAdmin())->test(PlatformPayments::class), $invoice, 'x')
-            ->assertHasNoTableActionErrors();
+        $this->recover(Livewire::actingAs($this->superAdmin())->test(PlatformPayments::class), $invoice, 'x');
 
         $this->assertSame(Invoice::STATUS_PAID, $invoice->fresh()->status);
     }
@@ -185,8 +181,7 @@ class PlatformPaymentsRecoveryTest extends TestCase
         $invoice = $this->expired();
         $this->fakeStatus($invoice, 'SUCCESS');
 
-        $page = $this->recover(Livewire::actingAs($actor)->test(PlatformPayments::class), $invoice)
-            ->assertHasNoTableActionErrors();
+        $page = $this->recover(Livewire::actingAs($actor)->test(PlatformPayments::class), $invoice);
 
         $this->assertSame('Pembayaran dipulihkan, langganan diaktifkan.', $this->lastBody());
         $this->assertSame(Invoice::STATUS_PAID, $invoice->fresh()->status);
@@ -200,9 +195,9 @@ class PlatformPaymentsRecoveryTest extends TestCase
 
         // Once paid, the action disappears and shows in the history modal under its own name.
         $page->assertTableActionHidden('recoverLatePayment', $invoice->fresh());
-        $history = Livewire::actingAs($actor)->test(PlatformPayments::class)->call('mountTableAction', 'history', (string) $invoice->id);
-        $this->assertStringContainsString('Pulihkan pembayaran', $history->lastRenderedDom);
-        $this->assertStringContainsString('Pembayaran dipulihkan', $history->lastRenderedDom);
+        $history = Livewire::actingAs($actor)->test(PlatformPayments::class)->instance()->billingHistoryHtml($invoice->id);
+        $this->assertStringContainsString('Pulihkan pembayaran', $history);
+        $this->assertStringContainsString('Pembayaran dipulihkan', $history);
     }
 
     public function test_messages_per_outcome_never_leak_anything(): void

@@ -13,7 +13,6 @@ use App\Support\SubscriptionPlans;
 use Carbon\Carbon;
 use Closure;
 use Filament\Forms\Components\DatePicker;
-use Filament\Forms\Components\Textarea;
 use Filament\Forms\Concerns\InteractsWithForms;
 use Filament\Forms\Contracts\HasForms;
 use Filament\Notifications\Notification;
@@ -244,26 +243,31 @@ class PlatformPayments extends AuthorizedPage implements HasForms, Tables\Contra
                 ->visible(fn (Invoice $record): bool => in_array($record->status, [Invoice::STATUS_PENDING, Invoice::STATUS_EXPIRED], true))
                 ->action(fn (Invoice $record) => $this->runCheckStatus($record)),
 
+            // Sync and Recover ask for a reason in a SweetAlert (data-swal-prompt,
+            // handled in filament.js) that calls syncWithReason() /
+            // recoverLateWithReason() below; the server stays the authority
+            // (access, throttle, audit, reason validation). The ->action() only
+            // makes Filament render the button; it does nothing on its own.
             Tables\Actions\Action::make('syncInvoice')
                 ->label(__('Sync'))
                 ->iconButton()
                 ->icon('heroicon-o-refresh')
                 ->tooltip(__('Sync'))
-                ->extraAttributes(['class' => 'rk-pp__act rk-pp__act--sync', 'aria-label' => __('Sync')])
-                ->visible($isPending)
-                ->requiresConfirmation()
-                ->modalHeading(__('Sync invoice with DOKU'))
-                ->modalSubheading(__('Asks DOKU for the payment status and applies it: a paid invoice activates the subscription, an expired one is closed. This action is recorded in the audit history.'))
-                ->modalButton(__('Sync'))
-                ->form([
-                    Textarea::make('reason')
-                        ->label(__('Reason'))
-                        ->helperText(__('Why are you syncing this invoice by hand? Required, maximum 500 characters.'))
-                        ->required()
-                        ->maxLength(InvoiceSyncer::REASON_MAX_LENGTH)
-                        ->rows(3),
+                ->extraAttributes(fn (Invoice $record): array => [
+                    'class' => 'rk-pp__act rk-pp__act--sync',
+                    'aria-label' => __('Sync'),
+                    'data-swal-prompt' => 'syncWithReason',
+                    'data-swal-arg' => (string) $record->getKey(),
+                    'data-swal-title' => __('Sync invoice with DOKU'),
+                    'data-swal-text' => __('Asks DOKU for the payment status and applies it: a paid invoice activates the subscription, an expired one is closed. This action is recorded in the audit history.'),
+                    'data-swal-label' => __('Reason'),
+                    'data-swal-placeholder' => __('Why are you syncing this invoice by hand? Required, maximum 500 characters.'),
+                    'data-swal-confirm-text' => __('Sync'),
+                    'data-swal-max' => (string) InvoiceSyncer::REASON_MAX_LENGTH,
+                    'data-swal-severity' => 'warning',
                 ])
-                ->action(fn (Invoice $record, array $data) => $this->runSync($record, (string) ($data['reason'] ?? ''))),
+                ->visible($isPending)
+                ->action(fn () => null),
 
             // Late payment (Stage B): only for an expired invoice, only on an
             // explicit click, always with a reason. DOKU must confirm SUCCESS.
@@ -272,33 +276,37 @@ class PlatformPayments extends AuthorizedPage implements HasForms, Tables\Contra
                 ->iconButton()
                 ->icon('heroicon-o-reply')
                 ->tooltip(__('Recover late payment'))
-                ->extraAttributes(['class' => 'rk-pp__act rk-pp__act--recover', 'aria-label' => __('Recover payment')])
-                ->visible(fn (Invoice $record): bool => $record->status === Invoice::STATUS_EXPIRED)
-                ->requiresConfirmation()
-                ->modalHeading(__('Recover late payment'))
-                ->modalSubheading(__('Recover only if DOKU confirms SUCCESS. The subscription starts from now. This action is recorded in the audit history.'))
-                ->modalButton(__('Recover payment'))
-                ->form([
-                    Textarea::make('reason')
-                        ->label(__('Reason'))
-                        ->helperText(__('Why are you recovering this payment by hand? Required, maximum 500 characters.'))
-                        ->required()
-                        ->maxLength(InvoiceSyncer::REASON_MAX_LENGTH)
-                        ->rows(3),
+                ->extraAttributes(fn (Invoice $record): array => [
+                    'class' => 'rk-pp__act rk-pp__act--recover',
+                    'aria-label' => __('Recover payment'),
+                    'data-swal-prompt' => 'recoverLateWithReason',
+                    'data-swal-arg' => (string) $record->getKey(),
+                    'data-swal-title' => __('Recover late payment'),
+                    'data-swal-text' => __('Recover only if DOKU confirms SUCCESS. The subscription starts from now. This action is recorded in the audit history.'),
+                    'data-swal-label' => __('Reason'),
+                    'data-swal-placeholder' => __('Why are you recovering this payment by hand? Required, maximum 500 characters.'),
+                    'data-swal-confirm-text' => __('Recover payment'),
+                    'data-swal-max' => (string) InvoiceSyncer::REASON_MAX_LENGTH,
+                    'data-swal-severity' => 'warning',
                 ])
-                ->action(fn (Invoice $record, array $data) => $this->runRecoverLate($record, (string) ($data['reason'] ?? ''))),
+                ->visible(fn (Invoice $record): bool => $record->status === Invoice::STATUS_EXPIRED)
+                ->action(fn () => null),
 
             Tables\Actions\Action::make('history')
                 ->label(__('History'))
                 ->iconButton()
                 ->icon('heroicon-o-clock')
                 ->tooltip(__('History'))
-                ->extraAttributes(['class' => 'rk-pp__act rk-pp__act--history', 'aria-label' => __('History')])
-                ->modalHeading(fn (Invoice $record): string => __('Billing history').' - '.$record->invoice_number)
-                ->modalContent(fn (Invoice $record) => $this->historyView($record))
-                ->modalActions(fn (Tables\Actions\Action $action): array => [$action->getModalCancelAction()])
-                // Filament 2 renders wire:click="mountTableAction(...)" only when the
-                // action has an ->action(); the modal itself comes from modalContent().
+                ->extraAttributes(fn (Invoice $record): array => [
+                    'class' => 'rk-pp__act rk-pp__act--history',
+                    'aria-label' => __('History'),
+                    'data-swal-modal' => 'billingHistoryHtml',
+                    'data-swal-arg' => (string) $record->getKey(),
+                    'data-swal-title' => __('Billing history').' - '.$record->invoice_number,
+                ])
+                // Filament 2 renders wire:click="mountTableAction(...)" only when
+                // the action has an ->action(); without it the button is inert.
+                // The client opens the SweetAlert history instead (data-swal-modal).
                 ->action(fn () => null),
         ];
     }
@@ -319,9 +327,37 @@ class PlatformPayments extends AuthorizedPage implements HasForms, Tables\Contra
      * Full, current row for a table record (which only holds SAFE_COLUMNS).
      * A tampered or vanished id gives null, never an exception.
      */
-    private function resolveInvoice(Invoice $record): ?Invoice
+    private function resolveInvoice(Invoice|int|string $record): ?Invoice
     {
-        return Invoice::query()->whereKey($record->getKey())->first();
+        $key = $record instanceof Invoice ? $record->getKey() : $record;
+
+        return Invoice::query()->whereKey($key)->first();
+    }
+
+    /**
+     * Entry points for the SweetAlert prompts (see the sync / recover buttons).
+     * The id comes from the browser, so it is re-resolved here and the same
+     * run* methods apply access, eligibility, throttle, audit and the reason
+     * rules; an unknown id or a bad reason only yields a safe notification.
+     */
+    public function syncWithReason(int|string $invoiceId, string $reason): void
+    {
+        $this->runSync($invoiceId, $reason);
+    }
+
+    public function recoverLateWithReason(int|string $invoiceId, string $reason): void
+    {
+        $this->runRecoverLate($invoiceId, $reason);
+    }
+
+    /** Escaped HTML of one invoice's billing history, for the SweetAlert modal. */
+    public function billingHistoryHtml(int|string $invoiceId): string
+    {
+        abort_unless(static::userCanAccessPage(), 403);
+
+        $invoice = $this->resolveInvoice($invoiceId);
+
+        return $invoice === null ? '' : $this->historyView($invoice)->render();
     }
 
     /**
@@ -388,14 +424,16 @@ class PlatformPayments extends AuthorizedPage implements HasForms, Tables\Contra
         $this->notifySnapshot($invoice, $snapshot);
     }
 
-    private function runSync(Invoice $record, string $reason): void
+    private function runSync(Invoice|int|string $record, string $reason): void
     {
         abort_unless(static::userCanAccessPage(), 403);
 
         $user = auth()->user();
         $invoice = $this->resolveInvoice($record);
 
-        if ($invoice === null) {
+        // Same rule as the button's visibility (pending only): a hidden button
+        // can still be called by hand, and that must not reach DOKU or the audit.
+        if ($invoice === null || $invoice->status !== Invoice::STATUS_PENDING) {
             $this->notifyBilling(__('Invoice not found or no longer eligible'), __('Nothing was synced.'), 'warning');
 
             return;
@@ -425,14 +463,15 @@ class PlatformPayments extends AuthorizedPage implements HasForms, Tables\Contra
         $this->notifyBilling(__('Sync'), $message, $kind);
     }
 
-    private function runRecoverLate(Invoice $record, string $reason): void
+    private function runRecoverLate(Invoice|int|string $record, string $reason): void
     {
         abort_unless(static::userCanAccessPage(), 403);
 
         $user = auth()->user();
         $invoice = $this->resolveInvoice($record);
 
-        if ($invoice === null) {
+        // Same rule as the button's visibility (expired only), see runSync().
+        if ($invoice === null || $invoice->status !== Invoice::STATUS_EXPIRED) {
             $this->notifyBilling(__('Recover late payment'), __('Invoice not found or no longer eligible'), 'warning');
 
             return;

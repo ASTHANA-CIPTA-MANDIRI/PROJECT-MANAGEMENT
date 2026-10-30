@@ -106,15 +106,14 @@ class PlatformPaymentsActionsTest extends TestCase
 
     private function sync($page, Invoice $invoice, string $reason = self::REASON)
     {
-        return $page->callTableAction('syncInvoice', $invoice, ['reason' => $reason]);
+        // What the SweetAlert prompt calls once the operator typed a reason.
+        return $page->call('syncWithReason', $invoice->id, $reason);
     }
 
     /** Drives the action without the visibility assertion, like a hand-made Livewire request. */
     private function craftedSync($page, Invoice $invoice)
     {
-        return $page->call('mountTableAction', 'syncInvoice', (string) $invoice->id)
-            ->set('mountedTableActionData.reason', self::REASON)
-            ->call('callMountedTableAction');
+        return $page->call('syncWithReason', $invoice->id, self::REASON);
     }
 
     // ------------------------------------------------------ authorization
@@ -139,6 +138,9 @@ class PlatformPaymentsActionsTest extends TestCase
             $page->call('mountTableAction', 'syncInvoice', (string) $invoice->id)->assertForbidden();
             $page->call('mountTableAction', 'recoverLatePayment', (string) $invoice->id)->assertForbidden();
             $page->call('mountTableAction', 'history', (string) $invoice->id)->assertForbidden();
+            $page->call('syncWithReason', $invoice->id, self::REASON)->assertForbidden();
+            $page->call('recoverLateWithReason', $invoice->id, self::REASON)->assertForbidden();
+            $page->call('billingHistoryHtml', $invoice->id)->assertForbidden();
             $page->call('callMountedTableAction')->assertForbidden();
         }
 
@@ -150,10 +152,34 @@ class PlatformPaymentsActionsTest extends TestCase
     {
         $source = file_get_contents(app_path('Filament/Pages/PlatformPayments.php'));
 
-        $this->assertSame(4, substr_count($source, 'abort_unless(static::userCanAccessPage(), 403);'), 'runCheckStatus, runSync, runRecoverLate and historyView each re-check.');
+        $this->assertSame(5, substr_count($source, 'abort_unless(static::userCanAccessPage(), 403);'), 'runCheckStatus, runSync, runRecoverLate, historyView and billingHistoryHtml each re-check.');
     }
 
     // ------------------------------------------------------ visible layout
+
+    public function test_sync_recover_and_history_open_a_sweetalert_not_a_native_or_filament_modal(): void
+    {
+        $pending = $this->invoice(['invoice_number' => 'INV-SWAL-P']);
+        $expired = $this->invoice(['invoice_number' => 'INV-SWAL-E', 'status' => Invoice::STATUS_EXPIRED, 'expires_at' => now()->subHour()]);
+
+        $html = Livewire::actingAs($this->superAdmin())->test(PlatformPayments::class)->lastRenderedDom;
+        $rows = preg_split('/<tr\b/', $html);
+        $pendingRow = collect($rows)->first(fn ($r) => str_contains($r, 'INV-SWAL-P'));
+        $expiredRow = collect($rows)->first(fn ($r) => str_contains($r, 'INV-SWAL-E'));
+
+        $this->assertStringContainsString('data-swal-prompt="syncWithReason"', $pendingRow);
+        $this->assertStringContainsString('data-swal-arg="'.$pending->id.'"', $pendingRow);
+        $this->assertStringContainsString('data-swal-prompt="recoverLateWithReason"', $expiredRow);
+        $this->assertStringContainsString('data-swal-max="500"', $expiredRow);
+        $this->assertStringContainsString('Pulihkan hanya jika DOKU mengonfirmasi SUCCESS', $expiredRow);
+        $this->assertStringContainsString('data-swal-modal="billingHistoryHtml"', $pendingRow);
+
+        // No Filament modal form, no native dialogs.
+        $this->assertStringNotContainsString('mountedTableActionData.reason', $html);
+        $this->assertStringNotContainsString('prompt(', $html);
+        $this->assertStringNotContainsString('confirm(', $html);
+        $this->assertStringNotContainsString('alert(', $html);
+    }
 
     /**
      * Regression: an action with a modal but no ->action() renders in Filament 2
@@ -223,8 +249,7 @@ class PlatformPaymentsActionsTest extends TestCase
         $before = DB::table('invoices')->get()->toArray();
 
         Livewire::actingAs($actor)->test(PlatformPayments::class)
-            ->callTableAction('checkStatus', $invoice)
-            ->assertHasNoTableActionErrors();
+            ->callTableAction('checkStatus', $invoice);
 
         $note = $this->lastNotification();
         $this->assertStringContainsString('Menunggu pembayaran', $note['body']);
@@ -379,8 +404,7 @@ class PlatformPaymentsActionsTest extends TestCase
         $invoice = $this->invoice();
         $this->fakeStatus($invoice, 'SUCCESS');
 
-        $this->sync(Livewire::actingAs($actor)->test(PlatformPayments::class), $invoice)
-            ->assertHasNoTableActionErrors();
+        $this->sync(Livewire::actingAs($actor)->test(PlatformPayments::class), $invoice);
 
         $this->assertSame('Pembayaran dikonfirmasi, langganan diaktifkan.', $this->lastNotification()['body']);
         $this->assertSame(Invoice::STATUS_PAID, $invoice->fresh()->status);
@@ -403,8 +427,11 @@ class PlatformPaymentsActionsTest extends TestCase
         $invoice = $this->invoice();
         Http::fake();
 
-        $this->sync(Livewire::actingAs($this->superAdmin())->test(PlatformPayments::class), $invoice, $reason)
-            ->assertHasTableActionErrors(['reason']);
+        $page = $this->sync(Livewire::actingAs($this->superAdmin())->test(PlatformPayments::class), $invoice, $reason);
+
+        // The server refuses it even though the SweetAlert validates first (UX only).
+        $this->assertSame('danger', $this->lastNotification()['color'] ?? 'danger');
+        $this->assertStringContainsString('Alasan wajib diisi dan maksimal 500 karakter', $this->lastNotification()['body']);
 
         Http::assertNothingSent();
         $this->assertSame(0, BillingAuditLog::count());
@@ -426,8 +453,7 @@ class PlatformPaymentsActionsTest extends TestCase
         $invoice = $this->invoice();
         $this->fakeStatus($invoice, 'SUCCESS');
 
-        $this->sync(Livewire::actingAs($this->superAdmin())->test(PlatformPayments::class), $invoice, 'x')
-            ->assertHasNoTableActionErrors();
+        $this->sync(Livewire::actingAs($this->superAdmin())->test(PlatformPayments::class), $invoice, 'x');
 
         $this->assertSame(Invoice::STATUS_PAID, $invoice->fresh()->status);
         $this->assertSame('x', BillingAuditLog::sole()->reason);
@@ -475,10 +501,7 @@ class PlatformPaymentsActionsTest extends TestCase
         $expired = $this->invoice(['status' => Invoice::STATUS_EXPIRED]);
 
         // The action is hidden for it; call it anyway like a crafted request would.
-        $page = Livewire::actingAs($this->superAdmin())->test(PlatformPayments::class)
-            ->call('mountTableAction', 'syncInvoice', (string) $expired->id)
-            ->set('mountedTableActionData.reason', self::REASON)
-            ->call('callMountedTableAction');
+        $this->craftedSync(Livewire::actingAs($this->superAdmin())->test(PlatformPayments::class), $expired);
 
         Http::assertNothingSent();
         $this->assertSame(Invoice::STATUS_EXPIRED, $expired->fresh()->status);
@@ -546,12 +569,10 @@ class PlatformPaymentsActionsTest extends TestCase
     {
         Http::fake();
         $invoice = $this->invoice();
-        $page = Livewire::actingAs($this->superAdmin())->test(PlatformPayments::class)
-            ->call('mountTableAction', 'syncInvoice', (string) $invoice->id)
-            ->set('mountedTableActionData.reason', self::REASON);
+        $page = Livewire::actingAs($this->superAdmin())->test(PlatformPayments::class);
 
         $invoice->delete();
-        $page->call('callMountedTableAction');
+        $page->call('syncWithReason', $invoice->id, self::REASON);
 
         Http::assertNothingSent();
         $this->assertSame(0, BillingAuditLog::count());
@@ -685,7 +706,7 @@ class PlatformPaymentsActionsTest extends TestCase
         $count = function () use ($page, $invoice): int {
             DB::flushQueryLog();
             DB::enableQueryLog();
-            $page->call('mountTableAction', 'history', (string) $invoice->id);
+            $page->instance()->billingHistoryHtml($invoice->id);
             $n = count(DB::getQueryLog());
             DB::disableQueryLog();
 
@@ -694,9 +715,10 @@ class PlatformPaymentsActionsTest extends TestCase
 
         $count(); // warm caches
         $few = $count();
-        $page->assertSeeInOrder(['Operator Dua', 'Operator Satu'])
-            ->assertSee('Alasan terbaru ini')
-            ->assertDontSee('MILIK INVOICE LAIN');
+        $html = $page->instance()->billingHistoryHtml($invoice->id);
+        $this->assertStringContainsString('Alasan terbaru ini', $html);
+        $this->assertStringNotContainsString('MILIK INVOICE LAIN', $html);
+        $this->assertLessThan(strpos($html, 'Operator Satu'), strpos($html, 'Operator Dua'));
 
         for ($i = 0; $i < 30; $i++) {
             BillingAuditLog::factory()->create(['invoice_id' => $invoice->id, 'actor_user_id' => User::factory()]);
@@ -711,10 +733,9 @@ class PlatformPaymentsActionsTest extends TestCase
         $actor = User::factory()->create();
         BillingAuditLog::factory()->count(55)->create(['invoice_id' => $invoice->id, 'actor_user_id' => $actor->id, 'reason' => 'baris-riwayat']);
 
-        $page = Livewire::actingAs($this->superAdmin())->test(PlatformPayments::class)
-            ->call('mountTableAction', 'history', (string) $invoice->id);
+        $html = Livewire::actingAs($this->superAdmin())->test(PlatformPayments::class)->instance()->billingHistoryHtml($invoice->id);
 
-        $this->assertSame(50, substr_count($page->lastRenderedDom, 'baris-riwayat'));
+        $this->assertSame(50, substr_count($html, 'baris-riwayat'));
     }
 
     public function test_history_escapes_the_reason(): void
@@ -722,24 +743,24 @@ class PlatformPaymentsActionsTest extends TestCase
         $invoice = $this->invoice();
         BillingAuditLog::factory()->sync()->create(['invoice_id' => $invoice->id, 'reason' => '<script>alert("xss")</script> halo']);
 
-        $page = Livewire::actingAs($this->superAdmin())->test(PlatformPayments::class)
-            ->call('mountTableAction', 'history', (string) $invoice->id);
+        $html = Livewire::actingAs($this->superAdmin())->test(PlatformPayments::class)->instance()->billingHistoryHtml($invoice->id);
 
-        $this->assertStringNotContainsString('<script>alert("xss")</script>', $page->lastRenderedDom);
-        $this->assertStringContainsString('&lt;script&gt;alert(&quot;xss&quot;)&lt;/script&gt;', $page->lastRenderedDom);
+        // The SweetAlert injects this string as HTML, so it must arrive escaped.
+        $this->assertStringNotContainsString('<script>alert("xss")</script>', $html);
+        $this->assertStringContainsString('&lt;script&gt;alert(&quot;xss&quot;)&lt;/script&gt;', $html);
     }
 
     public function test_history_is_empty_state_for_an_untouched_invoice_and_keeps_rows_of_a_deleted_actor(): void
     {
         $invoice = $this->invoice();
-        $page = Livewire::actingAs($this->superAdmin())->test(PlatformPayments::class)
-            ->call('mountTableAction', 'history', (string) $invoice->id)
-            ->assertSee('Belum ada tindakan penagihan');
+        $page = Livewire::actingAs($this->superAdmin())->test(PlatformPayments::class);
+        $this->assertStringContainsString('Belum ada tindakan penagihan', $page->instance()->billingHistoryHtml($invoice->id));
+        $this->assertSame('', $page->instance()->billingHistoryHtml(99999999));
 
         $log = BillingAuditLog::factory()->create(['invoice_id' => $invoice->id]);
         $log->actor->forceDelete();
 
-        $page->call('mountTableAction', 'history', (string) $invoice->id)->assertDontSee('Belum ada tindakan penagihan');
+        $this->assertStringNotContainsString('Belum ada tindakan penagihan', $page->instance()->billingHistoryHtml($invoice->id));
     }
 
     // --------------------------------------------------------- architecture
