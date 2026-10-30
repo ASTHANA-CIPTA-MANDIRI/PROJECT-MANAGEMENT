@@ -610,9 +610,9 @@ body.filament-body:has(.filament-app-layout) {
 }
 
 .filament-dashboard-page {
-    // Welcome card: soft gradient with two decorative translucent circles.
+    // Welcome card: compact white card, same family as the stat cards.
     .welcome-card {
-        @apply relative overflow-hidden rounded-2xl border-0 bg-gradient-to-br from-primary-50 to-white p-6 shadow-sm;
+        @apply relative overflow-hidden rounded-2xl border-0 bg-white p-5 shadow-sm;
 
         // The empty label row of the generic stats card is not used here.
         > div > div:first-child {
@@ -622,20 +622,6 @@ body.filament-body:has(.filament-app-layout) {
         > div > div.text-3xl {
             @apply text-base;
         }
-
-        &::before,
-        &::after {
-            content: '';
-            @apply pointer-events-none absolute rounded-full bg-primary-500;
-        }
-
-        &::before {
-            @apply -right-10 -top-12 h-40 w-40 opacity-10;
-        }
-
-        &::after {
-            @apply -bottom-14 right-24 h-32 w-32 opacity-5;
-        }
     }
 
     .welcome-card__body {
@@ -643,74 +629,78 @@ body.filament-body:has(.filament-app-layout) {
     }
 
     .welcome-card__avatar {
-        @apply h-14 w-14 flex-shrink-0 rounded-full object-cover ring-4 ring-primary-200 sm:h-20 sm:w-20;
+        @apply h-12 w-12 flex-shrink-0 rounded-full object-cover ring-2 ring-primary-100 sm:h-14 sm:w-14;
     }
 
     .welcome-card__title {
-        @apply text-xl font-bold leading-tight text-gray-900 sm:text-2xl;
+        @apply text-lg font-bold leading-tight text-gray-900 sm:text-xl;
         overflow-wrap: anywhere;
     }
 
     .welcome-card__summary {
-        @apply mt-1 text-sm text-gray-600;
+        @apply mt-0.5 text-sm text-gray-500;
     }
 
     .welcome-card__button {
         @include rk-btn;
-        @apply mt-3;
+        @apply mt-2;
         @include rk-btn-color($rk-btn-primary);
     }
 
-    // Headline KPI cards: solid blue, icon in a translucent circle top-left,
-    // big white number, small label, and a tinted corner blob per card.
+    // Headline KPI cards: compact white card, soft icon tile on the left,
+    // number + label on the right (same language as the Platform stat cards).
     .kpi-card {
-        @apply relative overflow-hidden rounded-2xl border-0 bg-primary-600 pt-20 text-white shadow-sm;
-
-        * {
-            @apply text-white;
-        }
+        --kpi-bg: #e8f1fc;
+        --kpi-fg: #3b82d6;
+        @apply relative overflow-hidden rounded-2xl border-0 bg-white p-4 shadow-sm;
 
         > div {
-            @apply flex flex-col;
-
-            > div.text-3xl {
-                @apply order-1 text-4xl font-bold leading-none;
-            }
+            display: grid;
+            grid-template-columns: auto minmax(0, 1fr);
+            grid-template-areas:
+                'icon value'
+                'label label';
+            align-items: center;
+            column-gap: 0.75rem;
+            row-gap: 0.625rem;
+            height: 100%;
 
             > div:first-child {
-                @apply order-2 mt-2;
+                display: contents;
+            }
 
-                span {
-                    @apply text-sm font-medium opacity-90;
-                }
+            > div.text-3xl {
+                grid-area: value;
+                font-size: 1.875rem;
+                font-weight: 700;
+                line-height: 2.25rem;
+                color: #111827;
+            }
+
+            span {
+                grid-area: label;
+                margin: 0 !important;
+                @apply text-sm font-normal leading-tight text-gray-500;
             }
         }
 
-        // The icon leaves the label row and becomes the circle badge.
+        // The icon becomes the soft rounded tile.
         svg {
-            @apply absolute left-6 top-5 box-border h-11 w-11 rounded-full bg-white/20 p-2.5;
+            grid-area: icon;
+            @apply box-border h-11 w-11 rounded-2xl p-2.5;
+            background: var(--kpi-bg);
+            color: var(--kpi-fg);
         }
 
-        &::before,
-        &::after {
-            content: '';
-            @apply pointer-events-none absolute rounded-full;
+        &.kpi-card-2 {
+            --kpi-bg: #fdf3e1;
+            --kpi-fg: #c98a1e;
         }
 
-        &::before {
-            @apply -right-8 -top-8 h-28 w-28 opacity-40;
+        &.kpi-card-3 {
+            --kpi-bg: #e6f6ec;
+            --kpi-fg: #3f9d63;
         }
-
-        &::after {
-            @apply -bottom-10 right-6 h-20 w-20 opacity-25;
-        }
-
-        &.kpi-card-1::before { @apply bg-primary-400; }
-        &.kpi-card-1::after { @apply bg-primary-300; }
-        &.kpi-card-2::before { @apply bg-cyan-300; }
-        &.kpi-card-2::after { @apply bg-primary-400; }
-        &.kpi-card-3::before { @apply bg-emerald-300; }
-        &.kpi-card-3::after { @apply bg-primary-300; }
     }
 }
 
