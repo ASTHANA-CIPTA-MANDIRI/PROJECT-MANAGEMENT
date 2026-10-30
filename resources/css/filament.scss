@@ -7141,6 +7141,85 @@ $rk-lang-flags: ('en': 'gb', 'fr': 'fr', 'ar': 'sa', 'az': 'az', 'be': 'by', 'bg
     }
 }
 
+// --- Platform: payments summary (compact) -----------------------------------------
+// Five slim cards: label on top, icon + number, one-line note. Same height for all
+// (every text is a single truncated line; the full text is in the title attribute).
+.rk-pp {
+    .rk-pl__stats {
+        gap: 0.75rem;
+    }
+
+    .rk-pl__stat {
+        display: grid;
+        grid-template-columns: auto minmax(0, 1fr);
+        grid-template-areas:
+            'label label'
+            'icon value'
+            'note note';
+        align-items: center;
+        column-gap: 0.625rem;
+        row-gap: 0.25rem;
+        min-height: 6.25rem;
+        padding: 0.75rem 1rem;
+        border-radius: 1.25rem;
+
+        > div {
+            display: contents;
+        }
+
+        small,
+        em {
+            min-width: 0;
+            margin: 0;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+            font-size: 0.75rem;
+            line-height: 1.25;
+        }
+
+        small {
+            grid-area: label;
+        }
+
+        em {
+            grid-area: note;
+        }
+
+        b {
+            grid-area: value;
+            margin: 0;
+            font-size: 1.5rem;
+            line-height: 2rem;
+        }
+    }
+
+    .rk-pl__stat-icon {
+        grid-area: icon;
+        width: 2rem;
+        height: 2rem;
+        border-radius: 0.75rem;
+
+        svg {
+            width: 1.125rem;
+            height: 1.125rem;
+        }
+    }
+
+    // Five across as soon as the content column is wide enough for them.
+    @media (min-width: 1280px) {
+        .rk-pl__stats {
+            grid-template-columns: repeat(5, minmax(0, 1fr));
+        }
+
+        .rk-pl__stat,
+        .rk-pl__stat:nth-child(n + 4),
+        .rk-pl__stat:last-child:nth-child(odd) {
+            grid-column: span 1;
+        }
+    }
+}
+
 // --- Platform: billing history modal (Pembayaran > Riwayat) -----------------------
 .rk-bah {
     display: flex;

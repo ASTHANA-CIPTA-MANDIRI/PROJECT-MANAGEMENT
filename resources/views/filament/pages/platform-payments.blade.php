@@ -7,9 +7,9 @@
                 <div class="rk-pl__stat">
                     <span class="rk-pl__stat-icon rk-pf__tile--{{ $stat['tone'] }}"><x-dynamic-component :component="'heroicon-o-'.$stat['icon']" class="h-6 w-6" /></span>
                     <div>
-                        <small>{{ $stat['label'] }}</small>
+                        <small title="{{ $stat['label'] }}">{{ $stat['label'] }}</small>
                         <b>{{ $stat['value'] }}</b>
-                        <em class="is-flat">{{ $stat['note'] }}</em>
+                        <em class="is-flat" title="{{ $stat['note'] }}">{{ $stat['note'] }}</em>
                     </div>
                 </div>
             @endforeach

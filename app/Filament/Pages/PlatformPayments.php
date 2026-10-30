@@ -142,7 +142,7 @@ class PlatformPayments extends AuthorizedPage implements HasForms, Tables\Contra
             [
                 'label' => __('Pending past due'),
                 'value' => $number(Invoice::query()->pendingPastDue()->count()),
-                'note' => __('Past the payment deadline, still pending - needs checking'),
+                'note' => __('Past due, still pending'),
                 'tone' => 'red', 'icon' => 'exclamation',
             ],
             [
@@ -160,7 +160,7 @@ class PlatformPayments extends AuthorizedPage implements HasForms, Tables\Contra
             [
                 'label' => __('Paid without subscription'),
                 'value' => $number(Invoice::query()->paidWithoutSubscription()->count()),
-                'note' => __('Money received but no subscription linked - needs checking'),
+                'note' => __('Paid, no subscription linked'),
                 'tone' => 'red', 'icon' => 'shield-exclamation',
             ],
         ];
