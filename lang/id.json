@@ -674,6 +674,7 @@
     "Good afternoon": "Selamat siang",
     "Good evening": "Selamat sore",
     "Good night": "Selamat malam",
+    "+ :count more": "+ :count lainnya",
     "You have :tickets active tickets across :projects projects": "Ada :tickets tugas aktif menunggu Anda di :projects proyek",
     "You have access to :projects projects": "Anda memiliki akses ke :projects proyek",
     "View my tickets": "Lihat tugas saya",

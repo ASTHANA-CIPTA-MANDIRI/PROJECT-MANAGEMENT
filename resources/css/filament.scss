@@ -2779,35 +2779,10 @@ body.rk-header-crumbs .filament-main-topbar .filament-breadcrumbs ul {
         }
     }
 
-    // Gradient hero card with abstract translucent circles.
+    // Time-to-resolve card: white like the others, big number + soft chips.
     .rk-an-hero {
-        @apply relative overflow-hidden border-0 text-white;
-        background: linear-gradient(135deg, #3b82d6 0%, #6aa7ea 100%);
-
-        &::before,
-        &::after {
-            content: '';
-            @apply pointer-events-none absolute rounded-full bg-white/10;
-        }
-
-        &::before {
-            @apply -right-10 -top-10 h-44 w-44;
-        }
-
-        &::after {
-            @apply -bottom-12 -left-8 h-40 w-40;
-        }
-
-        > * {
-            @apply relative z-10;
-        }
-
-        .rk-an-title {
-            @apply text-white;
-        }
-
         .rk-an-sub {
-            @apply text-white/80;
+            @apply mb-3;
         }
     }
 
@@ -2815,19 +2790,19 @@ body.rk-header-crumbs .filament-main-topbar .filament-breadcrumbs ul {
         @apply mb-3 flex items-baseline gap-2;
 
         b {
-            @apply text-6xl font-bold leading-none tracking-tight;
+            @apply text-5xl font-bold leading-none tracking-tight text-gray-900;
         }
 
         span {
-            @apply text-sm text-white/90;
+            @apply text-sm text-gray-500;
         }
     }
 
     .rk-an-hero__chips {
-        @apply mb-4 flex flex-wrap gap-2;
+        @apply mb-3 flex flex-wrap gap-2;
 
         span {
-            @apply rounded-full bg-white/20 px-3 py-1 text-xs text-white;
+            @apply rounded-full bg-primary-50 px-3 py-1 text-xs text-primary-700;
         }
 
         b {
@@ -2836,11 +2811,15 @@ body.rk-header-crumbs .filament-main-topbar .filament-breadcrumbs ul {
     }
 
     .rk-an-hero__row {
-        @apply flex items-center justify-between border-t border-white/20 py-2 text-sm text-white/90;
+        @apply flex items-center justify-between border-t border-gray-100 py-2 text-sm text-gray-600;
+
+        span:last-child {
+            @apply font-medium text-gray-900;
+        }
     }
 
     .rk-an-hero__empty {
-        @apply rounded-2xl bg-white/20 px-4 py-6 text-center text-sm text-white;
+        @apply rounded-2xl bg-gray-50 px-4 py-6 text-center text-sm text-gray-500;
     }
 
     // Workload: coloured initial + two-part bar (open solid, finished faded).
@@ -3148,15 +3127,92 @@ body.rk-header-crumbs .filament-main-topbar .filament-breadcrumbs ul {
     }
 
     // Overdue list.
+    // Code + age chip on the first line, title wraps below (never cut off).
     .rk-an-overdue {
-        @apply flex flex-wrap items-center gap-x-3 gap-y-1 border-b border-gray-100 py-3 text-sm last:border-b-0 hover:bg-slate-50;
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) auto;
+        grid-template-areas:
+            'code late'
+            'name name'
+            'who who';
+        @apply items-center gap-x-3 gap-y-0.5 border-b border-gray-100 py-3 text-sm last:border-b-0 hover:bg-slate-50;
 
         &__code {
+            grid-area: code;
             @apply text-xs font-medium text-primary-600;
         }
 
         &__name {
-            @apply min-w-0 flex-1 truncate font-medium text-gray-900;
+            grid-area: name;
+            @apply min-w-0 break-words font-medium leading-snug text-gray-900;
+        }
+
+        .rk-an-muted {
+            grid-area: who;
+        }
+
+        .rk-an-late {
+            grid-area: late;
+        }
+    }
+
+    .rk-an-more {
+        @apply pt-2 text-center;
+    }
+
+    // Stale tickets: two columns on wide cards so the list stays short.
+    .rk-an-twocol {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr);
+        column-gap: 2rem;
+
+        @media (min-width: 768px) {
+            grid-template-columns: repeat(2, minmax(0, 1fr));
+        }
+    }
+
+    // Epic rings: larger, spaced below the subtitle and centred in the card's free height.
+    .rk-an-epiccard {
+        @apply flex flex-col;
+
+        .rk-an-rings {
+            @apply mt-6 gap-x-4 gap-y-6;
+            flex: 1 1 auto;
+            align-content: center;
+        }
+
+        .rk-an-ring {
+            @apply gap-2;
+
+            svg {
+                @apply h-24 w-24;
+            }
+
+            span {
+                @apply text-sm;
+            }
+        }
+    }
+
+    // Long lists scroll inside the card instead of stretching the whole row.
+    .rk-an-scroll {
+        @apply overflow-y-auto pr-1;
+        max-height: 20rem;
+    }
+
+    // Cards in a row share its height; the doughnut card centres its content
+    // so a short card never shows a block of empty white below it.
+    .rk-an-bento > .rk-an-card {
+        @apply flex flex-col;
+    }
+
+    .rk-an-donutcard-wrap {
+        .rk-an-donutcard {
+            @apply my-auto flex-col items-center sm:flex-col;
+        }
+
+        .rk-an-bigkeys {
+            @apply w-full flex-row flex-wrap justify-center gap-x-6 gap-y-3;
         }
     }
 

@@ -103,7 +103,7 @@
                     </div>
                 </x-filament::card>
 
-                {{-- time to resolve: gradient hero --}}
+                {{-- time to resolve --}}
                 <x-filament::card class="rk-an-card rk-an-hero rk-span-4">
                     <h3 class="rk-an-title">{{ __('Time to resolve') }}</h3>
                     <p class="rk-an-sub">{{ __('From creation to done, tickets finished in the last 90 days') }}</p>
@@ -128,51 +128,8 @@
                     @endif
                 </x-filament::card>
 
-                {{-- narrow column with two stacked cards --}}
-                <div class="rk-an-stackcol rk-span-3">
-                    <x-filament::card class="rk-an-card">
-                        <h3 class="rk-an-title">{{ __('Epic progress') }}</h3>
-                        <p class="rk-an-sub">{{ __('Completed vs total tickets per epic') }}</p>
-
-                        @if (count($in['epics']))
-                            <div class="rk-an-rings">
-                                @foreach ($in['epics'] as $row)
-                                    <div class="rk-an-ring" title="{{ $row['done'] }}/{{ $row['total'] }}">
-                                        <svg viewBox="0 0 36 36" role="img">
-                                            <circle cx="18" cy="18" r="15.9155" fill="transparent" stroke="#eef1f5" stroke-width="3.5" />
-                                            <circle cx="18" cy="18" r="15.9155" fill="transparent" stroke="#3b82d6"
-                                                    stroke-width="3.5" stroke-linecap="round"
-                                                    stroke-dasharray="{{ $row['pct'] }} {{ 100 - $row['pct'] }}" stroke-dashoffset="25" />
-                                            <text x="18" y="20.5" text-anchor="middle" font-size="7.5" font-weight="700" fill="#111827">{{ $row['pct'] }}%</text>
-                                        </svg>
-                                        <span>{{ $row['name'] }}</span>
-                                    </div>
-                                @endforeach
-                            </div>
-                        @else
-                            <p class="rk-an-empty">{{ __('No epics with tickets.') }}</p>
-                        @endif
-                    </x-filament::card>
-
-                    <x-filament::card class="rk-an-card">
-                        <h3 class="rk-an-title">{{ __('Stale tickets') }}</h3>
-                        <p class="rk-an-sub">{{ __('Open tickets with no update for 14 days or more') }}</p>
-
-                        @forelse ($in['stale'] as $row)
-                            <a href="{{ route('filament.resources.tickets.view', $row['id']) }}" class="rk-an-overdue">
-                                <span class="rk-an-overdue__code">{{ $row['code'] }}</span>
-                                <span class="rk-an-overdue__name">{{ $row['name'] }}</span>
-                                <span class="rk-an-muted">{{ $row['assignee'] ?? __('Unassigned') }}</span>
-                                <span class="rk-an-late">{{ $row['days'] }} {{ __('days') }}</span>
-                            </a>
-                        @empty
-                            <p class="rk-an-empty">{{ __('No stale tickets. Everything is moving.') }}</p>
-                        @endforelse
-                    </x-filament::card>
-                </div>
-
                 {{-- type doughnut + key list (like a "traffic distribution" card) --}}
-                <x-filament::card class="rk-an-card rk-span-5">
+                <x-filament::card class="rk-an-card rk-an-donutcard-wrap rk-span-4">
                     <h3 class="rk-an-title">{{ __('Open tickets by type') }}</h3>
                     <p class="rk-an-sub">{{ __('Bugs, tasks and features still open') }}</p>
 
@@ -201,6 +158,7 @@
                     <h3 class="rk-an-title">{{ __('Workload by member') }}</h3>
                     <p class="rk-an-sub">{{ __('Open tickets per assignee, and tickets finished in the last 30 days') }}</p>
 
+                    <div class="rk-an-scroll">
                     @forelse ($in['workload'] as $row)
                         <div class="rk-an-person">
                             <span class="rk-an-person__avatar" style="background: #3b82d6">{{ \Illuminate\Support\Str::upper(\Illuminate\Support\Str::substr($row['name'], 0, 1)) }}</span>
@@ -218,6 +176,7 @@
                     @empty
                         <p class="rk-an-empty">{{ __('No open tickets.') }}</p>
                     @endforelse
+                    </div>
                 </x-filament::card>
 
                 {{-- priority: segmented bar --}}
@@ -246,9 +205,55 @@
                     @endif
                 </x-filament::card>
 
+                <x-filament::card class="rk-an-card rk-an-epiccard rk-span-4">
+                    <h3 class="rk-an-title">{{ __('Epic progress') }}</h3>
+                    <p class="rk-an-sub">{{ __('Completed vs total tickets per epic') }}</p>
+
+                    @if (count($in['epics']))
+                        <div class="rk-an-rings">
+                            @foreach ($in['epics'] as $row)
+                                <div class="rk-an-ring" title="{{ $row['done'] }}/{{ $row['total'] }}">
+                                    <svg viewBox="0 0 36 36" role="img">
+                                        <circle cx="18" cy="18" r="15.9155" fill="transparent" stroke="#eef1f5" stroke-width="3.5" />
+                                        <circle cx="18" cy="18" r="15.9155" fill="transparent" stroke="#3b82d6"
+                                                stroke-width="3.5" stroke-linecap="round"
+                                                stroke-dasharray="{{ $row['pct'] }} {{ 100 - $row['pct'] }}" stroke-dashoffset="25" />
+                                        <text x="18" y="20.5" text-anchor="middle" font-size="7.5" font-weight="700" fill="#111827">{{ $row['pct'] }}%</text>
+                                    </svg>
+                                    <span>{{ $row['name'] }}</span>
+                                </div>
+                            @endforeach
+                        </div>
+                    @else
+                        <p class="rk-an-empty">{{ __('No epics with tickets.') }}</p>
+                    @endif
+                </x-filament::card>
+
+                <x-filament::card class="rk-an-card rk-span-8">
+                    <h3 class="rk-an-title">{{ __('Stale tickets') }}</h3>
+                    <p class="rk-an-sub">{{ __('Open tickets with no update for 14 days or more') }}</p>
+
+                    <div class="rk-an-twocol">
+                    @forelse (array_slice($in['stale'], 0, 6) as $row)
+                        <a href="{{ route('filament.resources.tickets.view', $row['id']) }}" class="rk-an-overdue">
+                            <span class="rk-an-overdue__code">{{ $row['code'] }}</span>
+                            <span class="rk-an-overdue__name">{{ $row['name'] }}</span>
+                            <span class="rk-an-muted">{{ $row['assignee'] ?? __('Unassigned') }}</span>
+                            <span class="rk-an-late">{{ $row['days'] }} {{ __('days') }}</span>
+                        </a>
+                    @empty
+                        <p class="rk-an-empty">{{ __('No stale tickets. Everything is moving.') }}</p>
+                    @endforelse
+                    </div>
+
+                    @if (count($in['stale']) > 6)
+                        <p class="rk-an-muted rk-an-more">{{ __('+ :count more', ['count' => count($in['stale']) - 6]) }}</p>
+                    @endif
+                </x-filament::card>
+
                 {{-- tickets per sprint --}}
                 @if ($hasSprints)
-                    <x-filament::card class="rk-an-card rk-span-3">
+                    <x-filament::card class="rk-an-card rk-span-4">
                         <h3 class="rk-an-title">{{ __('Tickets per sprint') }}</h3>
                         <p class="rk-an-sub">{{ __('Finished vs total tickets in each sprint') }}</p>
 
@@ -270,7 +275,7 @@
                 @endif
 
                 {{-- logged hours --}}
-                <x-filament::card class="rk-an-card {{ $hasSprints ? 'rk-span-5' : 'rk-span-8' }}">
+                <x-filament::card class="rk-an-card {{ $hasSprints ? 'rk-span-8' : 'rk-span-12' }}">
                     <h3 class="rk-an-title">{{ __('Resource utilization') }}</h3>
                     <p class="rk-an-sub">{{ __('Hours logged in the last 30 days') }}</p>
 
