@@ -1132,5 +1132,7 @@
     "Maximum :max characters.": "Maksimal :max karakter.",
     "Enter a URL starting with http:// or https://": "Masukkan URL yang diawali http:// atau https://",
     "Add link": "Tambah tautan",
-    "OK": "OK"
+    "OK": "OK",
+    "Check invoices and payment status": "Cek invoice dan status pembayaran",
+    "Set plan prices and durations": "Atur harga dan durasi paket"
 }

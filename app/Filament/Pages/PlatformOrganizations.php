@@ -350,6 +350,8 @@ class PlatformOrganizations extends AuthorizedPage implements HasForms, Tables\C
             ['label' => __('Create organization'), 'hint' => __('Add a new organization to the platform'), 'icon' => 'office-building', 'tone' => 'blue', 'href' => null],
             ['label' => __('Manage users'), 'hint' => __('Control users and their roles'), 'icon' => 'users', 'tone' => 'green', 'href' => \App\Filament\Resources\UserResource::getUrl('index')],
             ['label' => __('Roles & permissions'), 'hint' => __('Decide who can do what'), 'icon' => 'shield-check', 'tone' => 'purple', 'href' => \App\Filament\Resources\RoleResource::getUrl('index')],
+            ['label' => __('Payments'), 'hint' => __('Check invoices and payment status'), 'icon' => 'credit-card', 'tone' => 'green', 'href' => PlatformPayments::getUrl()],
+            ['label' => __('Plans'), 'hint' => __('Set plan prices and durations'), 'icon' => 'tag', 'tone' => 'purple', 'href' => \App\Filament\Resources\SubscriptionPlanResource::getUrl('index')],
             ['label' => __('General settings'), 'hint' => __('Site name, logo and language'), 'icon' => 'cog', 'tone' => 'yellow', 'href' => ManageGeneralSettings::getUrl()],
         ];
     }
@@ -530,6 +532,17 @@ class PlatformOrganizations extends AuthorizedPage implements HasForms, Tables\C
         } catch (\Throwable) {
             return '-';
         }
+    }
+
+    // Four rows keep the table as tall as the "Aksi Cepat" column beside it.
+    protected function getTableRecordsPerPageSelectOptions(): array
+    {
+        return [4, 8, 12, 24];
+    }
+
+    protected function getDefaultTableRecordsPerPageSelectOption(): int
+    {
+        return 4;
     }
 
     protected function getTableRecordActionUsing(): ?Closure
